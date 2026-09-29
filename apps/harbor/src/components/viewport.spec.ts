@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest'
+
+import { clampPan, fitScale, isPannable, MAX_SCALE, MIN_SCALE } from './viewport'
+
+const FLEET = { width: 1900, height: 1300 }
+
+describe(fitScale, () => {
+  /**
+   * The bug this exists for: ninety hulls scaled into a 2.25× window landed around 35 %, and the
+   * captions stopped being letters. A plan is read at a legible size and moved across, not shrunk
+   * until it fits.
+   */
+  it('never shrinks past legibility, however small the window', () => {
+    expect(fitScale(FLEET, { width: 680, height: 430 })).toBe(MIN_SCALE)
+    expect(fitScale(FLEET, { width: 50, height: 50 })).toBe(MIN_SCALE)
+  })
+
+  it('fills a window that has room to spare', () => {
+    const scale = fitScale({ width: 400, height: 300 }, { width: 800, height: 600 })
+
+    expect(scale).toBe(2)
+  })
+
+  it('stops at the point where strokes get fat and nothing is gained', () => {
+    expect(fitScale({ width: 10, height: 10 }, { width: 800, height: 600 })).toBe(MAX_SCALE)
+  })
+
+  it('follows the tighter of the two axes', () => {
+    // Wide window, short: the height decides.
+    expect(fitScale({ width: 100, height: 100 }, { width: 900, height: 150 })).toBe(1.5)
+  })
+
+  it('answers something usable for an empty drawing', () => {
+    expect(fitScale({ width: 0, height: 0 }, { width: 800, height: 600 })).toBe(MIN_SCALE)
+  })
+})
+
+describe(clampPan, () => {
+  const view = { width: 680, height: 430 }
+
+  /** An axis that fits is centred and immovable — drifting it off would be for nothing. */
+  it('centres an axis that fits and ignores the offset', () => {
+    const at = clampPan({ x: -400, y: -400 }, { width: 200, height: 100 }, view, 1)
+
+    expect(at.x).toBe((680 - 200) / 2)
+    expect(at.y).toBe((430 - 100) / 2)
+  })
+
+  /** Scrolling into grey is how a viewer loses track of where they are. */
+  it('never lets an edge leave the window', () => {
+    const tooFarLeft = clampPan({ x: 500, y: 500 }, FLEET, view, 1)
+
+    expect(tooFarLeft).toStrictEqual({ x: 0, y: 0 })
+
+    const tooFarRight = clampPan({ x: -9999, y: -9999 }, FLEET, view, 1)
+
+    expect(tooFarRight).toStrictEqual({ x: 680 - 1900, y: 430 - 1300 })
+  })
+
+  it('leaves a position in range alone', () => {
+    expect(clampPan({ x: -300, y: -200 }, FLEET, view, 1)).toStrictEqual({ x: -300, y: -200 })
+  })
+
+  /** The scale changes how much does not fit, so the clamp has to know it. */
+  it('clamps against the drawn size, not the drawing', () => {
+    const at = clampPan({ x: -9999, y: -9999 }, { width: 400, height: 300 }, view, 2)
+
+    expect(at.x).toBe(680 - 800)
+    expect(at.y).toBe(430 - 600)
+  })
+})
+
+describe(isPannable, () => {
+  it('is true only where there is somewhere to go', () => {
+    expect(isPannable(FLEET, { width: 680, height: 430 }, 1)).toBe(true)
+    expect(isPannable({ width: 200, height: 100 }, { width: 680, height: 430 }, 1)).toBe(false)
+  })
+
+  it('counts an overflow on either axis', () => {
+    const view = { width: 680, height: 430 }
+
+    expect(isPannable({ width: 2000, height: 100 }, view, 1)).toBe(true)
+    expect(isPannable({ width: 200, height: 2000 }, view, 1)).toBe(true)
+  })
+})

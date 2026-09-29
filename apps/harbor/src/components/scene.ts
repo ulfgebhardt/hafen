@@ -20,11 +20,13 @@
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 
 import { ageLabel, berths, bindingQuests, fit, PER_LANE } from './fleet'
-import { draught, frames, HULL, outline, segments, storeys } from './hull'
+import { draught, frames, HULL, MAX_DRAUGHT, outline, segments, storeys } from './hull'
 import { drawn, isCapped, isShipshape, marksOf } from './marks'
 import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
+import { clampPan, fitScale, isPannable } from './viewport'
 
 import type { Berth } from './fleet'
+import type { Extent, Pan } from './viewport'
 import type { Ship } from '@hafen/core'
 
 /**
@@ -34,25 +36,35 @@ import type { Ship } from '@hafen/core'
  * of ninety-one repositories ran into each other. The cell is sized by the *text* and the hull
  * sits inside it — which is the right way round, because the text is the part to be read.
  */
-const CELL = { width: 158, height: 112 }
+const CELL = { width: 176, height: 140 }
 
 /** How many characters of a caption fit a cell at `LABEL`'s size. */
-const CAPTION_CHARS = 25
+const CAPTION_CHARS = 23
 
 /** How far each lane is inset, so the lanes read as depth rather than as table rows. */
 const LANE_STAGGER = 22
 
+/**
+ * Where the caption starts, below everything the ship can reach down to.
+ *
+ * Computed rather than guessed, because it was guessed first and the labels ended up drawn
+ * across the hulls: a deeply laden ship sits `draught` × `depth` lower, and the stash crates and
+ * boats hang under that again. The deepest a ship goes is `MAX_DRAUGHT`, so the text starts
+ * below that and not at a number that happened to work for an empty one.
+ */
+const CAPTION_TOP = Math.ceil(HULL.depth * (MAX_DRAUGHT - 1) + HULL.depth + 12)
+
 const LABEL = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 9,
-  fill: '#8da3b8',
+  fontSize: 11,
+  fill: '#9db4c9',
   letterSpacing: 0.2,
 })
 
 const LABEL_DIM = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 8,
-  fill: '#5c6f82',
+  fontSize: 9.5,
+  fill: '#6b8096',
   letterSpacing: 0.2,
 })
 
@@ -371,7 +383,7 @@ function caption(ship: Ship): Container {
   const group = new Container()
 
   const name = new Text({ text: fit(ship.name, CAPTION_CHARS), style: LABEL })
-  name.position.set(0, 7)
+  name.position.set(0, CAPTION_TOP)
   group.addChild(name)
 
   const binding = bindingQuests(ship)
@@ -381,7 +393,7 @@ function caption(ship: Ship): Container {
     text: fit(`${ageLabel(ship.rustDays)} · ${owed}`, CAPTION_CHARS + 4),
     style: LABEL_DIM,
   })
-  detail.position.set(0, 18)
+  detail.position.set(0, CAPTION_TOP + 13)
   group.addChild(detail)
 
   return group
@@ -427,12 +439,21 @@ function place(berth: Berth, picked: (ship: Ship) => void, rolling: Roll[]): Con
   return slot
 }
 
-/** Fits the drawing into the viewport without cropping it — a plan is read whole. */
-function centre(app: Application, world: Container, width: number, height: number): void {
-  const view = app.screen
-  const scale = Math.min(view.width / width, view.height / height, 1.6)
+/**
+ * Places the drawing: as large as it can be without falling below legibility, then clamped.
+ *
+ * `fitScale` may well answer 1 for ninety hulls, which means the plan is bigger than the window
+ * and has to be moved across. That is the right trade — the alternative was the whole fleet at
+ * 35 %, where the captions stopped being letters.
+ */
+function placeWorld(app: Application, world: Container, extent: Extent, pan: Pan): number {
+  const view = { width: app.screen.width, height: app.screen.height }
+  const scale = fitScale(extent, view)
   world.scale.set(scale)
-  world.position.set((view.width - width * scale) / 2, (view.height - height * scale) / 2)
+
+  const at = clampPan(pan, extent, view, scale)
+  world.position.set(at.x, at.y)
+  return scale
 }
 
 export interface Scene {
@@ -467,6 +488,21 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
   let picked: (ship: Ship | null) => void = () => undefined
   let rolling: Roll[] = []
+  let extent: Extent = { width: 0, height: 0 }
+  let pan: Pan = { x: 0, y: 0 }
+
+  const settle = (): void => {
+    const scale = placeWorld(app, world, extent, pan)
+    pan = { x: world.position.x, y: world.position.y }
+    // Only offer a grab where there is somewhere to go.
+    canvas.style.cursor = isPannable(
+      extent,
+      { width: app.screen.width, height: app.screen.height },
+      scale,
+    )
+      ? 'grab'
+      : 'default'
+  }
 
   const draw = (ships: readonly Ship[]): void => {
     world.removeChildren()
@@ -474,13 +510,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
     const laid = berths(ships)
     const lanes = Math.max(1, Math.ceil(laid.length / PER_LANE))
-    const width = PER_LANE * CELL.width + LANE_STAGGER * lanes + 40
-    const height = lanes * CELL.height + 60
+    extent = {
+      width: PER_LANE * CELL.width + LANE_STAGGER * lanes + 40,
+      height: lanes * CELL.height + 60,
+    }
 
-    world.addChild(sheet(width, height))
+    world.addChild(sheet(extent.width, extent.height))
 
     for (let lane = 0; lane < lanes; lane += 1) {
-      const line = laneLine(width - 20, lane)
+      const line = laneLine(extent.width - 20, lane)
       line.position.set(10, 40 + lane * CELL.height + HULL.depth)
       world.addChild(line)
     }
@@ -495,8 +533,54 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       world.addChild(place(berth, pick, rolling))
     }
 
-    centre(app, world, width, height)
+    // A fresh drawing starts at the top left, where the worst ships are.
+    pan = { x: 0, y: 0 }
+    settle()
   }
+
+  /**
+   * Wheel scrolls, shift-wheel scrolls sideways, dragging moves the sheet.
+   *
+   * On the canvas element rather than through Pixi's event system, because the hulls are
+   * `static` and eat pointer events — a drag that started on a ship would otherwise never
+   * reach the scene. `preventDefault` so the page behind does not scroll with it.
+   */
+  const onWheel = (event: WheelEvent): void => {
+    event.preventDefault()
+    const sideways = event.shiftKey
+    pan = {
+      x: pan.x - (sideways ? event.deltaY : event.deltaX),
+      y: pan.y - (sideways ? 0 : event.deltaY),
+    }
+    settle()
+  }
+  canvas.addEventListener('wheel', onWheel, { passive: false })
+
+  let dragging: { x: number; y: number } | null = null
+  const onDown = (event: PointerEvent): void => {
+    dragging = { x: event.clientX - pan.x, y: event.clientY - pan.y }
+    canvas.style.cursor = 'grabbing'
+  }
+  const onMove = (event: PointerEvent): void => {
+    if (dragging === null) {
+      return
+    }
+    pan = { x: event.clientX - dragging.x, y: event.clientY - dragging.y }
+    settle()
+  }
+  const onUp = (): void => {
+    dragging = null
+    settle()
+  }
+  canvas.addEventListener('pointerdown', onDown)
+  globalThis.addEventListener('pointermove', onMove)
+  globalThis.addEventListener('pointerup', onUp)
+
+  // The window is resizable, and a clamped pan is only correct for the size it was clamped at.
+  const onResize = (): void => {
+    settle()
+  }
+  globalThis.addEventListener('resize', onResize)
 
   app.ticker.add(() => {
     const now = app.ticker.lastTime / 1000
@@ -513,6 +597,11 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       picked = handler
     },
     destroy: () => {
+      canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('pointerdown', onDown)
+      globalThis.removeEventListener('pointermove', onMove)
+      globalThis.removeEventListener('pointerup', onUp)
+      globalThis.removeEventListener('resize', onResize)
       app.destroy(true, { children: true })
     },
   }
