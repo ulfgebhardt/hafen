@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { draught, frames, HULL, outline, segments, storeys } from './hull'
+import { draught, frames, HULL, MAX_DRAUGHT, outline, segments, storeys } from './hull'
 import { quest, ship } from './testing'
 
 describe(outline, () => {
@@ -162,6 +162,19 @@ describe(draught, () => {
       expect(draught(subject)).toBeGreaterThan(0)
       expect(draught(subject)).toBeLessThan(1)
     }
+  })
+
+  /**
+   * The scene lays the caption out below `MAX_DRAUGHT`, so nothing may sink past it — that was
+   * the bug: labels drawn across the hull of every laden ship.
+   */
+  it('never sinks past the depth the layout reserves', () => {
+    const worst = ship({
+      quests: Array.from({ length: 9 }, (_, index) => quest(`q${String(index)}`, 'violated')),
+    })
+
+    expect(draught(worst)).toBeLessThanOrEqual(MAX_DRAUGHT)
+    expect(draught(worst)).toBeCloseTo(MAX_DRAUGHT, 6)
   })
 
   /** Waiting and unmeasured are open too: only `met` lightens a ship. */

@@ -121,7 +121,15 @@ export function storeys(ship: Ship): number {
 }
 
 /**
- * Draught: how deep the hull sits, 0 … 1 of its depth.
+ * The deepest a hull ever sits.
+ *
+ * Exported so the scene can lay the caption out *below* it instead of guessing — which is what
+ * it did first, and the labels ended up drawn across the hulls of every laden ship.
+ */
+export const MAX_DRAUGHT = 0.85
+
+/**
+ * Draught: how deep the hull sits, 0 … `MAX_DRAUGHT` of its depth.
  *
  * Loaded by what is open. A ship meeting everything rides high, one with every demand violated
  * sits at its marks. This is the one place the scene editorialises, and it is a rendering of the
@@ -133,5 +141,8 @@ export function draught(ship: Ship): number {
     return 0.25
   }
   const open = binding.filter((quest) => quest.verdict !== 'met').length
-  return 0.3 + 0.55 * (open / binding.length)
+  // Clamped rather than trusted: `0.3 + 0.55` is 0.8500000000000001 in binary floating point,
+  // and the caption's position is computed from `MAX_DRAUGHT` — a promise the layout relies on
+  // has to hold exactly, not almost.
+  return Math.min(MAX_DRAUGHT, 0.3 + (MAX_DRAUGHT - 0.3) * (open / binding.length))
 }
