@@ -73,8 +73,8 @@ Technik, das Werkzeug ist der Hafen; kein Konflikt.
 ## Quests
 
 Die **Forderung ist eine Entscheidung, die Prüfung eine Messung.** Die Forderung liegt als Datei
-im Store (`hafen-data/quests/<kette>/<id>.md`), die Prüfung steht in `probe.ts`, und geschrieben
-wird nur ihr Ergebnis. Beides andersherum scheitert: eine Norm im Code kann niemand ohne Release
+im Store (`$XDG_DATA_HOME/hafen/quests/<kette>/<id>.md`), die Prüfung steht in `probe.ts`, und
+geschrieben wird nur ihr Ergebnis. Beides andersherum scheitert: eine Norm im Code kann niemand ohne Release
 ändern, und eine Prüfung als Prosa lässt sich nicht laufen.
 
 **Fünf Urteile, und `nicht messbar` ist keins der anderen vier.** `erfuellt`, `verletzt`,
@@ -118,6 +118,28 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 
 ## Das Fenster
 
+- **Kein Pfad ist verdrahtet, und schon gar nicht der einer Person.** Wurzel, Store und
+  Schnappschuss kommen aus `$HAFEN_ROOT`, `$HAFEN_STORE`, `$HAFEN_SNAPSHOT`, sonst aus XDG. Bis
+  30.09.2026 stand `<root>/ulfgebhardt/hafen-data` im Code: das machte das Werkzeug für jeden
+  anderen unbrauchbar, und es zeigte auf ein `register.md`, das den absoluten Pfad jedes Repos
+  dieser Maschine führt — eine Liste von Projekten und Kunden, keine Konfiguration. Der Store
+  bleibt deshalb lokal und wird nie gepusht.
+- **Die Größe wird gemessen, nicht angenommen** (`zoom_from` in `lib.rs`). `$HAFEN_ZOOM` schlägt
+  `GDK_SCALE`/`GDK_DPI_SCALE`, und die schlagen die Bildschirmdichte aus `xrandr`. Der letzte Fall
+  ist der, der hier zählt: auf dieser Maschine ist keine der GDK-Variablen gesetzt und `Xft.dpi`
+  sagt 96, während das Panel 210 dpi hat — wer die Behauptung glaubt, zeichnet halb so groß wie
+  nötig. Gesetzt wird in Rust beim Start und nicht aus dem Fenster: ein Zoom, den der Webview
+  selbst setzt, kommt ein Bild zu spät und bräuchte eine IPC-Erlaubnis für etwas, das eine
+  Eigenschaft des Bildschirms ist.
+- **Der lokale Stand steht neben dem Vertrag und nie darin** (`marks.ts`). Das Deck ist, was die
+  *Flotte* fordert; Fracht, Flaggen und Schäden sind, was das Repo gerade tut. Zwei Fragen mit
+  verschiedenen Antworten und verschiedenen Mitteln — in einer Reihe gezeichnet wären sie eine.
+  Der Konflikt ist dabei keine schwerere Fracht, sondern ein **Bruch**: gestoppte Arbeit, kein
+  Fortschritt. Und „sauber" bekommt einen Haken, weil eine Abwesenheit von Zeichen genau so
+  aussieht wie „nicht gemessen".
+- **Ein Zeichenlimit ist keine Messung** (`MAX_PER_KIND`). Vier Kisten je Art, und wo gekappt
+  wurde, steht ein `+`; die wahre Zahl steht im Datenblatt. Ein Repo mit 3785 unverzeichneten
+  Dateien würde das Schiff sonst unter Kisten begraben und nur „viel" sagen.
 - **Es misst nicht.** `hafen schnappschuss` misst, die App liest `snapshot.json`. Deshalb steht
   der Zeitpunkt der Messung in der Kopfzeile: ein Bild ohne Zeitstempel behauptet, aktuell zu
   sein, und dieses ist genau so alt wie der letzte Schnappschuss.

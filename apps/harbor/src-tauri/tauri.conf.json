@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hafen",
+  "version": "0.0.0",
+  "identifier": "dev.ulf-gebhardt.hafen",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Hafen",
+        "width": 1440,
+        "height": 900,
+        "resizable": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["appimage", "deb"],
+    "icon": ["icons/icon.png"]
+  }
+}

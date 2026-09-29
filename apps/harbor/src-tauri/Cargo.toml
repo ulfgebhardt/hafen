@@ -1,0 +1,19 @@
+[package]
+name = "hafen"
+version = "0.0.0"
+edition = "2021"
+description = "Hafen — Übersicht über alle Repos einer Maschine"
+authors = ["Ulf Gebhardt"]
+publish = false
+
+[lib]
+name = "hafen_lib"
+# `_lib` suffix avoids a name collision with the binary on Windows.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }

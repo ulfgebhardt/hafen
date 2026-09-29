@@ -1,7 +1,11 @@
 import config, { vitest, vue3 } from 'eslint-config-it4c'
 
 export default [
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/.turbo/**'] },
+  // `target/**` because cargo generates JS in there: after any `cargo build` the lint would
+  // otherwise fail on Tauri's own generated API script, which nobody wrote and nobody can fix.
+  {
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/.turbo/**', 'target/**'],
+  },
   ...config,
   ...vitest,
   ...vue3,

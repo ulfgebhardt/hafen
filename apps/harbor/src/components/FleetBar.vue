@@ -6,7 +6,12 @@
 
   import type { Ship } from '@hafen/core'
 
-  const { ships, at } = defineProps<{ ships: readonly Ship[]; at: string }>()
+  const { ships, at, source } = defineProps<{
+    ships: readonly Ship[]
+    at: string
+    /** Where this picture came from — a cache path in the app, a URL in a browser. */
+    source: string
+  }>()
 
   const counts = computed(() => countVerdicts(ships))
   const bound = computed(() => ships.filter((ship) => bindingQuests(ship).length > 0).length)
@@ -44,6 +49,6 @@
     </ul>
 
     <p class="font-mono text-xs text-slate-500">{{ bound }} gebunden</p>
-    <p class="ml-auto font-mono text-[10px] text-slate-600">gemessen {{ taken }}</p>
+    <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">gemessen {{ taken }}</p>
   </header>
 </template>

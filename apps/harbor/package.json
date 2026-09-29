@@ -10,7 +10,11 @@
     "snapshot": "pnpm --filter @hafen/cli exec tsx src/index.ts schnappschuss > public/snapshot.json",
     "test:lint": "eslint --max-warnings 0 .",
     "test:lint:typecheck": "vue-tsc --noEmit",
-    "test:unit": "vitest run --coverage"
+    "test:unit": "vitest run --coverage",
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "app:build": "tauri build",
+    "measure": "mkdir -p \"${XDG_CACHE_HOME:-$HOME/.cache}/hafen\" && pnpm --filter @hafen/cli exec tsx src/index.ts schnappschuss > \"${XDG_CACHE_HOME:-$HOME/.cache}/hafen/snapshot.json\""
   },
   "dependencies": {
     "@hafen/core": "workspace:*",
@@ -28,6 +32,7 @@
     "typescript": "~5.7.2",
     "vite": "^7.1.14",
     "vitest": "^4.1.7",
-    "vue-tsc": "^3.1.2"
+    "vue-tsc": "^3.1.2",
+    "@tauri-apps/cli": "^2"
   }
 }

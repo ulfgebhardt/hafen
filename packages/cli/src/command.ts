@@ -6,18 +6,34 @@ import { renderHarbor } from './render'
 
 import type { Ports, Quest, Ship } from '@hafen/core'
 
-/** The only thing the harbor cannot derive: where to look. */
-export const DEFAULT_ROOT = `${homedir()}/.data/sources`
+/**
+ * Where to look for repositories — the one thing the harbor cannot derive.
+ *
+ * `$HAFEN_ROOT`, else `~/.data/sources`, and the argument beats both. The default is one
+ * person's habit and is stated as such: a tool that only works for whoever wrote it is not a
+ * tool, and every path here is overridable for exactly that reason.
+ */
+// eslint-disable-next-line n/no-process-env -- the root has to be movable without an argument
+export const DEFAULT_ROOT = process.env['HAFEN_ROOT'] ?? `${homedir()}/.data/sources`
 
 /**
  * Where the fleet catalog lies — the quests, and the register.
  *
  * A store of its own and not a directory inside this repository: the demands are decisions, they
  * outlive any one version of this tool, and they are the one part of it that more than one person
- * can sensibly edit. Overridable so a second fleet — or a test — can be pointed somewhere else.
+ * can sensibly edit.
+ *
+ * Under `$XDG_DATA_HOME` and **not** under a hardcoded organisation directory. It was
+ * `<root>/ulfgebhardt/hafen-data` until this was read with a push in mind: that path is one
+ * person's, it made the tool useless to anybody else, and the register it points at holds the
+ * absolute path of every repository on the machine — which is a list of clients, not a config.
  */
 // eslint-disable-next-line n/no-process-env -- the store is the one thing that must be movable
-export const DEFAULT_STORE = process.env['HAFEN_STORE'] ?? `${DEFAULT_ROOT}/ulfgebhardt/hafen-data`
+const XDG_DATA = process.env['XDG_DATA_HOME']
+export const DEFAULT_STORE =
+  // eslint-disable-next-line n/no-process-env -- same reason, one line down
+  process.env['HAFEN_STORE'] ??
+  `${XDG_DATA !== undefined && XDG_DATA !== '' ? XDG_DATA : `${homedir()}/.local/share`}/hafen`
 
 export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
 

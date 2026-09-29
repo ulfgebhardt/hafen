@@ -5,12 +5,14 @@ import FleetBar from './FleetBar.vue'
 import { quest, ship } from './testing'
 
 const AT = '2026-09-29T21:42:18.126Z'
+const SOURCE = '/cache/hafen/snapshot.json'
 
 describe('fleetBar', () => {
   it('counts the fleet and every verdict in it', () => {
     const bar = mount(FleetBar, {
       props: {
         at: AT,
+        source: SOURCE,
         ships: [
           ship({ quests: [quest('a', 'violated'), quest('b', 'met')] }),
           ship({ quests: [quest('a', 'met')] }),
@@ -28,6 +30,7 @@ describe('fleetBar', () => {
     const bar = mount(FleetBar, {
       props: {
         at: AT,
+        source: SOURCE,
         ships: [
           ship({ quests: [quest('a', 'met')] }),
           ship({ quests: [quest('a', 'notApplicable')] }),
@@ -44,14 +47,14 @@ describe('fleetBar', () => {
    * `schnappschuss`. A view without its timestamp claims to be current.
    */
   it('says when the measurement was taken', () => {
-    const bar = mount(FleetBar, { props: { at: AT, ships: [ship()] } })
+    const bar = mount(FleetBar, { props: { at: AT, source: SOURCE, ships: [ship()] } })
 
     expect(bar.text()).toContain('gemessen')
     expect(bar.text()).toContain('2026')
   })
 
   it('draws an empty harbor without falling over', () => {
-    const bar = mount(FleetBar, { props: { at: AT, ships: [] } })
+    const bar = mount(FleetBar, { props: { at: AT, source: SOURCE, ships: [] } })
 
     expect(bar.text()).toContain('0 Schiffe')
   })

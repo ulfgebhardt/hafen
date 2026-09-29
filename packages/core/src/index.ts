@@ -84,6 +84,9 @@ export {
   UnreadableRootError,
 } from './ship'
 
+export type { Working } from './working'
+export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'
+
 export type { Activity, Fleet, RustLevel } from './fleet'
 export { ACTIVE_DAYS, activityOf, byActivity, RUST_TIERS, rustLevel, summarizeFleet } from './fleet'
 
