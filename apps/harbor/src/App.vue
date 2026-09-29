@@ -4,31 +4,31 @@
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import ShipSheet from './components/ShipSheet.vue'
+  import { loadSnapshot, SnapshotError } from './snapshot'
 
+  import type { Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
-  /** What `hafen schnappschuss` writes. The app reads it and measures nothing itself. */
-  interface Snapshot {
-    at: string
-    root: string
-    ships: readonly Ship[]
-  }
-
   const snapshot = ref<Snapshot | null>(null)
-  const failed = ref<string | null>(null)
+  const source = ref<string>('')
+  const failed = ref<SnapshotError | null>(null)
   const picked = ref<Ship | null>(null)
 
   onMounted(async () => {
     try {
-      const response = await fetch('snapshot.json')
-      if (!response.ok) {
-        throw new Error(`${String(response.status)} ${response.statusText}`)
-      }
-      snapshot.value = (await response.json()) as Snapshot
+      const loaded = await loadSnapshot()
+      snapshot.value = loaded.snapshot
+      source.value = loaded.source
     } catch (error) {
-      // Named rather than left blank: an empty harbor and a failed read are different sentences,
-      // and a window that shows nothing for both is a window that lies about one of them.
-      failed.value = String(error)
+      /**
+       * Named, never blank. An empty harbor and a snapshot that could not be read are different
+       * sentences, and a window that shows nothing for both lies about the one a human could
+       * have fixed — so the message carries where it looked and what to type.
+       */
+      failed.value =
+        error instanceof SnapshotError
+          ? error
+          : new SnapshotError(String(error), '(unbekannt)', 'hafen schnappschuss')
     }
   })
 </script>
@@ -36,7 +36,7 @@
 <template>
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
     <template v-if="snapshot !== null">
-      <FleetBar :ships="snapshot.ships" :at="snapshot.at" />
+      <FleetBar :ships="snapshot.ships" :at="snapshot.at" :source="source" />
 
       <div class="flex min-h-0 flex-1">
         <main class="min-w-0 flex-1">
@@ -52,10 +52,13 @@
       </div>
     </template>
 
-    <p v-else-if="failed !== null" class="p-6 font-mono text-sm text-red-400">
-      snapshot.json nicht lesbar: {{ failed }}<br />
-      <span class="text-slate-500">Erzeugen mit: pnpm --filter @hafen/harbor snapshot</span>
-    </p>
+    <section v-else-if="failed !== null" class="p-6 font-mono text-sm">
+      <p class="text-red-400">Kein Schnappschuss: {{ failed.message }}</p>
+      <p class="mt-2 text-slate-500">Gesucht in {{ failed.source }}</p>
+      <p class="mt-4 text-slate-400">Erzeugen mit:</p>
+      <p class="mt-1 text-slate-300">{{ failed.remedy }}</p>
+    </section>
+
     <p v-else class="p-6 text-sm text-slate-600">wird gelesen …</p>
   </div>
 </template>

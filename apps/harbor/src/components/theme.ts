@@ -1,3 +1,4 @@
+import type { MarkKind } from './marks'
 import type { Activity, QuestVerdict, RustLevel, Stage } from '@hafen/core'
 
 /** User-facing strings are German — the shipyard vocabulary (see CLAUDE.md). */
@@ -121,3 +122,22 @@ export const SCENE = {
   crane: '#8a9db0',
   accent: '#e08a4f',
 } as const
+
+/**
+ * Colour per local mark — the repository's own state, not the fleet's demands.
+ *
+ * Deliberately a quieter range than `VERDICT_COLOR`: a dirty tree is normal and a violated quest
+ * is not, so local marks read as detail on the ship while the deck keeps the loud colours.
+ * `damage` is the exception and shares the violated red, because a conflict is the one local
+ * state that has stopped rather than progressed.
+ */
+export const MARK_COLOR: Record<MarkKind, string> = {
+  staged: '#7fa8c9',
+  unstaged: '#c9a24a',
+  untracked: '#8d8d8d',
+  damage: '#c2634f',
+  pennant: '#e08a4f',
+  drag: '#6f7d8c',
+  stash: '#9a7fc9',
+  boat: '#7f9a8d',
+}

@@ -21,7 +21,8 @@ import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pi
 
 import { ageLabel, berths, bindingQuests, fit, PER_LANE } from './fleet'
 import { draught, frames, HULL, outline, segments, storeys } from './hull'
-import { SCENE, SEGMENT, VERDICT_COLOR } from './theme'
+import { drawn, isCapped, isShipshape, marksOf } from './marks'
+import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 
 import type { Berth } from './fleet'
 import type { Ship } from '@hafen/core'
@@ -185,6 +186,130 @@ function superstructure(ship: Ship, steel: number): Graphics {
 }
 
 /**
+ * What the repository itself is doing, as cargo, flags and damage.
+ *
+ * Beside the deck and never on it: the deck is what the *fleet* demands, this is what is going
+ * on *here*. Drawing them in one row would merge two questions that have different answers and
+ * different remedies.
+ *
+ * Crates are stacked forward of the bridge, the pennant flies at the mast, a breach is drawn
+ * into the hull side, and the stash lies on the quay under the ship — outside the hull, because
+ * that is exactly where stashed work is: in no commit and in no tree.
+ */
+function localState(ship: Ship, steel: number): Container {
+  const group = new Container()
+  const state = new Graphics()
+  group.addChild(state)
+
+  const marks = marksOf(ship)
+  const crateSize = 3.2
+  let stackX = HULL.length * 0.58
+
+  for (const mark of marks) {
+    const count = drawn(mark)
+    const color = hex(MARK_COLOR[mark.kind])
+
+    if (mark.kind === 'damage') {
+      // A breach in the side: the one mark here that is not cargo, because a conflict is not
+      // work in progress — it is work that stopped.
+      const at = HULL.length * 0.42
+      state
+        .moveTo(at - 4, 4)
+        .lineTo(at + 4, HULL.depth - 5)
+        .moveTo(at + 4, 4)
+        .lineTo(at - 4, HULL.depth - 5)
+        .stroke({ width: 1.2, color, alpha: 0.95 })
+      continue
+    }
+
+    if (mark.kind === 'pennant') {
+      // At the masthead: cargo aboard that has not been delivered.
+      const mastX = HULL.length * 0.28 + 13
+      const top = -6.5 - HULL.house * 0.55 * storeys(ship) - HULL.mast * 0.5
+      state
+        .moveTo(mastX, top)
+        .lineTo(mastX + 9, top + 2.2)
+        .lineTo(mastX, top + 4.4)
+        .closePath()
+        .fill({ color, alpha: 0.85 })
+      continue
+    }
+
+    if (mark.kind === 'drag') {
+      // A drag mark astern: the remote is ahead, this tree is being pulled along behind it.
+      for (let index = 0; index < count; index += 1) {
+        const x = -3 - index * 3.5
+        state.moveTo(x, HULL.depth - 3).lineTo(x - 2.5, HULL.depth + 1)
+      }
+      state.stroke({ width: 0.9, color, alpha: 0.75 })
+      continue
+    }
+
+    if (mark.kind === 'boat') {
+      // Boats alongside, outboard of the hull: another working tree of the same repository.
+      for (let index = 0; index < count; index += 1) {
+        const x = HULL.length * 0.1 + index * 9
+        const y = HULL.depth + 3.5
+        state
+          .moveTo(x, y)
+          .lineTo(x + 7, y)
+          .lineTo(x + 5.5, y + 2.4)
+          .lineTo(x + 1.5, y + 2.4)
+          .closePath()
+          .stroke({ width: 0.6, color, alpha: 0.6 })
+      }
+      continue
+    }
+
+    if (mark.kind === 'stash') {
+      // On the quay under the ship: work that is in no commit and in no tree.
+      for (let index = 0; index < count; index += 1) {
+        const x = HULL.length * 0.62 + index * (crateSize + 1.4)
+        state.rect(x, HULL.depth + 4, crateSize, crateSize)
+      }
+      state.stroke({ width: 0.7, color, alpha: 0.8 })
+      continue
+    }
+
+    // Crates on deck, stacked forward: staged closed, unstaged open, untracked dashed.
+    for (let index = 0; index < count; index += 1) {
+      const x = stackX + index * (crateSize + 1.2)
+      const y = -6.5 - crateSize - 0.5
+      if (mark.kind === 'staged') {
+        state.rect(x, y, crateSize, crateSize).fill({ color, alpha: 0.85 })
+      } else {
+        state.rect(x, y, crateSize, crateSize).stroke({
+          width: mark.kind === 'untracked' ? 0.5 : 0.8,
+          color,
+          alpha: mark.kind === 'untracked' ? 0.6 : 0.85,
+        })
+      }
+    }
+    stackX += count * (crateSize + 1.2) + 2.4
+
+    if (isCapped(mark)) {
+      // The cap is a drawing limit, so the drawing says so rather than claiming the count is
+      // four. The real number is in the datasheet.
+      const plus = new Text({ text: '+', style: LABEL_DIM })
+      plus.position.set(stackX - 2, -6.5 - crateSize - 5)
+      group.addChild(plus)
+    }
+  }
+
+  // Everything measured and nothing open: one quiet tick, so "clean" is visible rather than
+  // being the absence of marks — which is what "not measured" looks like.
+  if (isShipshape(ship) && ship.hasGit) {
+    state
+      .moveTo(HULL.length * 0.62, -9)
+      .lineTo(HULL.length * 0.62 + 2.2, -7)
+      .lineTo(HULL.length * 0.62 + 6, -11.5)
+      .stroke({ width: 0.9, color: steel, alpha: 0.45 })
+  }
+
+  return group
+}
+
+/**
  * One ship as a lines plan.
  *
  * Returns the container *and* the hull, because the roll is applied to the hull and its deck
@@ -230,6 +355,7 @@ function drawShip(ship: Ship): { root: Container; body: Container } {
 
   body.addChild(deck(ship, steel))
   body.addChild(superstructure(ship, steel))
+  body.addChild(localState(ship, steel))
 
   root.addChild(body)
   return { root, body }

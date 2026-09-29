@@ -50,21 +50,28 @@ eine Forderung, die hier nicht gilt, ist keine bestandene.
 
 ## Der Katalog
 
-Was die Flotte fordert, liegt als Markdown im Store (Default
-`~/.data/sources/ulfgebhardt/hafen-data`):
+Was die Flotte fordert, liegt als Markdown im Store — `$HAFEN_STORE`, sonst
+`$XDG_DATA_HOME/hafen` (also meist `~/.local/share/hafen`):
 
 ```
-hafen-data/
+~/.local/share/hafen/
   quests/werft/lint.md
   quests/werft/typecheck.md
   register.md
 ```
+
+Der Store bleibt **lokal**. `register.md` führt jedes Repo mit absolutem Pfad, und das ist eine
+Liste von Projekten und Kunden — nichts, was in ein öffentliches Repository gehört.
 
 Ein einzelnes Repo darf in `.hafen/quests/` eigene Forderungen ergänzen. **Der Katalog führt:**
 eine lokale Quest mit einer Id, die der Katalog schon fordert, wird verworfen — und das steht in
 der Ausgabe, damit die Regel sichtbar ist.
 
 ## Das Fenster
+
+Das Fenster skaliert sich selbst: `$HAFEN_ZOOM`, sonst `GDK_SCALE`/`GDK_DPI_SCALE`, sonst aus der
+tatsächlichen Bildschirmdichte. Gemessen auf dem Panel, für das es geschrieben wurde — 2560×1440
+auf 309 mm sind 210 dpi, während X hartnäckig 96 meldet, also Faktor 2,25.
 
 ```sh
 pnpm --filter @hafen/harbor snapshot   # misst die Flotte in public/snapshot.json
@@ -80,6 +87,24 @@ und „gemessen und leer" dürfen nicht gleich aussehen.
 Der Tiefgang ist die Last — ein Schiff, das alles erfüllt, liegt hoch. Die Aufbauten wachsen mit
 der Zahl der Forderungen. Sortiert wird nach Zustand, Schlimmstes zuerst; Rost ist zweiter
 Schlüssel und nie erster, denn frisch ist nicht dasselbe wie wichtig.
+
+**Daneben steht, was das Repo selbst gerade tut** — zwei verschiedene Fragen, also zwei Orte am
+Schiff. Das Deck ist die Forderung der Flotte, Fracht und Flaggen sind der lokale Stand:
+
+| Zeichen | Bedeutung | Zeichen | Bedeutung |
+| --- | --- | --- | --- |
+| Kiste, gefüllt | vorgemerkt (staged) | Wimpel am Mast | nicht gepusht |
+| Kiste, offen | geändert | Schleifspur am Heck | Remote ist voraus |
+| Kiste, gestrichelt | unverzeichnet | Kisten am Kai | Stash |
+| Bruch im Rumpf | Konflikt — hier ist Schluss | Boote längsseits | weitere Worktrees |
+| Haken | sauber, auf seinem Branch | | |
+
+Der Bruch steht für sich, weil ein Konflikt keine schwerere Fracht ist, sondern **gestoppte**
+Arbeit. Der Haken ist da, damit „sauber" sichtbar ist statt als Abwesenheit von Zeichen — so
+sieht sonst „nicht gemessen" aus.
+
+Auf dieser Maschine gemessen: 25 von 90 Repos haben Stash-Einträge, eines davon 16. Arbeit, die
+in keinem Commit und in keinem Baum liegt und die sonst nichts anzeigt.
 
 **Die App misst nicht.** Sie liest `snapshot.json` und sagt in der Kopfzeile, wann der gemessen
 wurde — ein Bild ohne seinen Zeitstempel behauptet, aktuell zu sein.

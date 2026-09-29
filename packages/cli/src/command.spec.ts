@@ -369,6 +369,9 @@ describe(main, () => {
       'git worktree list --porcelain',
       'git rev-list --count',
       'git ls-files -z',
+      // Added when the working tree and the stash became measurements: this list noticed it,
+      // which is the whole reason it is an allow list.
+      'git stash list',
     ]
 
     out()

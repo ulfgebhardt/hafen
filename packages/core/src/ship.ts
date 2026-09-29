@@ -4,12 +4,14 @@ import { detectContract } from './contract'
 import { forgeOf } from './forge'
 import { measureQuests } from './probe'
 import { daysSince } from './time'
+import { countStash, hasOpenWork, readWorking } from './working'
 
 import type { QuestResult } from './chain'
 import type { Contract } from './contract'
 import type { Forge } from './forge'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
+import type { Working } from './working'
 
 /**
  * One of a ship's remotes, as git names it.
@@ -53,7 +55,24 @@ export interface Ship {
    */
   remotes: readonly Remote[]
   branch: string | null
+  /** Whether anything at all is open. Derived from `working` — see `hasOpenWork`. */
   dirty: boolean
+  /**
+   * What is open, in the five kinds git tells apart.
+   *
+   * Beside `dirty` and not instead of it, because most readers only ask the yes/no question. The
+   * detail exists because staged work, untracked files and a stuck merge are three different
+   * sentences, and one bit told none of them.
+   */
+  working: Working
+  /**
+   * Entries on the stash.
+   *
+   * Counted because stashed work exists nowhere else — not in a commit, not in the tree, and in
+   * no other measurement here. A repository with four stash entries and a clean tree looks
+   * finished and is not.
+   */
+  stash: number
   /** Days since the last commit — the source of `rust`. */
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
@@ -258,15 +277,17 @@ export async function inspectShip(
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
 
-  const [hasGit, remotes, branch, status, lastCommit, worktrees, tracking] = await Promise.all([
-    ports.fs.isDirectory(`${path}/.git`),
-    git(ports, path, ['remote', '-v']),
-    git(ports, path, ['rev-parse', '--abbrev-ref', 'HEAD']),
-    git(ports, path, ['status', '--porcelain']),
-    git(ports, path, ['log', '-1', '--format=%cI']),
-    git(ports, path, ['worktree', 'list', '--porcelain']),
-    git(ports, path, ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']),
-  ])
+  const [hasGit, remotes, branch, status, lastCommit, worktrees, tracking, stashList] =
+    await Promise.all([
+      ports.fs.isDirectory(`${path}/.git`),
+      git(ports, path, ['remote', '-v']),
+      git(ports, path, ['rev-parse', '--abbrev-ref', 'HEAD']),
+      git(ports, path, ['status', '--porcelain']),
+      git(ports, path, ['log', '-1', '--format=%cI']),
+      git(ports, path, ['worktree', 'list', '--porcelain']),
+      git(ports, path, ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']),
+      git(ports, path, ['stash', 'list']),
+    ])
 
   // The ship's own tree is in that list and is no dock of anybody's.
   const docks = parseWorktrees(worktrees)
@@ -274,7 +295,11 @@ export async function inspectShip(
     .filter((tree) => tree !== path)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
-  const dirty = status !== null && status !== ''
+  // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
+  // two opinions about the same tree.
+  const working = readWorking(status)
+  const dirty = hasOpenWork(working)
+  const stash = countStash(stashList)
 
   const contract = await detectContract(ports, path)
 
@@ -302,6 +327,8 @@ export async function inspectShip(
     remotes: parseRemotes(remotes),
     branch,
     dirty,
+    working,
+    stash,
     rustDays,
     docks,
     ahead,

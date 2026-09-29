@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { activityOf, byActivity, rustLevel, summarizeFleet } from './fleet'
 import { mockChecks } from './mock'
 import { CHECK_ROLES } from './role'
+import { NOTHING_OPEN } from './working'
 
 import type { Contract, MemberCheck } from './contract'
 import type { CheckRole } from './role'
@@ -39,6 +40,8 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     remotes: [],
     branch: 'main',
     dirty: false,
+    working: NOTHING_OPEN,
+    stash: 0,
     rustDays: 1,
     docks: [],
     ahead: 0,

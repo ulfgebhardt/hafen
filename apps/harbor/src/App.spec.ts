@@ -18,18 +18,21 @@ const stubs = {
   },
 }
 
+/**
+ * The app's own way in: the Tauri command, answering the way `lib.rs` does.
+ *
+ * Stubbed at the bridge rather than at `loadSnapshot`, so this spec exercises the same branch
+ * the packaged window takes — `snapshot.spec.ts` covers the browser half.
+ */
 function answersWith(body: unknown, ok = true): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () =>
-      Promise.resolve({
-        ok,
-        status: ok ? 200 : 404,
-        statusText: ok ? 'OK' : 'Not Found',
-        json: async () => Promise.resolve(body),
-      }),
+  const invoke = vi.fn<(command: string) => Promise<unknown>>(async () =>
+    Promise.resolve(
+      ok
+        ? { path: '/cache/hafen/snapshot.json', json: JSON.stringify(body), error: null }
+        : { path: '/cache/hafen/snapshot.json', json: null, error: 'No such file' },
     ),
   )
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
 }
 
 const snapshot = {
@@ -70,29 +73,23 @@ describe('app', () => {
     const app = mount(App, { global: { stubs } })
     await flushPromises()
 
-    expect(app.text()).toContain('snapshot.json nicht lesbar')
-    expect(app.text()).toContain('404')
-    expect(app.text()).toContain('snapshot')
+    expect(app.text()).toContain('Kein Schnappschuss')
+    expect(app.text()).toContain('No such file')
+    expect(app.text()).toContain('/cache/hafen/snapshot.json')
+    expect(app.text()).toContain('hafen schnappschuss')
   })
 
-  it('names a snapshot that is not JSON rather than hanging on "wird gelesen"', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: async () => Promise.reject(new Error('Unexpected token <')),
-        }),
-      ),
+  /** Anything the loader did not name is still named, rather than leaving "wird gelesen". */
+  it('names a snapshot that is not JSON at all', async () => {
+    const invoke = vi.fn<(command: string) => Promise<unknown>>(async () =>
+      Promise.resolve({ path: '/cache/hafen/snapshot.json', json: 'kein JSON', error: null }),
     )
+    vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
 
     const app = mount(App, { global: { stubs } })
     await flushPromises()
 
-    expect(app.text()).toContain('nicht lesbar')
-    expect(app.text()).toContain('Unexpected token')
+    expect(app.text()).toContain('Kein Schnappschuss')
   })
 
   it('waits for a ship to be picked before showing a sheet', async () => {

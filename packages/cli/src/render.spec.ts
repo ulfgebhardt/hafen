@@ -1,4 +1,4 @@
-import { mockContract } from '@hafen/core'
+import { NOTHING_OPEN, mockContract } from '@hafen/core'
 import { describe, expect, it } from 'vitest'
 
 import { renderHarbor } from './render'
@@ -35,6 +35,8 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     remotes: [],
     branch: 'main',
     dirty: false,
+    working: NOTHING_OPEN,
+    stash: 0,
     rustDays: 1,
     docks: [],
     ahead: 0,
