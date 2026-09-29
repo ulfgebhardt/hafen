@@ -1,3 +1,4 @@
+import { NO_WORK } from '@hafen/core'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -51,6 +52,32 @@ describe('fleetBar', () => {
 
     expect(bar.text()).toContain('gemessen')
     expect(bar.text()).toContain('2026')
+  })
+
+  /**
+   * Side by side and never added: a project total describes the repositories, the personal one
+   * describes what this person did with them.
+   */
+  it('shows the fleet score and the personal one apart', () => {
+    const bar = mount(FleetBar, {
+      props: {
+        at: AT,
+        source: SOURCE,
+        ships: [
+          ship({
+            rustDays: 2,
+            ledger: {
+              total: { ...NO_WORK, commits: 10, byKind: { feat: 10 } },
+              own: { ...NO_WORK, commits: 2, byKind: { feat: 2 } },
+            },
+          }),
+        ],
+      },
+    })
+
+    expect(bar.text()).toContain('Flotte')
+    expect(bar.text()).toContain('30')
+    expect(bar.text()).toContain('du')
   })
 
   it('draws an empty harbor without falling over', () => {

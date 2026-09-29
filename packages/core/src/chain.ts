@@ -192,6 +192,17 @@ export function evaluateQuests(
 }
 
 /** The quests this ship owes and does not meet — the ones that are work. */
+/**
+ * The quests that say something about a ship — `notApplicable` does not.
+ *
+ * Here rather than in the window, because three callers ask it now: the scene, the sheet and the
+ * scoring. A predicate that decides what "this ship is held to anything" means belongs where the
+ * verdicts are defined.
+ */
+export function bindingQuests(results: readonly QuestResult[]): readonly QuestResult[] {
+  return results.filter((quest) => quest.verdict !== 'notApplicable')
+}
+
 export function violatedQuests(results: readonly QuestResult[]): readonly QuestResult[] {
   return results.filter((result) => result.verdict === 'violated')
 }

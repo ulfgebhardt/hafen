@@ -1,9 +1,9 @@
-import { NOTHING_OPEN, mockContract } from '@hafen/core'
+import { NOTHING_OPEN, NO_LEDGER, NO_WORK, mockContract } from '@hafen/core'
 import { describe, expect, it } from 'vitest'
 
-import { renderHarbor } from './render'
+import { renderHarbor, renderPoints } from './render'
 
-import type { ProbeResult, QuestResult, QuestVerdict, Ship } from '@hafen/core'
+import type { ProbeResult, QuestResult, QuestVerdict, Ship, Work } from '@hafen/core'
 
 function check(ok: boolean | null, question = 'lintet etwas'): ProbeResult {
   return { ok, evidence: { question, where: 'package.json', found: 'eslint .' } }
@@ -37,6 +37,7 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     dirty: false,
     working: NOTHING_OPEN,
     stash: 0,
+    ledger: NO_LEDGER,
     rustDays: 1,
     docks: [],
     ahead: 0,
@@ -209,5 +210,86 @@ describe(renderHarbor, () => {
 
   it('keeps the catalog section out when there is nothing wrong with it', () => {
     expect(renderHarbor([ship()])).not.toContain('KATALOG')
+  })
+})
+
+describe(renderPoints, () => {
+  const withWork = (name: string, total: Partial<Work>, own: Partial<Work> = {}): Ship =>
+    ship({
+      name,
+      ledger: { total: { ...NO_WORK, ...total }, own: { ...NO_WORK, ...own } },
+    })
+
+  it('says so rather than drawing an empty board', () => {
+    expect(renderPoints([], true)).toContain('(keine Schiffe gefunden)')
+  })
+
+  it('ranks repositories by what they accumulated', () => {
+    const text = renderPoints(
+      [
+        withWork('klein', { commits: 1, byKind: { feat: 1 } }),
+        withWork('gross', { commits: 100, byKind: { feat: 100 } }),
+      ],
+      true,
+    )
+
+    expect(text.indexOf('gross')).toBeLessThan(text.indexOf('klein'))
+  })
+
+  /** A repository nobody has committed to is not a score of zero, it is not a row. */
+  it('leaves out repositories with no commits at all', () => {
+    const text = renderPoints([withWork('leer', {}), withWork('voll', { commits: 3 })], true)
+
+    expect(text).toContain('voll')
+    expect(text).not.toMatch(/\bleer\b/u)
+  })
+
+  /**
+   * The split this whole board exists for: eighteen thousand points from a project with forty
+   * contributors are not a personal score.
+   */
+  it('shows the own share beside the project total, never instead of it', () => {
+    const text = renderPoints(
+      [withWork('geteilt', { commits: 100, byKind: { feat: 100 } }, { byKind: { feat: 2 } })],
+      true,
+    )
+
+    expect(text).toContain('davon dein 6')
+    expect(text).toContain('300')
+  })
+
+  /** A zero beside two thousand commits is a missing convention, not idleness. */
+  it('names how much of the history carries no convention', () => {
+    const text = renderPoints([withWork('alt', { commits: 100, unscored: 96 })], true)
+
+    expect(text).toContain('96 ohne Convention (96 %)')
+  })
+
+  it('reports the three parts of the personal score', () => {
+    const text = renderPoints([ship({ rustDays: 2, ledger: NO_LEDGER })], true)
+
+    expect(text).toContain('Arbeit')
+    expect(text).toContain('Breite')
+    expect(text).toContain('Ordnung')
+  })
+
+  /**
+   * Without an address every commit would count as somebody else's, and a personal score of zero
+   * beside a busy fleet is worse than no score — so it says which measurement is missing.
+   */
+  it('refuses to score a person it cannot identify', () => {
+    const text = renderPoints([withWork('etwas', { commits: 10 })], false)
+
+    expect(text).toContain('Keine eigene Adresse bekannt')
+    expect(text).toContain('HAFEN_EMAILS')
+    expect(text).not.toContain('Breite')
+  })
+
+  it('says how many rows it left out rather than silently cutting', () => {
+    const many = Array.from({ length: 20 }, (_, index) =>
+      withWork(`s${String(index)}`, { commits: 20 - index }),
+    )
+
+    expect(renderPoints(many, true)).toContain('und 5 weitere')
   })
 })

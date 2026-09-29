@@ -2,7 +2,7 @@ import { homedir } from 'node:os'
 
 import { EMPTY_REGISTER, parseRegister, readQuestCatalog, surveyHarbor } from '@hafen/core'
 
-import { renderHarbor } from './render'
+import { renderHarbor, renderPoints } from './render'
 
 import type { Ports, Quest, Ship } from '@hafen/core'
 
@@ -38,11 +38,13 @@ export const DEFAULT_STORE =
 export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
 
   hafen           alle Schiffe mit Zustand, Vertrags-Luecken und Quests
-  schnappschuss   dasselbe als JSON
+  punkte          was die Projekte geleistet haben, und was davon deins ist
+  schnappschuss   alles als JSON
 
   wurzel      Default: ${DEFAULT_ROOT}
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
+  HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
   --store     Katalog und Register; Default: ${DEFAULT_STORE}
 
 Der Hafen misst und zeichnet. Er veraendert kein Repository.
@@ -87,6 +89,29 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
     return catalog.quests
   }
 
+  /**
+   * Whose commits count as the reader's own.
+   *
+   * `$HAFEN_EMAILS` first, then git's configured address. Read **once** rather than per
+   * repository: `git config --get user.email` ninety times is ninety processes for an answer
+   * that is almost always the same one, and a repository with a local override is rare enough
+   * to name in the variable.
+   *
+   * Empty means no ledger is measured at all — a count of "own" against nobody would report
+   * every commit as somebody else's, which is worse than saying nothing.
+   */
+  const identities = async (): Promise<readonly string[]> => {
+    // eslint-disable-next-line n/no-process-env -- one person often commits under several names
+    const declared = (process.env['HAFEN_EMAILS'] ?? '')
+      .split(',')
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry !== '')
+
+    const configured = await ports.proc.run('git', ['config', '--get', 'user.email'])
+    const own = configured.code === 0 ? configured.stdout.trim().toLowerCase() : ''
+    return own !== '' && !declared.includes(own) ? [...declared, own] : declared
+  }
+
   /** Directories the survey would not find by itself. A decision, so it comes from the register. */
   const enlisted = async (): Promise<readonly string[]> => {
     const raw = await ports.fs.readFile(`${store}/register.md`)
@@ -95,7 +120,14 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
 
   switch (command) {
     case 'hafen': {
-      const ships = await surveyHarbor(ports, root, await enlisted(), {}, await demands())
+      const ships = await surveyHarbor(
+        ports,
+        root,
+        await enlisted(),
+        {},
+        await demands(),
+        await identities(),
+      )
       if (asJson) {
         write(ships)
       } else {
@@ -103,8 +135,27 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       }
       return 0
     }
+    case 'punkte': {
+      const own = await identities()
+      const ships = await surveyHarbor(ports, root, await enlisted(), {}, await demands(), own)
+      if (asJson) {
+        write({
+          ships: ships.map((ship) => ({ name: ship.name, org: ship.org, ledger: ship.ledger })),
+        })
+      } else {
+        process.stdout.write(`${renderPoints(ships, own.length > 0)}\n`)
+      }
+      return 0
+    }
     case 'schnappschuss': {
-      const ships = await surveyHarbor(ports, root, await enlisted(), {}, await demands())
+      const ships = await surveyHarbor(
+        ports,
+        root,
+        await enlisted(),
+        {},
+        await demands(),
+        await identities(),
+      )
       const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }
       write(snapshot)
       return 0

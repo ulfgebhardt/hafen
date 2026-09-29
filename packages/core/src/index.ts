@@ -65,7 +65,7 @@ export type { Evidence, ProbeResult, QuestFacts } from './probe'
 export { measureQuests, runCheck } from './probe'
 
 export type { QuestResult, QuestVerdict } from './chain'
-export { evaluateQuests, unmeasuredQuests, violatedQuests } from './chain'
+export { bindingQuests, evaluateQuests, unmeasuredQuests, violatedQuests } from './chain'
 
 export type { Register } from './register'
 export { EMPTY_REGISTER, parseRegister, renderRegister, setArchived, setEnlisted } from './register'
@@ -83,6 +83,38 @@ export {
   surveyOrder,
   UnreadableRootError,
 } from './ship'
+
+export type { Commit, CommitKind, Ledger, Work } from './work'
+export {
+  COMMIT_KINDS,
+  countWork,
+  isBot,
+  kindOf,
+  LOG_FORMAT,
+  NO_LEDGER,
+  NO_WORK,
+  parseLog,
+  pullOf,
+  readLedger,
+} from './work'
+
+export type { FleetPoints, ShipPoints } from './points'
+export {
+  ACTIVE_WINDOW_DAYS,
+  BREADTH_POINTS,
+  byProjectPoints,
+  fleetPoints,
+  isActive,
+  isClean,
+  KIND_POINTS,
+  projectPoints,
+  PULL_POINTS,
+  questRatio,
+  scoreWork,
+  SHIPSHAPE_POINTS,
+  shipPoints,
+  UNSCORED_POINTS,
+} from './points'
 
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'

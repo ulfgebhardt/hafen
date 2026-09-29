@@ -112,6 +112,37 @@ wurde — ein Bild ohne seinen Zeitstempel behauptet, aktuell zu sein.
 Gezeichnet wird mit PixiJS über WebGL. Der Grund ist gemessen: derselbe Hafen im DOM kostete in
 Werft 8,4 % CPU im Leerlauf, und das bei weniger Detail.
 
+## Punkte
+
+```sh
+pnpm hafen punkte
+```
+
+Zwei Zahlen, nebeneinander und **nie addiert**:
+
+- **Projektpunkte** sagen, was ein *Repository* angesammelt hat — alle Autoren. Ein geschäftiges
+  gemeinsames Projekt steht hoch, und das ist richtig: die Zahl beschreibt das Projekt.
+- **Deine Punkte** sagen, was *du* mit deiner Flotte gemacht hast. Eigene Commits, plus zwei
+  Dinge, die kein einzelnes Repository zeigen kann: wie viele Projekte du gleichzeitig hältst
+  (*Breite*) und wie viele Bäume du sauber hinterlässt (*Ordnung*).
+
+Die Trennung ist der Punkt: 23 000 Punkte aus einem Projekt mit 110 Mitwirkenden sind keine
+persönliche Leistung.
+
+Gewichtet wird nach Conventional-Commit-Typ (`feat` 3, `fix`/`perf` 2, der Rest 1), plus 2 pro
+gelandetem Pull Request. Ein Commit ohne Convention zählt trotzdem — eine Null neben 2000 Commits
+wäre eine fehlende Konvention und keine Untätigkeit, und wie viele es sind, steht dabei.
+
+PRs werden **lokal** gezählt, ohne die Forge zu fragen: als Menge von Nummern aus Merge-Commits
+(`Merge pull request #123`) *und* Squashes (`… (#123)`). Beide Formen kommen vor, oft im selben
+Repo — wer nur Merge-Commits zählt, meldet für ein squash-merging Projekt eine glatte Null.
+
+Der Snapshot trägt die **Rohzahlen**, nicht die Punkte. Eine andere Gewichtung kostet damit keine
+neue Messung — was zählt, weil der erste Satz Gewichte immer falsch ist.
+
+Eigene Adressen: `git config user.email`, erweiterbar über `HAFEN_EMAILS` (komma-getrennt). Ohne
+eine bekannte Adresse wird **nicht** gescort — jeder Commit zählte sonst als fremder.
+
 ## Aufbau
 
 ```

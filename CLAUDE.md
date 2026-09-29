@@ -116,6 +116,35 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 - **Ein Check muss ein Urteil zurückgeben** (`judges`). `vitest` ohne `run` wartet,
   `playwright test --ui` wartet auf einen Menschen, `--fix` ändert den Baum, damit er grün wird.
 
+## Punkte
+
+- **Zwei Zahlen, nie eine.** Projektpunkte beschreiben ein *Repository* (alle Autoren),
+  Nutzerpunkte beschreiben, was ein *Mensch* mit seiner Flotte getan hat. Gemessen auf dieser
+  Maschine: 151 556 gegen 23 661. Sie zu addieren hiesse, wer neben dem groessten gemeinsamen
+  Projekt steht, duerfte dessen Geschichte als seine ausgeben.
+- **Die Messung steht in `work.ts`, die Wertung in `points.ts`** — dieselbe Trennung wie
+  quest/probe: eine Zahl ist eine Tatsache, ein Gewicht eine Entscheidung. Der Schnappschuss
+  traegt die **Rohsignale** und nicht die Punkte, also kostet eine andere Gewichtung keine neue
+  Messung. Das zaehlt, weil der erste Satz Gewichte immer falsch ist.
+- **Quests gehen nicht in die Punkte ein.** Eine erfuellte Forderung ist ein Zustand, in dem das
+  Schiff sein *soll*, keine Leistung zum Verbuchen — und beides zu addieren liesse ein Repo sich
+  mit Commit-Menge aus einem verletzten Vertrag freikaufen.
+- **Ein Commit ohne Convention zaehlt trotzdem, und es wird gesagt wie viele.** Eine Null neben
+  2 000 Commits waere eine fehlende Konvention und keine Untaetigkeit — die eine Art, wie diese
+  Zahlen glatt luegen koennten. Gemessen: 96 % der 124 314 Commits dieser Flotte tragen keine,
+  fast alle davon in grossen Fremdprojekten (`ng`: 3 von 11 382).
+- **PRs werden als Menge von Nummern gezaehlt, nicht als Commits.** Beide Merge-Arten kommen vor,
+  oft im selben Repo: `Merge pull request #123` und der Squash `… (#123)`. Nur Merge-Commits zu
+  zaehlen meldete fuer jahrweiser 0 statt 348 — eine glatte Falschaussage. Die Menge entdoppelt
+  zugleich, wo beide Formen dieselbe Nummer nennen. Und sie kommt aus `git log`: kein `gh`, keine
+  Forge, kein Netz.
+- **Ordnung ist das Gegengewicht zur Arbeit.** Commits allein belohnen Bewegung, und eine Flotte,
+  die auf Bewegung optimiert, ist eine mit neunzig halbfertigen Baeumen. `tidy` faellt, sobald
+  Arbeit herumliegt — ein Stash ist genau das.
+- **Ohne bekannte Adresse wird nicht gescort.** `git config user.email` plus `HAFEN_EMAILS`,
+  einmal gelesen statt neunzigmal. Fehlt sie, zaehlte jeder Commit als fremder, und eine
+  persoenliche Null neben einer geschaeftigen Flotte ist schlechter als gar keine Zahl.
+
 ## Prüfarten
 
 Welche es gibt, entscheidet **eine** Stelle: das `switch` in `probe.ts`. Ein Name, den niemand

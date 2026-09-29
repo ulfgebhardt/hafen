@@ -1,4 +1,11 @@
-import { hasChecks, RUST_THRESHOLD_DAYS } from '@hafen/core'
+import {
+  ACTIVE_WINDOW_DAYS,
+  byProjectPoints,
+  fleetPoints,
+  hasChecks,
+  RUST_THRESHOLD_DAYS,
+  shipPoints,
+} from '@hafen/core'
 
 import type { QuestResult, QuestVerdict, Ship, Stage } from '@hafen/core'
 
@@ -32,6 +39,9 @@ const VERDICT_LABEL: Record<QuestVerdict, string> = {
   unmeasured: 'nicht messbar',
   notApplicable: 'nicht anwendbar',
 }
+
+/** How many repositories the project table lists before it says how many are left. */
+const POINTS_ROWS = 15
 
 /** How wide the id column is. Longer ids push the reason right rather than colliding with it. */
 const ID_COLUMN = 16
@@ -180,6 +190,72 @@ export function renderHarbor(ships: readonly Ship[], options: HarborOptions = {}
   }
   lines.push(`  ${String(bound)} von ${String(ships.length)} Schiffen sind an eine Quest gebunden`)
   lines.push(...unreadableLines(ships))
+
+  return lines.join('\n')
+}
+
+/**
+ * Two scoreboards, and the split between them is the whole point.
+ *
+ * The project table says what each *repository* accumulated, every author counted. The user
+ * total says what *this person* did with their fleet — own commits only, plus the two things no
+ * single repository can show: how many projects are held at once, and how many are left clean.
+ *
+ * Shown side by side and never added together: eighteen thousand points from a project with
+ * forty contributors are not a personal score.
+ */
+export function renderPoints(ships: readonly Ship[], hasIdentity: boolean): string {
+  if (ships.length === 0) {
+    return 'PUNKTE\n\n  (keine Schiffe gefunden)'
+  }
+
+  const mine = fleetPoints(ships)
+  const lines = ['PROJEKTPUNKTE', '']
+
+  const ranked = [...ships].sort(byProjectPoints).filter((ship) => ship.ledger.total.commits > 0)
+  for (const ship of ranked.slice(0, POINTS_ROWS)) {
+    const label = `${ship.org}/${ship.name}`
+    const score = shipPoints(ship)
+    const work = ship.ledger.total
+    const share = score.project === 0 ? '' : `  davon dein ${String(score.own)}`
+    lines.push(
+      `  ${label.padEnd(44)}${String(score.project).padStart(6)}` +
+        `   ${String(work.commits)} Commits, ${String(work.pulls)} PRs, ` +
+        `${String(work.authors)} ${work.authors === 1 ? 'Autor' : 'Autoren'}${share}`,
+    )
+  }
+  if (ranked.length > POINTS_ROWS) {
+    lines.push(`  … und ${String(ranked.length - POINTS_ROWS)} weitere`)
+  }
+
+  // An unscored commit did something; it just did not say what. Saying so keeps a zero beside
+  // two thousand commits from reading as idleness.
+  const unscored = ships.reduce((sum, ship) => sum + ship.ledger.total.unscored, 0)
+  const commits = ships.reduce((sum, ship) => sum + ship.ledger.total.commits, 0)
+  if (commits > 0) {
+    const share = Math.round((unscored / commits) * 100)
+    lines.push(
+      '',
+      `  ${String(commits)} Commits gesamt, davon ${String(unscored)} ohne Convention (${String(share)} %)`,
+    )
+  }
+
+  lines.push('', 'DEINE PUNKTE', '')
+  if (!hasIdentity) {
+    lines.push(
+      '  Keine eigene Adresse bekannt — weder `git config user.email` noch HAFEN_EMAILS.',
+      '  Ohne sie zählte jeder Commit als fremder, und das wäre schlechter als gar nichts.',
+    )
+    return lines.join('\n')
+  }
+
+  lines.push(
+    `  ${String(mine.work).padStart(6)}   Arbeit — eigene Commits und PRs über die ganze Flotte`,
+    `  ${String(mine.breadth).padStart(6)}   Breite — ${String(mine.active)} Projekte in den letzten ${String(ACTIVE_WINDOW_DAYS)} Tagen angefasst`,
+    `  ${String(mine.tidy).padStart(6)}   Ordnung — ${String(mine.clean)} von ${String(mine.fleet)} Bäumen sauber hinterlassen`,
+    `  ${'─'.repeat(6)}`,
+    `  ${String(mine.total).padStart(6)}   gesamt`,
+  )
 
   return lines.join('\n')
 }
