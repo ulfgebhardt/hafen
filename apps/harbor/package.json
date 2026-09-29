@@ -1,0 +1,33 @@
+{
+  "name": "@hafen/harbor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "snapshot": "pnpm --filter @hafen/cli exec tsx src/index.ts schnappschuss > public/snapshot.json",
+    "test:lint": "eslint --max-warnings 0 .",
+    "test:lint:typecheck": "vue-tsc --noEmit",
+    "test:unit": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@hafen/core": "workspace:*",
+    "pixi.js": "^8.21.0",
+    "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "@vue/test-utils": "^2.4.10",
+    "happy-dom": "^20.0.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.7.2",
+    "vite": "^7.1.14",
+    "vitest": "^4.1.7",
+    "vue-tsc": "^3.1.2"
+  }
+}
