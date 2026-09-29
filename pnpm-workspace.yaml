@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+
+# esbuild backs vitest and tsx; unrs-resolver backs the import rules in eslint-config-it4c.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

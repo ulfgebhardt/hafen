@@ -1,0 +1,22 @@
+{
+  "name": "hafen",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.26.0",
+  "scripts": {
+    "test:lint": "turbo test:lint",
+    "test:lint:eslint": "eslint --max-warnings 0 .",
+    "test:lint:typecheck": "turbo test:lint:typecheck",
+    "test:unit": "turbo test:unit",
+    "hafen": "pnpm --filter @hafen/cli exec tsx src/index.ts"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "eslint-config-it4c": "^0.13.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "turbo": "^2.6.1",
+    "typescript": "~5.7.2",
+    "vitest": "^4.1.7"
+  }
+}
