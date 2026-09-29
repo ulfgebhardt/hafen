@@ -51,8 +51,14 @@ const LANE_STAGGER = 22
  * across the hulls: a deeply laden ship sits `draught` × `depth` lower, and the stash crates and
  * boats hang under that again. The deepest a ship goes is `MAX_DRAUGHT`, so the text starts
  * below that and not at a number that happened to work for an empty one.
+ *
+ * A function and not a module-level constant, which is the second half of the white-window fix
+ * in `vite.hmr.ts`: a constant computed once out of another module's export freezes whichever
+ * generation of that module was loaded first.
  */
-const CAPTION_TOP = Math.ceil(HULL.depth * (MAX_DRAUGHT - 1) + HULL.depth + 12)
+function captionTop(): number {
+  return Math.ceil(HULL.depth * (MAX_DRAUGHT - 1) + HULL.depth + 12)
+}
 
 const LABEL = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -383,7 +389,8 @@ function caption(ship: Ship): Container {
   const group = new Container()
 
   const name = new Text({ text: fit(ship.name, CAPTION_CHARS), style: LABEL })
-  name.position.set(0, CAPTION_TOP)
+  const top = captionTop()
+  name.position.set(0, top)
   group.addChild(name)
 
   const binding = bindingQuests(ship)
@@ -393,7 +400,7 @@ function caption(ship: Ship): Container {
     text: fit(`${ageLabel(ship.rustDays)} · ${owed}`, CAPTION_CHARS + 4),
     style: LABEL_DIM,
   })
-  detail.position.set(0, CAPTION_TOP + 13)
+  detail.position.set(0, top + 13)
   group.addChild(detail)
 
   return group
