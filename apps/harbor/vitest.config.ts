@@ -7,7 +7,7 @@ export default defineConfig({
     environment: 'happy-dom',
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.ts', 'src/**/*.vue'],
+      include: ['src/**/*.ts', 'src/**/*.vue', 'vite.hmr.ts'],
       /**
        * What cannot be asserted about, named rather than quietly counted.
        *
