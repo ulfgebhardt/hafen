@@ -2,8 +2,11 @@
   "name": "@hafen/cli",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
-  "bin": { "hafen": "src/index.ts" },
+  "bin": {
+    "hafen": "src/index.ts"
+  },
   "scripts": {
     "test:lint": "eslint --max-warnings 0 .",
     "test:lint:typecheck": "tsc --noEmit",

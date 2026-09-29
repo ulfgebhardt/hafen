@@ -128,8 +128,9 @@ gezeichnet wird — Reihenfolge, Segmente, Tiefgang — und sind zu 100 % gemess
 zeichnet nur und ist als einziges von der Coverage ausgenommen, weil über Pixel keine Zusicherung
 möglich ist, die kein Screenshot wäre. Der Blindfleck ist damit klein und benannt.
 
-Der Kern stammt aus [Werft](../werft), einem Agenten-Cockpit, das nicht weitergeführt wird. Was
-hier liegt, ist der Teil, der eine Frage an Repositories stellt statt an einen Menschen.
+Der Kern stammt aus Werft, einem lokalen Agenten-Cockpit, das nicht weitergeführt wird. Was hier
+liegt, ist der Teil davon, der eine Frage an Repositories stellt statt an einen Menschen — und
+damit der Teil, der ohne ständige Aufmerksamkeit etwas wert ist.
 
 ## Tests
 
