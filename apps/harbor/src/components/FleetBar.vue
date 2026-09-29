@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { fleetPoints, projectPoints } from '@hafen/core'
   import { computed } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
@@ -14,6 +15,16 @@
   }>()
 
   const counts = computed(() => countVerdicts(ships))
+
+  /**
+   * Two scores, side by side and never added.
+   *
+   * The project total describes the repositories; the personal one describes what this person
+   * did with them. Adding them would let whoever stands nearest the biggest shared project claim
+   * its history.
+   */
+  const mine = computed(() => fleetPoints(ships))
+  const fleet = computed(() => projectPoints(ships))
   const bound = computed(() => ships.filter((ship) => bindingQuests(ship).length > 0).length)
 
   /**
@@ -49,6 +60,15 @@
     </ul>
 
     <p class="font-mono text-xs text-slate-500">{{ bound }} gebunden</p>
+
+    <p
+      class="font-mono text-xs text-slate-400"
+      :title="`${mine.active} Projekte aktiv, ${mine.clean} von ${mine.fleet} Bäumen sauber`"
+    >
+      <span class="text-slate-600">Flotte</span> {{ fleet.toLocaleString('de-DE') }}
+      <span class="ml-2 text-slate-600">du</span>
+      <span class="ml-1 text-slate-200">{{ mine.total.toLocaleString('de-DE') }}</span>
+    </p>
     <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">gemessen {{ taken }}</p>
   </header>
 </template>

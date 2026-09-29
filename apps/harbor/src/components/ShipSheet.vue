@@ -1,5 +1,12 @@
 <script setup lang="ts">
-  import { contractChecks, hasChecks, mirrorsOf, originOf, rustLevel } from '@hafen/core'
+  import {
+    contractChecks,
+    hasChecks,
+    mirrorsOf,
+    originOf,
+    rustLevel,
+    shipPoints,
+  } from '@hafen/core'
   import { computed } from 'vue'
 
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
@@ -17,6 +24,7 @@
   const origin = computed(() => originOf(ship.remotes))
   const mirrors = computed(() => mirrorsOf(ship.remotes))
   const checks = computed(() => contractChecks(ship.contract))
+  const points = computed(() => shipPoints(ship))
 </script>
 
 <template>
@@ -58,6 +66,26 @@
         <p class="text-[10px] tracking-wide text-slate-600 uppercase">Worktrees</p>
         <p class="text-slate-300">{{ ship.docks.length }}</p>
       </div>
+    </section>
+
+    <!-- Counts beside the score, so the weighting can be argued with rather than believed. -->
+    <section class="border-b border-slate-800 px-4 py-3">
+      <p class="text-[10px] tracking-wide text-slate-600 uppercase">Geleistet</p>
+      <p class="text-slate-300">
+        {{ points.project.toLocaleString('de-DE') }}
+        <span class="text-[11px] text-slate-600">Projektpunkte</span>
+        <span v-if="points.own > 0" class="ml-2 text-slate-400"
+          >{{ points.own.toLocaleString('de-DE') }}
+          <span class="text-[11px] text-slate-600">davon deine</span></span
+        >
+      </p>
+      <p class="text-[11px] text-slate-600">
+        {{ ship.ledger.total.commits }} Commits · {{ ship.ledger.total.pulls }} PRs ·
+        {{ ship.ledger.total.authors }} {{ ship.ledger.total.authors === 1 ? 'Autor' : 'Autoren' }}
+      </p>
+      <p v-if="ship.ledger.total.unscored > 0" class="text-[11px] text-slate-600">
+        {{ ship.ledger.total.unscored }} ohne Convention
+      </p>
     </section>
 
     <section class="border-b border-slate-800 px-4 py-3">

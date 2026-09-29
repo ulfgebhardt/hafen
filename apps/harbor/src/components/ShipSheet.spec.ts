@@ -1,4 +1,4 @@
-import { mockContract, mockRemote } from '@hafen/core'
+import { mockContract, mockRemote, NO_WORK } from '@hafen/core'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
@@ -98,6 +98,34 @@ describe('shipSheet', () => {
     const sheet = mount(ShipSheet, { props: { ship: ship() } })
 
     expect(sheet.text()).toContain('Keine Forderung der Flotte gilt für dieses Schiff')
+  })
+
+  /** Counts beside the score, so a weighting can be argued with rather than believed. */
+  it('shows what was done here, with the numbers behind the score', () => {
+    const sheet = mount(ShipSheet, {
+      props: {
+        ship: ship({
+          ledger: {
+            total: { ...NO_WORK, commits: 40, pulls: 7, authors: 3, byKind: { feat: 40 } },
+            own: { ...NO_WORK, commits: 10, byKind: { feat: 10 } },
+          },
+        }),
+      },
+    })
+
+    expect(sheet.text()).toContain('Projektpunkte')
+    expect(sheet.text()).toContain('40 Commits')
+    expect(sheet.text()).toContain('7 PRs')
+    expect(sheet.text()).toContain('davon deine')
+  })
+
+  /** A zero share is not a row worth drawing — it is the normal case on a foreign repository. */
+  it('leaves the own share out where there is none', () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship({ ledger: { total: { ...NO_WORK, commits: 5 }, own: NO_WORK } }) },
+    })
+
+    expect(sheet.text()).not.toContain('davon deine')
   })
 
   /** The one time the catalog's lead bites has to be visible, or it is not a rule. */

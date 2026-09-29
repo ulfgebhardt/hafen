@@ -4,6 +4,7 @@ import { detectContract } from './contract'
 import { forgeOf } from './forge'
 import { measureQuests } from './probe'
 import { daysSince } from './time'
+import { LOG_FORMAT, NO_LEDGER, readLedger } from './work'
 import { countStash, hasOpenWork, readWorking } from './working'
 
 import type { QuestResult } from './chain'
@@ -11,6 +12,7 @@ import type { Contract } from './contract'
 import type { Forge } from './forge'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
+import type { Ledger } from './work'
 import type { Working } from './working'
 
 /**
@@ -73,6 +75,14 @@ export interface Ship {
    * finished and is not.
    */
   stash: number
+  /**
+   * What was done here, and the reader's share of it.
+   *
+   * Raw counts and never points: what any of it is worth is a decision, and that lives in
+   * `points.ts`. Keeping the signals in the snapshot means a different weighting costs no new
+   * measurement — which matters, because the first set of weights is always wrong.
+   */
+  ledger: Ledger
   /** Days since the last commit — the source of `rust`. */
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
@@ -272,12 +282,13 @@ export async function inspectShip(
   ports: Ports,
   path: string,
   catalog: readonly Quest[] = [],
+  ownEmails: readonly string[] = [],
 ): Promise<Ship> {
   const segments = path.split('/').filter((segment) => segment !== '')
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
 
-  const [hasGit, remotes, branch, status, lastCommit, worktrees, tracking, stashList] =
+  const [hasGit, remotes, branch, status, lastCommit, worktrees, tracking, stashList, log] =
     await Promise.all([
       ports.fs.isDirectory(`${path}/.git`),
       git(ports, path, ['remote', '-v']),
@@ -287,6 +298,16 @@ export async function inspectShip(
       git(ports, path, ['worktree', 'list', '--porcelain']),
       git(ports, path, ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']),
       git(ports, path, ['stash', 'list']),
+      /*
+       * The whole history in one call: author, subject and parents per commit.
+       *
+       * Measured at 0.3 s for 17 642 commits — cheaper than several of the small calls above it,
+       * because the cost here is starting a process and not reading the objects. Skipped entirely
+       * where nobody named an address to count against: there would be nothing to compare to.
+       */
+      ownEmails.length === 0
+        ? Promise.resolve(null)
+        : git(ports, path, ['log', `--format=${LOG_FORMAT}`]),
     ])
 
   // The ship's own tree is in that list and is no dock of anybody's.
@@ -300,6 +321,9 @@ export async function inspectShip(
   const working = readWorking(status)
   const dirty = hasOpenWork(working)
   const stash = countStash(stashList)
+  // Nothing measured where nobody was named: a ledger without own addresses would report every
+  // commit as somebody else's, which is worse than saying nothing.
+  const ledger = ownEmails.length === 0 ? NO_LEDGER : readLedger(log, ownEmails)
 
   const contract = await detectContract(ports, path)
 
@@ -329,6 +353,7 @@ export async function inspectShip(
     dirty,
     working,
     stash,
+    ledger,
     rustDays,
     docks,
     ahead,
@@ -462,6 +487,7 @@ export async function surveyHarbor(
   enlisted: readonly string[] = [],
   progress: SurveyProgress = {},
   catalog: readonly Quest[] = [],
+  ownEmails: readonly string[] = [],
 ): Promise<readonly Ship[]> {
   // An unreadable root and an empty one both yield zero ships, but only one of them is
   // a fault. Reporting them alike hides misconfiguration behind an empty harbor.
@@ -481,7 +507,7 @@ export async function surveyHarbor(
   const measured = new Map<string, Ship>()
 
   await inLanes(surveyOrder(paths, progress.first ?? []), SURVEY_LANES, async (path) => {
-    const ship = await inspectShip(ports, path, catalog)
+    const ship = await inspectShip(ports, path, catalog, ownEmails)
     measured.set(path, ship)
     progress.onShip?.(ship)
   })

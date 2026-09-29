@@ -349,6 +349,59 @@ describe(main, () => {
     expect(stdout()).toContain('test:lint')
   })
 
+  describe('punkte', () => {
+    /** Own work is counted against the configured address, which is one process and not ninety. */
+    it('scores the fleet against the configured identity', async () => {
+      const stdout = out()
+      const log = ['me@x\u0000feat: meins\u0000abc', 'other@x\u0000fix: fremd\u0000abc'].join('\n')
+
+      await main(
+        ['punkte', ROOT, `--store=${STORE}`],
+        nodeShip(
+          {},
+          {
+            commands: {
+              'git config --get user.email': { stdout: 'me@x\n' },
+              'git log --format=%ae%x00%s%x00%P': { stdout: log },
+            },
+          },
+        ),
+      )
+
+      expect(stdout()).toContain('PROJEKTPUNKTE')
+      expect(stdout()).toContain('DEINE PUNKTE')
+    })
+
+    /**
+     * Without an address every commit counts as somebody else's, so the command says which
+     * measurement is missing instead of printing a zero.
+     */
+    it('says what it cannot know when no address is configured', async () => {
+      const stdout = out()
+
+      await main(
+        ['punkte', ROOT, `--store=${STORE}`],
+        nodeShip({}, { commands: { 'git config --get user.email': { code: 1, stdout: '' } } }),
+      )
+
+      expect(stdout()).toContain('Keine eigene Adresse bekannt')
+    })
+
+    it('answers as JSON when asked, with the raw counts and no points', async () => {
+      const stdout = out()
+
+      await main(
+        ['punkte', ROOT, `--store=${STORE}`, '--json'],
+        nodeShip({}, { commands: { 'git config --get user.email': { stdout: 'me@x\n' } } }),
+      )
+
+      const answer = JSON.parse(stdout()) as { ships: { ledger: unknown }[] }
+
+      expect(answer.ships[0]).toHaveProperty('ledger')
+      expect(stdout()).not.toContain('"points"')
+    })
+  })
+
   /**
    * The harbor measures and draws — it changes no repository, and it goes nowhere near a network.
    * Asserted against the port rather than trusted: this is the promise the whole tool rests on,
@@ -372,6 +425,10 @@ describe(main, () => {
       // Added when the working tree and the stash became measurements: this list noticed it,
       // which is the whole reason it is an allow list.
       'git stash list',
+      // Added with the ledger: the whole history in one call, and the identity to compare it
+      // against. This list noticed both, which is the whole reason it is an allow list.
+      'git log --format=',
+      'git config --get user.email',
     ]
 
     out()

@@ -6,7 +6,7 @@
  * the day it changes.
  */
 
-import { NOTHING_OPEN, mockContract } from '@hafen/core'
+import { NOTHING_OPEN, NO_LEDGER, mockContract } from '@hafen/core'
 
 import type { ProbeResult, QuestResult, QuestVerdict, Ship } from '@hafen/core'
 
@@ -42,6 +42,7 @@ export function ship(overrides: Partial<Ship> = {}): Ship {
     dirty: false,
     working: NOTHING_OPEN,
     stash: 0,
+    ledger: NO_LEDGER,
     rustDays: 1,
     docks: [],
     ahead: 0,
