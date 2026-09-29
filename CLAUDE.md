@@ -116,6 +116,30 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 - **Ein Check muss ein Urteil zurückgeben** (`judges`). `vitest` ohne `run` wartet,
   `playwright test --ui` wartet auf einen Menschen, `--fix` ändert den Baum, damit er grün wird.
 
+## Das Fenster
+
+- **Es misst nicht.** `hafen schnappschuss` misst, die App liest `snapshot.json`. Deshalb steht
+  der Zeitpunkt der Messung in der Kopfzeile: ein Bild ohne Zeitstempel behauptet, aktuell zu
+  sein, und dieses ist genau so alt wie der letzte Schnappschuss.
+- **Der Stil ist eine Risszeichnung, keine Illustration.** Raster, dünne Striche, Spanten,
+  Wasserlinien, Beschriftung in Monospace. Keine Wolken, keine Möwen, keine Gischt. Jede Linie
+  steht für etwas Gemessenes — dieselbe Zusage wie im Rest des Werkzeugs. Das einzige, was
+  ausdrücklich Deko ist, sind die Spanten, und `hull.ts` sagt das an Ort und Stelle.
+- **Was gezeichnet wird, entscheidet nicht der Zeichner.** `fleet.ts` (Reihenfolge, Gruppierung)
+  und `hull.ts` (Geometrie, Segmente, Tiefgang) sind reine Funktionen und zu 100 % gemessen;
+  `scene.ts` setzt sie in Striche um und besitzt keine Regel. Nur durch diesen Schnitt ist
+  überhaupt etwas zusicherbar, denn über einen Canvas lässt sich nichts behaupten. `scene.ts` und
+  `HarborScene.vue` stehen deshalb **namentlich** in der Coverage-Ausnahme, statt stillschweigend
+  mitgezählt zu werden — derselbe Umgang wie mit einer `manuell`-Prüfung im Katalog.
+- **Kein committetes Vergleichsbild.** Es entstünde auf einer Maschine mit einem Satz Fonts, und
+  die nächste Chromium-Version färbt es rot, ohne dass etwas kaputt ist. Ein Rot, das nichts
+  bedeutet, verliert seinen Leser.
+- **Jedes Urteil trägt eine Form, nicht nur eine Farbe** (`SEGMENT` in `theme.ts`): gefüllt,
+  schraffiert, gestrichelt. Acht Prozent der Männer trennen dieses Rot und Grün nicht, und ein
+  Screenreader bekommt von einem Canvas gar nichts — die Wörter stehen im Datenblatt daneben.
+- **Pixi statt DOM, und das ist gemessen.** Derselbe Hafen als SVG wären ~2700 Knoten; in Werft
+  kostete der DOM-Renderer allein 8,4 % CPU im Leerlauf, bei weniger Detail.
+
 ## Test-Vertrag
 
 ```sh

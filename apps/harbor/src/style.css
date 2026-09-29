@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+/* A drawing sheet, not a page: the scene owns the background, the chrome stays out of its way. */
+html,
+body {
+  margin: 0;
+  background: #020617;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

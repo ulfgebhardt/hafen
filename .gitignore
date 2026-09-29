@@ -3,3 +3,6 @@ dist/
 coverage/
 .turbo/
 *.tsbuildinfo
+# Measured, not authored: `pnpm --filter @hafen/harbor snapshot` writes it, and it carries every
+# local path on this machine.
+apps/harbor/public/snapshot.json
