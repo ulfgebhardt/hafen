@@ -1,0 +1,390 @@
+/**
+ * The measuring half of a quest: what a check reads, and what it saw.
+ *
+ * The demand is a file in the Ablage (`quest.ts`); this is the code that answers it. The two are
+ * apart because they fail in opposite directions — a demand in code cannot be changed without
+ * cutting a release, and a measurement in a data file cannot be run at all.
+ *
+ * **Every answer carries its evidence.** A bare verdict is a thing to believe, and a quest
+ * evaluation nobody can trace back to what was read would be the kept status field it replaces,
+ * only with better manners. So a probe says what it asked, where it looked, and what stood there
+ * — including when it could not answer, which is a third result and not a `false`.
+ *
+ * Only the art `datei` answers here. It costs no access Werft does not already pay for: the same
+ * manifests and workflows `detectContract` reads, plus the handful of files a quest names.
+ * `forge`, `http`, `tls`, `dns` and `metrik` are `0045`; they are recognised and answered with
+ * "this Werft does not measure that", which is section 4's own rule about the blind spot being
+ * named instead of guessed at.
+ */
+
+import { CONTRACT_SCRIPTS } from './contract'
+import { SHIP_TRAITS } from './quest'
+
+import type { Contract, ContractPorts } from './contract'
+import type { Quest, QuestCheck, ShipTrait } from './quest'
+import type { CheckRole } from './role'
+
+/** What a probe read, so a verdict can be argued with instead of believed. */
+export interface Evidence {
+  /** What was asked, in the words of the catalog or of the probe itself. */
+  question: string
+  /** Where it was looked up — a path in the ship, or the measurement it came out of. */
+  where: string
+  /** What stood there. */
+  found: string
+}
+
+export interface ProbeResult {
+  /**
+   * `null` where the question cannot be answered on this ship at all — no manifest to read, no
+   * workflow to look in, an art this Werft does not measure.
+   *
+   * A third value and not a `false`, for the reason the dock sweep gives when tmux does not
+   * answer: an unsuccessful measurement is not a finding. A Rust crate has no `package.json`,
+   * and reading that as "declares no lint script" is how the fixed list of four produced gaps
+   * that were not there.
+   */
+  ok: boolean | null
+  evidence: Evidence
+}
+
+/**
+ * Everything the art `datei` needs, measured once per ship.
+ *
+ * Handed to the evaluation rather than read inside it, so that the evaluation stays a pure
+ * function over facts — the same reason `orderCandidates` takes `landed` instead of asking git.
+ */
+export interface QuestFacts {
+  contract: Contract
+  /** What this ship is, of the traits a quest may ask for. */
+  traits: readonly ShipTrait[]
+  /** Every file the catalog names, read once. `null` for one that is not there. */
+  files: ReadonlyMap<string, string | null>
+  /** Dependency names across every manifest of the ship, both kinds. */
+  dependencies: readonly string[]
+  /**
+   * How many workflow files there are.
+   *
+   * Counted and not read — `inCi` already reads them, and this is the other question: "does this
+   * ship have CI at all". The same split as `hasComposeFile` beside `docker compose config`, and
+   * for the same reason: without it, "no workflow runs lint" and "there are no workflows" are
+   * one answer, and a repository with no CI would be told it has a lint gap in its CI.
+   */
+  workflows: number
+}
+
+function role(check: QuestCheck): CheckRole | null {
+  const named = check.args['rolle'] ?? ''
+  return named === 'lint' || named === 'typecheck' || named === 'unit' || named === 'e2e'
+    ? named
+    : null
+}
+
+/** Which scripts of the ship fill a role, with the member they live in. */
+function filling(contract: Contract, wanted: CheckRole): readonly string[] {
+  return contract.members.flatMap((member) =>
+    member.checks
+      .filter((check) => check.role === wanted)
+      .map((check) => (member.dir === '.' ? check.script : `${check.script} (${member.dir})`)),
+  )
+}
+
+function manifestNote(contract: Contract): string {
+  const count = contract.members.length
+  return count === 1 ? '1 Manifest' : `${String(count)} Manifeste`
+}
+
+function workflowNote(facts: QuestFacts): string {
+  return facts.workflows === 1 ? '1 Workflow' : `${String(facts.workflows)} Workflows`
+}
+
+/** A path a quest names, refused when it would leave the ship. */
+function shipFile(facts: QuestFacts, path: string): { ok: boolean | null; found: string } {
+  const text = facts.files.get(path)
+  if (text === undefined) {
+    // Only a path the catalog refused to resolve gets here — an absolute one, or one climbing
+    // out of the ship. Answered rather than read: the store can be pushed, and a quest that
+    // reads `../../.ssh/id_ed25519` would make the survey a file exfiltration.
+    return { ok: null, found: 'Pfad liegt nicht im Schiff' }
+  }
+  return { ok: text !== null, found: text === null ? 'nicht vorhanden' : 'vorhanden' }
+}
+
+/**
+ * One check, answered.
+ *
+ * Every branch produces an `Evidence`, including the ones that answer `null`: "Werft cannot say"
+ * is the answer that most needs its reason, because it is the one a reader would otherwise take
+ * for a defect in the catalog.
+ */
+export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
+  const { contract } = facts
+  const say = (
+    question: string,
+    where: string,
+    found: string,
+    ok: boolean | null,
+  ): ProbeResult => ({
+    ok,
+    evidence: { question: check.question ?? question, where, found },
+  })
+
+  // Answering nothing is the point of this one, and it comes before the art: section 4 allows a
+  // manual quest and demands in the same breath that Werft say which demands it cannot check
+  // itself. "Nobody can measure this" and "this Werft does not measure that yet" are two
+  // sentences, and only the second one will ever stop being true.
+  if (check.kind === 'manuell' || check.probe === 'manuell') {
+    return say('von Hand zu prüfen', 'nirgends', 'nicht maschinell prüfbar', null)
+  }
+  if (check.kind !== 'datei') {
+    return say(
+      `Prüfung der Art ${check.kind}`,
+      'nirgends',
+      `die Prüfart ${check.kind} misst diese Werft nicht`,
+      null,
+    )
+  }
+
+  const wanted = role(check)
+
+  switch (check.probe) {
+    case 'rolle': {
+      if (wanted === null) {
+        return say(
+          'Rolle',
+          'nirgends',
+          `keine Rolle genannt (rolle: ${check.args['rolle'] ?? ''})`,
+          null,
+        )
+      }
+      const scripts = filling(contract, wanted)
+      const inCi = contract.inCi.includes(wanted)
+      if (contract.members.length === 0 && facts.workflows === 0) {
+        return say(
+          `irgendetwas misst die Rolle ${wanted}`,
+          'package.json, .github/workflows',
+          'weder Manifest noch Workflow — hier ist nichts zu lesen',
+          null,
+        )
+      }
+      return say(
+        `irgendetwas misst die Rolle ${wanted}`,
+        `${manifestNote(contract)}, ${workflowNote(facts)}`,
+        scripts.length > 0
+          ? scripts.join(', ')
+          : inCi
+            ? 'kein Skript, aber die CI misst es'
+            : 'nichts',
+        contract.scripts[wanted] || inCi,
+      )
+    }
+
+    case 'rolle-in-ci': {
+      if (wanted === null) {
+        return say('Rolle in der CI', 'nirgends', 'keine Rolle genannt', null)
+      }
+      if (facts.workflows === 0) {
+        return say(
+          `ein CI-Workflow ruft ${wanted} auf`,
+          '.github/workflows',
+          'keine Workflows — ob eine CI das misst, sagt dieses Repository nicht',
+          null,
+        )
+      }
+      return say(
+        `ein CI-Workflow ruft ${wanted} auf`,
+        `.github/workflows (${workflowNote(facts)})`,
+        contract.inCi.length > 0 ? contract.inCi.join(', ') : 'keine Rolle in den run-Schritten',
+        contract.inCi.includes(wanted),
+      )
+    }
+
+    case 'haus-name': {
+      if (wanted === null) {
+        return say('Hausname', 'nirgends', 'keine Rolle genannt', null)
+      }
+      const scripts = filling(contract, wanted)
+      if (scripts.length === 0) {
+        // Whether the check carries the house name is only a question once there is a check.
+        // Answering `false` here would report the same absence twice — once as the missing step
+        // and once as the wrong name — and make one gap look like two.
+        return say(
+          `der ${wanted}-Schritt heißt ${CONTRACT_SCRIPTS[wanted]}`,
+          'package.json → scripts',
+          `kein Skript füllt die Rolle ${wanted}`,
+          null,
+        )
+      }
+      return say(
+        `der ${wanted}-Schritt heißt ${CONTRACT_SCRIPTS[wanted]}`,
+        'package.json → scripts',
+        scripts.join(', '),
+        contract.members.some((member) =>
+          member.checks.some(
+            (entry) => entry.role === wanted && entry.script === CONTRACT_SCRIPTS[wanted],
+          ),
+        ),
+      )
+    }
+
+    case 'datei': {
+      const path = check.args['datei'] ?? ''
+      const seen = shipFile(facts, path)
+      return say(`${path} liegt im Schiff`, path, seen.found, seen.ok)
+    }
+
+    case 'datei-enthaelt': {
+      const path = check.args['datei'] ?? ''
+      const text = check.args['text'] ?? ''
+      const raw = facts.files.get(path)
+      if (raw === undefined) {
+        return say(`${path} nennt ${text}`, path, 'Pfad liegt nicht im Schiff', null)
+      }
+      return say(
+        `${path} nennt ${text}`,
+        path,
+        raw === null
+          ? 'nicht vorhanden'
+          : raw.includes(text)
+            ? `nennt ${text}`
+            : `nennt ${text} nicht`,
+        raw?.includes(text) ?? false,
+      )
+    }
+
+    case 'abhaengigkeit': {
+      const name = check.args['paket'] ?? ''
+      if (contract.members.length === 0) {
+        return say(`${name} ist eine Abhängigkeit`, 'package.json', 'kein Manifest zu lesen', null)
+      }
+      return say(
+        `${name} ist eine Abhängigkeit`,
+        `package.json (${manifestNote(contract)})`,
+        facts.dependencies.includes(name) ? 'deklariert' : 'nicht deklariert',
+        facts.dependencies.includes(name),
+      )
+    }
+
+    default:
+      // The one place that decides which probes exist. A name nobody implements is answered and
+      // not thrown: a typo in one quest must not take the catalog down, and a catalog written
+      // for a later Werft has to be readable by this one.
+      return say(
+        `Prüfung ${check.probe}`,
+        'nirgends',
+        `die Prüfung ${check.probe} kennt diese Werft nicht`,
+        null,
+      )
+  }
+}
+
+/** Every distinct file path the catalog names, and whether it is one this survey may read. */
+function wantedFiles(catalog: readonly Quest[]): readonly string[] {
+  const paths = new Set<string>()
+  for (const quest of catalog) {
+    for (const check of quest.checks) {
+      const path = check.args['datei']
+      if (
+        path !== undefined &&
+        path !== '' &&
+        !path.startsWith('/') &&
+        !path.split('/').includes('..')
+      ) {
+        paths.add(path)
+      }
+    }
+  }
+  return [...paths].sort()
+}
+
+interface Manifest {
+  dependencies?: Readonly<Record<string, string>>
+  devDependencies?: Readonly<Record<string, string>>
+}
+
+/**
+ * The dependency names of every member.
+ *
+ * Read from the directories the contract already found, and only when a quest asks — the survey
+ * has parsed these files once for their scripts, and asking git a second time for the same list
+ * would be a second answer to "which manifests are this ship's".
+ */
+async function readDependencies(
+  ports: ContractPorts,
+  shipPath: string,
+  contract: Contract,
+): Promise<readonly string[]> {
+  const found = await Promise.all(
+    contract.members.map(async (member) => {
+      const at = member.dir === '.' ? shipPath : `${shipPath}/${member.dir}`
+      const raw = await ports.fs.readFile(`${at}/package.json`)
+      if (raw === null) {
+        return []
+      }
+      try {
+        const manifest = JSON.parse(raw) as Manifest
+        return [
+          ...Object.keys(manifest.dependencies ?? {}),
+          ...Object.keys(manifest.devDependencies ?? {}),
+        ]
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error
+        }
+        return []
+      }
+    }),
+  )
+  return [...new Set(found.flat())].sort()
+}
+
+/** How many workflow files there are — counted, never read. See `QuestFacts.workflows`. */
+async function countWorkflows(ports: ContractPorts, shipPath: string): Promise<number> {
+  const entries = await ports.fs.readDir(`${shipPath}/.github/workflows`)
+  return entries === null
+    ? 0
+    : entries.filter((entry) => entry.endsWith('.yml') || entry.endsWith('.yaml')).length
+}
+
+/** What the ship is, of the traits a quest may ask for. */
+async function readTraits(
+  ports: ContractPorts,
+  shipPath: string,
+  contract: Contract,
+): Promise<readonly ShipTrait[]> {
+  const has: Record<ShipTrait, boolean> = {
+    node: contract.kind !== 'other',
+    rust: (await ports.fs.readFile(`${shipPath}/Cargo.toml`)) !== null,
+  }
+  return SHIP_TRAITS.filter((trait) => has[trait])
+}
+
+/**
+ * Everything the catalog needs to know about one ship.
+ *
+ * Driven by the catalog and not by a fixed list: a quest that names no file costs no read, and a
+ * fleet with an empty catalog pays nothing at all. That is what keeps the demand extensible by
+ * lines in a file rather than by a second rebuild.
+ */
+export async function measureQuests(
+  ports: ContractPorts,
+  shipPath: string,
+  contract: Contract,
+  catalog: readonly Quest[],
+): Promise<QuestFacts> {
+  const paths = wantedFiles(catalog)
+  const asksDependencies = catalog.some((quest) =>
+    quest.checks.some((check) => check.probe === 'abhaengigkeit'),
+  )
+
+  const [files, dependencies, workflows, traits] = await Promise.all([
+    Promise.all(
+      paths.map(async (path) => [path, await ports.fs.readFile(`${shipPath}/${path}`)] as const),
+    ),
+    asksDependencies ? readDependencies(ports, shipPath, contract) : Promise.resolve([]),
+    countWorkflows(ports, shipPath),
+    readTraits(ports, shipPath, contract),
+  ])
+
+  return { contract, traits, files: new Map(files), dependencies, workflows }
+}
