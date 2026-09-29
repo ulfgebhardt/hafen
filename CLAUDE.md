@@ -23,7 +23,7 @@ unsere** sind.
 
 ## Herkunft
 
-Der Kern kommt aus Werft (`../werft`), und zwar gemessen: die Kette `quest` → `probe` →
+Der Kern kommt aus Werft, einem nicht weitergeführten lokalen Agenten-Cockpit, und zwar gemessen: die Kette `quest` → `probe` →
 `contract` → `role` importiert nichts nach oben, also war der Schnitt ein Kopieren. Was dort
 liegen blieb — Dock, Session, PTY, Order, Launch, Basin, Collision, Seatrial — sind rund 15 000
 Zeilen Agenten-Verwaltung.
