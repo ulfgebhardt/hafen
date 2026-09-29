@@ -14,13 +14,23 @@ function check(
   return { probe, kind, args, question: null }
 }
 
+/**
+ * `count` workflow files, contents irrelevant.
+ *
+ * Most of these specs assert the *count* and the "are there any at all" split; the ones that
+ * care what is inside pass a body.
+ */
+function ciFiles(count: number, body = 'name: ci\n'): readonly string[] {
+  return Array.from({ length: count }, () => body)
+}
+
 function facts(overrides: Partial<QuestFacts> = {}): QuestFacts {
   return {
     contract: mockContract(),
     traits: ['node'],
     files: new Map(),
     dependencies: [],
-    workflows: 0,
+    workflows: ciFiles(0),
     ...overrides,
   }
 }
@@ -38,7 +48,7 @@ describe(runCheck, () => {
       })
 
       expect(
-        runCheck(check('rolle', { rolle: 'lint' }), facts({ contract, workflows: 2 })),
+        runCheck(check('rolle', { rolle: 'lint' }), facts({ contract, workflows: ciFiles(2) })),
       ).toStrictEqual({
         ok: true,
         evidence: {
@@ -51,7 +61,10 @@ describe(runCheck, () => {
 
     it('counts a role only the CI measures — that is a Rust crate with clippy', () => {
       const contract = mockContract({ kind: 'other', members: [], inCi: ['lint'] })
-      const result = runCheck(check('rolle', { rolle: 'lint' }), facts({ contract, workflows: 1 }))
+      const result = runCheck(
+        check('rolle', { rolle: 'lint' }),
+        facts({ contract, workflows: ciFiles(1) }),
+      )
 
       expect(result.ok).toBe(true)
       expect(result.evidence.found).toBe('kein Skript, aber die CI misst es')
@@ -77,8 +90,8 @@ describe(runCheck, () => {
       })
 
       expect(
-        runCheck(check('rolle', { rolle: 'lint' }), facts({ contract, workflows: 1 })).evidence
-          .found,
+        runCheck(check('rolle', { rolle: 'lint' }), facts({ contract, workflows: ciFiles(1) }))
+          .evidence.found,
       ).toBe('lint (packages/ui)')
     })
   })
@@ -89,10 +102,16 @@ describe(runCheck, () => {
 
       expect(runCheck(check('rolle-in-ci', { rolle: 'lint' }), facts({ contract })).ok).toBeNull()
       expect(
-        runCheck(check('rolle-in-ci', { rolle: 'lint' }), facts({ contract, workflows: 3 })).ok,
+        runCheck(
+          check('rolle-in-ci', { rolle: 'lint' }),
+          facts({ contract, workflows: ciFiles(3) }),
+        ).ok,
       ).toBe(false)
       expect(
-        runCheck(check('rolle-in-ci', { rolle: 'unit' }), facts({ contract, workflows: 3 })).ok,
+        runCheck(
+          check('rolle-in-ci', { rolle: 'unit' }),
+          facts({ contract, workflows: ciFiles(3) }),
+        ).ok,
       ).toBe(true)
     })
   })
@@ -161,6 +180,46 @@ describe(runCheck, () => {
     })
   })
 
+  describe('ci-nennt', () => {
+    /**
+     * The case that forced this probe: release-please lives in `release.yml` in five of these
+     * repositories, `release-please-lint.yml` in another, `ui-release.yml` in a third. A quest
+     * naming one path would measure the file name instead of the practice.
+     */
+    it('finds a tool in whichever workflow happens to hold it', () => {
+      const workflows = ['name: ci\n', 'name: release\nuses: googleapis/release-please-action@v4\n']
+
+      expect(runCheck(check('ci-nennt', { text: 'release-please' }), facts({ workflows })).ok).toBe(
+        true,
+      )
+    })
+
+    it('says no where every workflow is silent about it', () => {
+      const result = runCheck(
+        check('ci-nennt', { text: 'release-please' }),
+        facts({ workflows: ciFiles(3) }),
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.evidence.found).toBe('nennt release-please nirgends')
+      expect(result.evidence.where).toContain('3 Workflows')
+    })
+
+    /**
+     * "No workflow says so" and "there are no workflows" are different sentences, and the second
+     * is not a gap — the same split `rolle-in-ci` makes, and for the same reason.
+     */
+    it('cannot answer where there is no CI at all', () => {
+      const result = runCheck(
+        check('ci-nennt', { text: 'release-please' }),
+        facts({ workflows: [] }),
+      )
+
+      expect(result.ok).toBeNull()
+      expect(result.evidence.found).toContain('keine Workflows')
+    })
+  })
+
   describe('abhaengigkeit', () => {
     it('reads the declared packages, and says so when there is no manifest', () => {
       const asked = (given: Partial<QuestFacts>): ReturnType<typeof runCheck> =>
@@ -199,11 +258,15 @@ describe(measureQuests, () => {
   it('reads only what the catalog names, and counts the workflows', async () => {
     const ports = mockPorts({
       files: {
+        [`${SHIP}/.github/workflows/a.yml`]: 'name: a\n',
+        [`${SHIP}/.github/workflows/b.yaml`]: 'name: b\n',
         [`${SHIP}/.tool-versions`]: 'nodejs 22.11.0\n',
         [`${SHIP}/Cargo.toml`]: '[package]\n',
         [`${SHIP}/package.json`]: JSON.stringify({ devDependencies: { vitest: '^4' } }),
       },
       dirs: { [`${SHIP}/.github/workflows`]: ['a.yml', 'b.yaml', 'README.md'] },
+      // Listed *and* readable: the facts carry the bodies now, so a directory entry with no
+      // file behind it is correctly not a workflow.
     })
 
     const measured = await measureQuests(ports, SHIP, mockContract(), [
@@ -212,7 +275,7 @@ describe(measureQuests, () => {
 
     expect([...measured.files.keys()]).toStrictEqual(['.tool-versions', 'fehlt.txt'])
     expect(measured.files.get('fehlt.txt')).toBeNull()
-    expect(measured.workflows).toBe(2)
+    expect(measured.workflows).toHaveLength(2)
     expect(measured.traits).toStrictEqual(['node', 'rust'])
     // Nothing asked for a dependency, so no manifest was parsed a second time for one.
     expect(measured.dependencies).toStrictEqual([])

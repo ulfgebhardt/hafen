@@ -567,7 +567,14 @@ function readCiRoles(
   return CHECK_ROLES.filter((role) => found.has(role))
 }
 
-async function readWorkflows(fs: FsPort, shipPath: string): Promise<readonly string[]> {
+/**
+ * Every workflow file of a ship, as text.
+ *
+ * Exported because two questions need the same bytes: which roles the CI runs (`inCi`, here) and
+ * whether any workflow names a given tool (`ci-nennt`, in `probe.ts`). Reading the directory
+ * twice was what it did before — once for the roles and once just to count the files.
+ */
+export async function readWorkflows(fs: FsPort, shipPath: string): Promise<readonly string[]> {
   const dir = `${shipPath}/.github/workflows`
   const entries = await fs.readDir(dir)
   if (entries === null) {

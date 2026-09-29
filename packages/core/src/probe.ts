@@ -17,7 +17,7 @@
  * named instead of guessed at.
  */
 
-import { CONTRACT_SCRIPTS } from './contract'
+import { CONTRACT_SCRIPTS, readWorkflows } from './contract'
 import { SHIP_TRAITS } from './quest'
 
 import type { Contract, ContractPorts } from './contract'
@@ -63,14 +63,18 @@ export interface QuestFacts {
   /** Dependency names across every manifest of the ship, both kinds. */
   dependencies: readonly string[]
   /**
-   * How many workflow files there are.
+   * Every workflow file of the ship, as text.
    *
-   * Counted and not read — `inCi` already reads them, and this is the other question: "does this
-   * ship have CI at all". The same split as `hasComposeFile` beside `docker compose config`, and
-   * for the same reason: without it, "no workflow runs lint" and "there are no workflows" are
-   * one answer, and a repository with no CI would be told it has a lint gap in its CI.
+   * The count answers "does this ship have CI at all", which has to stay apart from "no workflow
+   * runs lint": without the distinction, a repository with no CI is told it has a lint gap in its
+   * CI. The *contents* answer the other question — whether any workflow names a given tool, which
+   * no fixed path can, because the file is called `release.yml` in five repositories here and
+   * `release-please-lint.yml` in another.
+   *
+   * Read once and handed on: this used to be a bare count taken by listing the directory a second
+   * time, while `detectContract` had already read every one of these files for `inCi`.
    */
-  workflows: number
+  workflows: readonly string[]
 }
 
 function role(check: QuestCheck): CheckRole | null {
@@ -95,7 +99,8 @@ function manifestNote(contract: Contract): string {
 }
 
 function workflowNote(facts: QuestFacts): string {
-  return facts.workflows === 1 ? '1 Workflow' : `${String(facts.workflows)} Workflows`
+  const count = facts.workflows.length
+  return count === 1 ? '1 Workflow' : `${String(count)} Workflows`
 }
 
 /** A path a quest names, refused when it would leave the ship. */
@@ -159,7 +164,7 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       }
       const scripts = filling(contract, wanted)
       const inCi = contract.inCi.includes(wanted)
-      if (contract.members.length === 0 && facts.workflows === 0) {
+      if (contract.members.length === 0 && facts.workflows.length === 0) {
         return say(
           `irgendetwas misst die Rolle ${wanted}`,
           'package.json, .github/workflows',
@@ -183,7 +188,7 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       if (wanted === null) {
         return say('Rolle in der CI', 'nirgends', 'keine Rolle genannt', null)
       }
-      if (facts.workflows === 0) {
+      if (facts.workflows.length === 0) {
         return say(
           `ein CI-Workflow ruft ${wanted} auf`,
           '.github/workflows',
@@ -249,6 +254,33 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
             ? `nennt ${text}`
             : `nennt ${text} nicht`,
         raw?.includes(text) ?? false,
+      )
+    }
+
+    /**
+     * Whether *any* workflow names something — the question a fixed path cannot answer.
+     *
+     * release-please is the case that forced it: the workflow is called `release.yml` in five of
+     * these repositories, `release-please-lint.yml` in another, `ui-release.yml` in a third. A
+     * quest that named one path would measure the file name instead of the practice, and would
+     * report a gap in repositories that do exactly what is asked.
+     */
+    case 'ci-nennt': {
+      const text = check.args['text'] ?? ''
+      if (facts.workflows.length === 0) {
+        return say(
+          `ein Workflow nennt ${text}`,
+          '.github/workflows',
+          'keine Workflows — ob eine CI das tut, sagt dieses Repository nicht',
+          null,
+        )
+      }
+      const hit = facts.workflows.some((body) => body.includes(text))
+      return say(
+        `ein Workflow nennt ${text}`,
+        `.github/workflows (${workflowNote(facts)})`,
+        hit ? `nennt ${text}` : `nennt ${text} nirgends`,
+        hit,
       )
     }
 
@@ -339,12 +371,6 @@ async function readDependencies(
 }
 
 /** How many workflow files there are — counted, never read. See `QuestFacts.workflows`. */
-async function countWorkflows(ports: ContractPorts, shipPath: string): Promise<number> {
-  const entries = await ports.fs.readDir(`${shipPath}/.github/workflows`)
-  return entries === null
-    ? 0
-    : entries.filter((entry) => entry.endsWith('.yml') || entry.endsWith('.yaml')).length
-}
 
 /** What the ship is, of the traits a quest may ask for. */
 async function readTraits(
@@ -382,7 +408,7 @@ export async function measureQuests(
       paths.map(async (path) => [path, await ports.fs.readFile(`${shipPath}/${path}`)] as const),
     ),
     asksDependencies ? readDependencies(ports, shipPath, contract) : Promise.resolve([]),
-    countWorkflows(ports, shipPath),
+    readWorkflows(ports.fs, shipPath),
     readTraits(ports, shipPath, contract),
   ])
 

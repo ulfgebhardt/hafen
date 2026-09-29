@@ -116,6 +116,27 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 - **Ein Check muss ein Urteil zurückgeben** (`judges`). `vitest` ohne `run` wartet,
   `playwright test --ui` wartet auf einen Menschen, `--fix` ändert den Baum, damit er grün wird.
 
+## Prüfarten
+
+Welche es gibt, entscheidet **eine** Stelle: das `switch` in `probe.ts`. Ein Name, den niemand
+implementiert, wird beantwortet und nicht geworfen — ein Tippfehler in einer Quest darf den
+Katalog nicht mitnehmen, und ein Katalog, der für einen späteren Hafen geschrieben ist, muss von
+diesem lesbar bleiben.
+
+- **`ci-nennt` prüft die Praxis, nicht den Dateinamen.** release-please liegt auf dieser Flotte
+  in `release.yml` (fünfmal), `release-please-lint.yml` und `ui-release.yml`. Eine Quest mit
+  festem Pfad hätte ausgerechnet den Repositories eine Lücke bescheinigt, die das Geforderte tun.
+  Die Workflow-Inhalte trägt `QuestFacts` seitdem mit — sie wurden vorher gelesen, verworfen und
+  das Verzeichnis ein zweites Mal nur zum Zählen aufgelistet.
+- **`art: forge` ist der benannte Blindfleck.** Ob ein Zweig geschützt ist, steht in der
+  GitHub-API und nirgends im Repository. Eine solche Quest wird `nicht messbar` — weder ein
+  erfundenes `verletzt` noch ein stillschweigendes `nicht anwendbar`, sondern der Satz "das gilt
+  hier und ich kann es nicht prüfen". Genau dafür gibt es das fünfte Urteil.
+- **`workflows` ist eine Liste und keine Zahl, und der Unterschied hat gebissen.** Nach der
+  Umstellung verglich `rolle` weiter `facts.workflows === 0` — ein Array gegen eine Zahl, also
+  immer falsch, und die Prüfung hätte eine Lücke *behauptet*, wo nichts messbar war. Ein Test
+  hat es gefangen; die Regel dahinter ist die übliche: unmessbar ist nicht verletzt.
+
 ## Das Fenster
 
 - **Kein Pfad ist verdrahtet, und schon gar nicht der einer Person.** Wurzel, Store und

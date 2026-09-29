@@ -6,6 +6,15 @@ import { mockContract } from './mock'
 import type { QuestFacts } from './probe'
 import type { Quest, QuestCheck, ShipTrait } from './quest'
 
+/**
+ * `count` workflow files, contents irrelevant.
+ *
+ * These specs assert the *count* and the "are there any at all" split; nothing here reads a body.
+ */
+function ciFiles(count: number, body = 'name: ci\n'): readonly string[] {
+  return Array.from({ length: count }, () => body)
+}
+
 function check(
   probe: string,
   args: Record<string, string> = {},
@@ -33,7 +42,7 @@ function facts(traits: readonly ShipTrait[], overrides: Partial<QuestFacts> = {}
     traits,
     files: new Map(),
     dependencies: [],
-    workflows: 0,
+    workflows: ciFiles(0),
     ...overrides,
   }
 }
@@ -44,7 +53,7 @@ const LINTING = facts(['node'], {
     scripts: { lint: true, typecheck: false, unit: false, e2e: false },
     inCi: ['lint'],
   }),
-  workflows: 4,
+  workflows: ciFiles(4),
   dependencies: ['eslint-config-it4c'],
   files: new Map([['eslint.config.ts', "import it4c from 'eslint-config-it4c'\n"]]),
 })
@@ -106,7 +115,7 @@ describe(evaluateQuests, () => {
     // The case the order names: a crate lints with clippy in CI and owes no eslint config.
     const crate = facts(['rust'], {
       contract: mockContract({ kind: 'other', members: [], inCi: ['lint'] }),
-      workflows: 1,
+      workflows: ciFiles(1),
     })
     const results = evaluateQuests([LINT, STANDARD], crate)
 
@@ -129,7 +138,7 @@ describe(evaluateQuests, () => {
   })
 
   it('waits on a prerequisite that applies and is not met', () => {
-    const bare = facts(['node'], { workflows: 1 })
+    const bare = facts(['node'], { workflows: ciFiles(1) })
     const results = evaluateQuests([LINT, STANDARD], bare)
 
     expect(results[0]?.verdict).toBe('violated')
@@ -139,7 +148,7 @@ describe(evaluateQuests, () => {
   })
 
   it('names what is open when a demand is violated', () => {
-    const results = evaluateQuests([LINT], facts(['node'], { workflows: 2 }))
+    const results = evaluateQuests([LINT], facts(['node'], { workflows: ciFiles(2) }))
 
     expect(results[0]?.reason).toBe(
       'offen: irgendetwas misst die Rolle lint, ein CI-Workflow ruft lint auf',
@@ -211,7 +220,7 @@ describe(evaluateQuests, () => {
 
 describe(violatedQuests, () => {
   it('picks the demands that are work, and leaves the ones nobody could measure', () => {
-    const results = evaluateQuests([LINT, STANDARD], facts(['node'], { workflows: 1 }))
+    const results = evaluateQuests([LINT, STANDARD], facts(['node'], { workflows: ciFiles(1) }))
 
     expect(violatedQuests(results).map((result) => result.id)).toStrictEqual(['lint'])
     expect(unmeasuredQuests(results)).toStrictEqual([])
