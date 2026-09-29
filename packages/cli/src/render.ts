@@ -33,6 +33,9 @@ const VERDICT_LABEL: Record<QuestVerdict, string> = {
   notApplicable: 'nicht anwendbar',
 }
 
+/** How wide the id column is. Longer ids push the reason right rather than colliding with it. */
+const ID_COLUMN = 16
+
 /** The order a reader wants: what is broken first, what does not apply last. */
 const VERDICT_ORDER: readonly QuestVerdict[] = [
   'violated',
@@ -96,7 +99,9 @@ function questLines(ship: Ship, verbose: boolean): readonly string[] {
 
   return sorted.flatMap((quest) => {
     const own = ship.ownQuests.includes(quest.id) ? ' (eigene)' : ''
-    const head = `      ${VERDICT_MARK[quest.verdict]} ${quest.id.padEnd(16)}${quest.reason}${own}`
+    // `padEnd` alone runs the id into the reason as soon as one is longer than the column —
+    // `geschuetzter-hauptzweigwartet auf …`. The separating space has to be its own.
+    const head = `      ${VERDICT_MARK[quest.verdict]} ${quest.id.padEnd(ID_COLUMN)} ${quest.reason}${own}`
     // The evidence, only when asked for: a verdict has to be arguable, and a list that always
     // carries its proof is a list nobody scrolls through.
     return verbose ? [head, ...evidenceLines(quest)] : [head]
