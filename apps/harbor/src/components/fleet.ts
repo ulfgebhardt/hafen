@@ -6,7 +6,7 @@
  * test can point at.
  */
 
-import { rustLevel } from '@hafen/core'
+import { rustLevel, shipPoints } from '@hafen/core'
 
 import { VERDICT_ORDER } from './theme'
 
@@ -104,6 +104,22 @@ export function drift(path: string): number {
   return hash / 997
 }
 
+/**
+ * Where a ship sorts in the harbour: biggest first.
+ *
+ * Chosen over `byCondition`, and the reason is what a plan from above does that a list does not.
+ * Size is drawn — it is the hull's length — so ordering by anything else puts a long ship beside a
+ * short one for a reason the picture cannot show, and every row looks ragged. Sorted by size the
+ * rows step down from the left, which is a shape the eye reads before any label.
+ *
+ * Condition is the second key and not the first, so it still decides between two ships of the same
+ * weight. It has not been thrown away: it is what `contractCandidates` and the task list rank by,
+ * and those answer "what should I do", which is a different question from "what is this harbour".
+ */
+export function bySize(a: Ship, b: Ship): number {
+  return shipPoints(b).project - shipPoints(a).project || byCondition(a, b)
+}
+
 export interface Berth {
   ship: Ship
   /** 0 … 1 across the scene, left to right. */
@@ -118,13 +134,13 @@ export interface Berth {
 export const PER_LANE = 10
 
 /**
- * The fleet laid out over the water: worst first, left to right, wrapping into lanes.
+ * The fleet laid out over the water: biggest first, left to right, wrapping into lanes.
  *
  * Lanes rather than one long row, because ninety-one hulls in a line is a horizontal scroll —
  * and the thing worth seeing is the *shape of the fleet*, which needs them all at once.
  */
 export function berths(ships: readonly Ship[]): readonly Berth[] {
-  const sorted = [...ships].sort(byCondition)
+  const sorted = [...ships].sort(bySize)
   return sorted.map((ship, index) => ({
     ship,
     x: (index % PER_LANE) / PER_LANE,
