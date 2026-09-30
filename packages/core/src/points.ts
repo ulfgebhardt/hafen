@@ -117,6 +117,57 @@ export const SHIPSHAPE_POINTS = 3
  */
 export const QUEST_POINTS = 8
 
+/**
+ * Past this many members nothing more is learned about how wide a repository is.
+ *
+ * Measured over 92 repositories: the widest carries thirteen, and the distribution is 64 at zero,
+ * 16 at one, and a thin tail. Sixteen is therefore a ceiling that never binds today and will not
+ * surprise anybody the day something crosses it.
+ */
+export const SPAN_CEILING = 16
+
+/**
+ * How many members of this repository actually carry a check.
+ *
+ * **Carrying** and not merely declared, and that distinction is the whole measurement: `vike` has
+ * sixty-seven `package.json` files and three of them run anything. Counting manifests would have
+ * made an examples directory the widest repository in the fleet.
+ *
+ * At least one, always: a repository with no members at all is still one repository, and a demand
+ * on it is still a demand.
+ */
+export function spanOf(ship: Ship): number {
+  const carrying = ship.contract.members.filter((member) => member.checks.length > 0).length
+  return Math.max(1, Math.min(carrying, SPAN_CEILING))
+}
+
+/**
+ * What a demand is worth on a repository this wide, as a multiplier.
+ *
+ * Square root, the same shape `hullOf` uses for length, and for the same reason: more, but
+ * diminishing. Meeting `lint` in eleven packages is not eleven times meeting it in one — the
+ * config is shared and the fix is copied — but it is plainly more than once, because each package
+ * brings its own scripts, its own overrides and its own failures.
+ *
+ * The alternative that was measured and rejected is counting *checks*: Ocelot-Social runs thirty
+ * and gradido forty-three, and a demand does not get four times harder because somebody split
+ * `test` into `test:unit` and `test:integration`.
+ */
+export function spanWeight(ship: Ship): number {
+  return Math.sqrt(spanOf(ship))
+}
+
+/**
+ * What one met demand is worth on this ship.
+ *
+ * The fix for a real complaint: Ocelot-Social is held to the same nine demands as a one-package
+ * repository and meeting them costs eleven times the places to touch — and it scored the same.
+ * Rounded, so nothing in the window ever prints a fraction of a point.
+ */
+export function questValue(ship: Ship): number {
+  return Math.round(QUEST_POINTS * spanWeight(ship))
+}
+
 export interface FleetPoints {
   /** Own commits and pull requests across every repository. */
   work: number
@@ -183,7 +234,15 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
 
   const breadth = active * BREADTH_POINTS
   const tidy = clean * SHIPSHAPE_POINTS
-  const contracts = met * QUEST_POINTS
+  // Per ship and not over the flat list: what a demand is worth depends on how wide the repository
+  // it was met on is, and a flat count cannot see which ship a quest came from.
+  const contracts = ships.reduce(
+    (sum, ship) =>
+      sum +
+      bindingQuests(ship.quests).filter((quest) => quest.verdict === 'met').length *
+        questValue(ship),
+    0,
+  )
 
   return {
     work,
