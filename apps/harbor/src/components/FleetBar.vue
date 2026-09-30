@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { fleetPoints, projectPoints } from '@hafen/core'
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
   import PointValue from './PointValue.vue'
@@ -24,7 +24,28 @@
     busy?: boolean
   }>()
 
-  const emit = defineEmits<{ measure: [] }>()
+  const emit = defineEmits<{ measure: []; enlist: [string] }>()
+
+  /**
+   * Taking a directory on by hand — the other half of the register.
+   *
+   * A field rather than a dialog, and closed until asked for: it is the rarest action in the
+   * window, and a permanent input beside the fleet's figures would read as something to fill in.
+   * A path is typed because there is nothing to pick from — the whole point is a directory the
+   * survey does not find.
+   */
+  const adopting = ref(false)
+  const path = ref('')
+
+  const adopt = (): void => {
+    const given = path.value.trim()
+    if (given === '') {
+      return
+    }
+    emit('enlist', given)
+    path.value = ''
+    adopting.value = false
+  }
 
   const counts = computed(() => countVerdicts(ships))
 
@@ -95,5 +116,37 @@
     >
       {{ busy ? 'misst …' : 'neu messen' }}
     </button>
+
+    <button
+      v-if="canMeasure && !adopting"
+      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+      title="Ein Verzeichnis ins Register aufnehmen, das die Messung nicht selbst findet"
+      @click="adopting = true"
+    >
+      aufnehmen
+    </button>
+    <span v-else-if="canMeasure" class="flex items-baseline gap-1">
+      <input
+        v-model="path"
+        class="w-64 border-b border-slate-700 bg-transparent font-mono text-[10px] text-slate-300 outline-none placeholder:text-slate-700"
+        placeholder="/pfad/zum/verzeichnis"
+        aria-label="Verzeichnis aufnehmen"
+        @keyup.enter="adopt"
+        @keyup.escape="adopting = false"
+      />
+      <button
+        class="font-mono text-[10px] text-slate-500 hover:text-slate-300"
+        :disabled="busy"
+        @click="adopt"
+      >
+        ok
+      </button>
+      <button
+        class="font-mono text-[10px] text-slate-600 hover:text-slate-400"
+        @click="adopting = false"
+      >
+        ×
+      </button>
+    </span>
   </header>
 </template>

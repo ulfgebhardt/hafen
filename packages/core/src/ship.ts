@@ -135,6 +135,15 @@ export interface Ship {
    */
   archived: boolean
   /**
+   * Whether the register took this directory on by hand.
+   *
+   * The register's other half, and it travels for the same reason `archived` does: it is a
+   * decision nothing in the repository says, and the window has to be able to offer taking it back
+   * out. Without it a "remove from the register" button would stand on every ship and do nothing
+   * on most of them — a button that lies.
+   */
+  enlisted: boolean
+  /**
    * Whether this is a git repository at all. An enlisted directory may not be one, and then
    * branch, age and points are absent rather than zero — the two must not look alike.
    */
@@ -304,6 +313,8 @@ export interface InspectOptions {
   ownEmails?: readonly string[]
   /** Whether the register puts this one away. */
   archived?: boolean
+  /** Whether the register took this directory on by hand. */
+  enlisted?: boolean
 }
 
 export async function inspectShip(
@@ -311,7 +322,7 @@ export async function inspectShip(
   path: string,
   options: InspectOptions = {},
 ): Promise<Ship> {
-  const { catalog = [], ownEmails = [], archived = false } = options
+  const { catalog = [], ownEmails = [], archived = false, enlisted = false } = options
   const segments = path.split('/').filter((segment) => segment !== '')
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
@@ -395,6 +406,7 @@ export async function inspectShip(
     unreadableQuests: merged.unreadable,
     stage: stageOf({ docks, rustDays, ahead, dirty }),
     archived,
+    enlisted,
     hasGit,
   }
 }
@@ -679,6 +691,7 @@ export async function surveyHarbor(
 ): Promise<readonly Ship[]> {
   const { register = EMPTY_REGISTER, progress = {}, catalog = [], ownEmails = [] } = options
   const enlisted = register.enlisted
+  const adopted = new Set(enlisted)
   const archived = new Set(register.archived)
   const roots = typeof root === 'string' ? [root] : root
 
@@ -707,6 +720,7 @@ export async function surveyHarbor(
       catalog,
       ownEmails,
       archived: archived.has(path),
+      enlisted: adopted.has(path),
     })
     measured.set(path, ship)
     progress.onShip?.(ship)

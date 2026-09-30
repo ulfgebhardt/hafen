@@ -342,3 +342,30 @@ export function hasPlume(ship: Ship): boolean {
   const condition = conditionOf(ship)
   return condition.contract === 1 && condition.hygiene === 1
 }
+
+/**
+ * Which demand's box lies under a point, or `null` for a click that hit no box.
+ *
+ * Arithmetic and not a hit area per box: a hundred ships carrying nine boxes each would be nine
+ * hundred interactive display objects for a question that is asked once per click. Scanning twenty
+ * rectangles when somebody taps is free, and it keeps the boxes in one batched `Graphics` — which
+ * is the whole reason the drawing costs what it does.
+ *
+ * Two coordinate systems, because the two halves live in different containers: the cargo moves
+ * with the ship and the planking does not. The caller converts for each, which is also the only
+ * place that knows about that split.
+ */
+export function questAt(
+  boxes: readonly { quest: QuestResult; spot: Spot; along: number; across: number }[],
+  at: Spot,
+): string | null {
+  for (const box of boxes) {
+    if (
+      Math.abs(at.x - box.spot.x) <= box.along / 2 &&
+      Math.abs(at.y - box.spot.y) <= box.across / 2
+    ) {
+      return box.quest.id
+    }
+  }
+  return null
+}

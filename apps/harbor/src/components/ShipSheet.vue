@@ -2,12 +2,14 @@
   import {
     contractChecks,
     hasChecks,
+    localTasks,
     mirrorsOf,
     originOf,
     rustLevel,
     shipPoints,
+    taskForQuest,
   } from '@hafen/core'
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
 
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
   import PointValue from './PointValue.vue'
@@ -22,6 +24,7 @@
     pinned = false,
     canAct = false,
     busy = false,
+    quest: chosenQuest = null,
   } = defineProps<{
     ship: Ship
     /** Whether this sheet is held by a click rather than following the pointer. */
@@ -29,6 +32,8 @@
     /** Whether this window has a shell. False in a browser, where the buttons would only fail. */
     canAct?: boolean
     busy?: boolean
+    /** The quest whose box was clicked in the harbour, if it was a box that was clicked. */
+    quest?: string | null
   }>()
 
   /**
@@ -38,7 +43,7 @@
    * buttons on it. Archiving is what the register holds, and the register holds nothing else about
    * a ship — so there is no third one to add later without something changing shape first.
    */
-  const emit = defineEmits<{ measure: [string]; archive: [boolean] }>()
+  const emit = defineEmits<{ measure: [string]; archive: [boolean]; enlist: [boolean] }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
   const notApplicable = computed(() =>
@@ -48,26 +53,57 @@
   const mirrors = computed(() => mirrorsOf(ship.remotes))
   const checks = computed(() => contractChecks(ship.contract))
   const points = computed(() => shipPoints(ship))
+
+  /**
+   * Only what the repository itself is asking for.
+   *
+   * The violated quests used to be in here as well *and* in the section below with their evidence
+   * — the same sentence twice, the second time with more behind it. They are offered at their own
+   * row now, which is where the proof that they are open already stood.
+   */
+  const doing = computed(() => localTasks(ship))
+
+  /**
+   * How far this sheet has been scrolled, for the header that shrinks.
+   *
+   * Measured from the element rather than kept in step with a class: the header has to stay put —
+   * it is what says which repository the rest is about — but at full height it is a quarter of a
+   * 384 px panel, and that quarter is spent on a path that does not change while reading.
+   */
+  const scrolled = ref(false)
+  const onScroll = (event: Event): void => {
+    scrolled.value = (event.target as HTMLElement).scrollTop > 12
+  }
 </script>
 
 <template>
   <!-- A datasheet, not a dashboard: every row is a measurement with its source. -->
-  <article class="flex h-full flex-col overflow-y-auto bg-slate-900/60 text-sm">
+  <article class="flex h-full flex-col overflow-y-auto bg-slate-900/60 text-sm" @scroll="onScroll">
     <!--
       Sticky: the name is what tells a reader which repository the rest of the sheet is about,
       and it scrolled away exactly when the list below got long enough to need it.
     -->
-    <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 px-4 py-3">
-      <p class="flex items-baseline gap-2 font-mono text-[10px] tracking-widest uppercase">
+    <header
+      class="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 px-4 transition-[padding] duration-150"
+      :class="scrolled ? 'py-1.5' : 'py-3'"
+    >
+      <p
+        v-if="!scrolled"
+        class="flex items-baseline gap-2 font-mono text-[10px] tracking-widest uppercase"
+      >
         <span class="text-slate-500">Schiffsdatenblatt</span>
         <!-- Said out loud: a panel that silently stops following the pointer looks broken. -->
         <span v-if="pinned" class="text-slate-400 normal-case">festgehalten</span>
         <span v-else class="text-slate-700 normal-case">anklicken hält fest</span>
       </p>
-      <h2 class="mt-1 font-mono text-base break-words text-slate-100">
+      <h2
+        class="font-mono break-words text-slate-100"
+        :class="scrolled ? 'text-sm' : 'mt-1 text-base'"
+      >
         {{ ship.org }}/{{ ship.name }}
       </h2>
-      <p class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
+      <!-- The path is the first thing to go: it is long, and it does not change while reading. -->
+      <p v-if="!scrolled" class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
 
       <!--
         Two buttons, and both act on this one repository rather than on the fleet: measuring all
@@ -75,7 +111,11 @@
         avoid. Neither touches the repository — one reads it, the other writes a line in the
         register.
       -->
-      <p v-if="canAct" class="mt-2 flex gap-3 font-mono text-[10px]">
+      <p
+        v-if="canAct"
+        class="flex gap-3 font-mono text-[10px]"
+        :class="scrolled ? 'mt-0.5' : 'mt-2'"
+      >
         <button
           class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
           :disabled="busy"
@@ -95,6 +135,20 @@
           @click="emit('archive', !ship.archived)"
         >
           {{ ship.archived ? 'reaktivieren' : 'archivieren' }}
+        </button>
+        <!--
+          Only where the register actually holds this directory. On a repository the survey found
+          by itself there is nothing to take out, and a button that did nothing on most ships would
+          be a button that lies — which is why `enlisted` travels on the ship at all.
+        -->
+        <button
+          v-if="ship.enlisted"
+          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          :disabled="busy"
+          title="Aus dem Register nehmen — dieses Verzeichnis wurde von Hand aufgenommen"
+          @click="emit('enlist', false)"
+        >
+          nicht mehr führen
         </button>
       </p>
     </header>
@@ -185,7 +239,7 @@
       </p>
     </section>
 
-    <TaskList :ship="ship" />
+    <TaskList :tasks="doing" />
 
     <section class="px-4 py-3">
       <p class="text-[10px] tracking-wide text-slate-600 uppercase">
@@ -197,10 +251,12 @@
       </div>
       <div v-else class="mt-1">
         <QuestRow
-          v-for="quest in binding"
-          :key="quest.id"
-          :quest="quest"
-          :own="ship.ownQuests.includes(quest.id)"
+          v-for="demand in binding"
+          :key="demand.id"
+          :quest="demand"
+          :own="ship.ownQuests.includes(demand.id)"
+          :task="taskForQuest(ship, demand.id)"
+          :chosen="demand.id === chosenQuest"
         />
       </div>
 

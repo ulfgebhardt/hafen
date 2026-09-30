@@ -9,7 +9,7 @@
   import { inTauri, loadSnapshot, remeasure, setRegister, SnapshotError } from './snapshot'
 
   import type { Band } from './components/band'
-  import type { Snapshot } from './snapshot'
+  import type { RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
   const snapshot = ref<Snapshot | null>(null)
@@ -24,6 +24,8 @@
    */
   const picked = ref<Ship | null>(null)
   const hovered = ref<Ship | null>(null)
+  /** The demand whose box was clicked, so the sheet can open that row rather than the whole list. */
+  const demand = ref<string | null>(null)
   const sheet = computed(() => picked.value ?? hovered.value)
 
   /**
@@ -78,23 +80,34 @@
    * comes back from a fresh measurement of that one repository. Two opinions about a file that was
    * just written is exactly the kept status field the whole tool is built to avoid.
    */
-  const archive = async (path: string, away: boolean): Promise<void> => {
+  const act = async (action: RegisterAction, path: string): Promise<void> => {
     if (snapshot.value === null || busy.value) {
       return
     }
     busy.value = true
     trouble.value = null
     try {
-      snapshot.value = await setRegister(
-        snapshot.value,
-        away ? 'archivieren' : 'reaktivieren',
-        path,
-      )
+      snapshot.value = await setRegister(snapshot.value, action, path)
     } catch (error) {
       trouble.value = error instanceof Error ? error.message : String(error)
     } finally {
       busy.value = false
     }
+  }
+
+  const archive = async (path: string, away: boolean): Promise<void> => {
+    await act(away ? 'archivieren' : 'reaktivieren', path)
+  }
+
+  /**
+   * Take a directory on, or stop holding it.
+   *
+   * The register's other half. Adopting one is the only action in the window that names a path
+   * nobody clicked on — there is nothing to click, because the whole point is a directory the
+   * survey does not find.
+   */
+  const enlist = async (path: string, hold: boolean): Promise<void> => {
+    await act(hold ? 'aufnehmen' : 'entfernen', path)
   }
 
   onMounted(async () => {
@@ -127,6 +140,7 @@
         :can-measure="canAct"
         :busy="busy"
         @measure="measure()"
+        @enlist="enlist($event, true)"
       />
       <BandTabs v-model:band="band" :ships="snapshot.ships" />
 
@@ -156,6 +170,7 @@
             :key="band"
             v-model:picked="picked"
             v-model:hovered="hovered"
+            v-model:quest="demand"
             :ships="shown"
           />
         </main>
@@ -167,8 +182,10 @@
             :pinned="picked !== null"
             :can-act="canAct"
             :busy="busy"
+            :quest="picked === null ? null : demand"
             @measure="measure($event)"
             @archive="archive(sheet.path, $event)"
+            @enlist="enlist(sheet.path, $event)"
           />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.
