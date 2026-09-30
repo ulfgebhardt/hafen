@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue'
+  import { computed, onErrorCaptured, onMounted, ref } from 'vue'
 
   import { byBand, firstBand } from './components/band'
   import BandTabs from './components/BandTabs.vue'
@@ -163,6 +163,23 @@
       busy.value = false
     }
   }
+
+  /**
+   * A panel that could not draw says so.
+   *
+   * Measured the hard way: a snapshot written before `branches` existed made the datasheet throw,
+   * and what a reader saw was an empty column — no message, no clue, and nothing to type into a
+   * search. Every field added to `Ship` can do that to every snapshot already on disk. Caught here
+   * and not swallowed: the harbour keeps drawing, and the reason stands in the bar with the remedy
+   * beside it.
+   */
+  // eslint-disable-next-line promise/prefer-await-to-callbacks -- Vue's error hook is a callback
+  onErrorCaptured((error) => {
+    trouble.value = `Datenblatt nicht zeichenbar: ${error.message}\nMoeglicherweise ist der Schnappschuss aelter als dieses Fenster — einmal neu messen.`
+    picked.value = null
+    hovered.value = null
+    return false
+  })
 
   onMounted(async () => {
     try {

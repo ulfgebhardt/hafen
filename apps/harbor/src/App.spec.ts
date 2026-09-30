@@ -336,3 +336,37 @@ describe('the tools, from the window', () => {
     expect(page.text()).toContain('kein Terminal gefunden')
   })
 })
+
+describe('a snapshot older than the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * Measured the hard way: a cache written before `branches` existed made the datasheet throw, and
+   * what a reader saw was an empty column — no message, no clue. Every field added to `Ship` can
+   * do that to every snapshot already on disk.
+   */
+  it('says why a datasheet could not be drawn instead of leaving a blank column', async () => {
+    const old = {
+      ...snapshot,
+      // A ship from before the field existed.
+      ships: [{ ...snapshot.ships[0], branches: undefined, contract: undefined }],
+    }
+    bridge({
+      snapshot: { path: '/cache', json: JSON.stringify(old), error: null },
+      tools: [],
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', old.ships[0])
+    await flushPromises()
+
+    expect(page.text()).toContain('Datenblatt nicht zeichenbar')
+    expect(page.text()).toContain('neu messen')
+  })
+})
