@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onErrorCaptured, onMounted, ref } from 'vue'
 
-  import { byBand, CONTRACTS, firstBand, isBand } from './components/band'
+  import { byBand, CONTRACTS, draws, firstBand, FLEET, isBand } from './components/band'
   import BandTabs from './components/BandTabs.vue'
   import ContractList from './components/ContractList.vue'
   import { filterByContract } from './components/contracts'
@@ -108,6 +108,16 @@
   const narrowed = computed(() => filterByContract(fleet.value, contract.value))
 
   /**
+   * Which of the two harbours is drawn, and it follows the page rather than a switch.
+   *
+   * Lanes pack tighter — measured, the same 64 berths in 418 × 323 against 558 × 618 — and a fan
+   * cannot be packed that way, because a walkway at an angle needs the gaps a wedge has and a
+   * rectangle does not. So the band pages, which are about *what is on this page*, get the tight
+   * one; the fleet page, which is about *who owns what*, gets the one that can branch.
+   */
+  const layout = computed<'lanes' | 'fan'>(() => (page.value === FLEET ? 'fan' : 'lanes'))
+
+  /**
    * The forge reading keyed by ship, for the drawing.
    *
    * Built here and not in the scene, because `statsFor` already knows how a remote maps onto a
@@ -123,7 +133,20 @@
         }),
       ),
   )
-  const shown = computed(() => (isBand(page.value) ? byBand(narrowed.value)[page.value] : []))
+  /**
+   * What the drawing gets.
+   *
+   * The fleet page skips the band split on purpose — that is the whole of its job. It still
+   * honours the search and the contract pick, because those are things a reader asked for; the
+   * bands are not, they are how the other pages are arranged.
+   */
+  const shown = computed(() =>
+    page.value === FLEET
+      ? narrowed.value
+      : isBand(page.value)
+        ? byBand(narrowed.value)[page.value]
+        : [],
+  )
 
   /**
    * Whether this window can measure and write at all.
@@ -352,7 +375,7 @@
         and only one of the two has a remedy the reader can act on.
       -->
       <p
-        v-if="isBand(page) && shown.length === 0 && (query.trim() !== '' || contract !== null)"
+        v-if="draws(page) && shown.length === 0 && (query.trim() !== '' || contract !== null)"
         class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
       >
         <!--
@@ -414,12 +437,13 @@
           />
           <!-- Keyed on the page: a new page is a new drawing, not the old one panned. -->
           <HarborScene
-            v-else
+            v-else-if="draws(page)"
             :key="`${page}:${query}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
             v-model:quest="demand"
             :forge="forgeByPath"
+            :layout="layout"
             :ships="shown"
           />
         </main>

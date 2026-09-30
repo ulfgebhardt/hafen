@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest'
 
 import { fleetlets } from './flags'
 import {
+  arcFor,
   berthBox,
+  centresFor,
+  CENTRES_MOST,
   cuts,
+  FAN,
   harbourOf,
   inTheWayOf,
   overlaps,
   reachesShore,
   sectorsOf,
   walksOf,
+  waysAt,
 } from './moorings'
 import { BERTH } from './plan'
 import { ship } from './testing'
@@ -57,7 +62,7 @@ describe(harbourOf, () => {
    */
   it('files each ship against the plank she actually lies at', () => {
     const many = harbourOf(fleetlets(fleetOf({ one: 12 })))
-    const byId = new Map(many.nodes.map((node) => [node.id, node]))
+    const byId = new Map(many.quays.map((quay) => [quay.id, quay]))
 
     for (const mooring of many.moorings) {
       const plank = byId.get(mooring.node)
@@ -72,12 +77,30 @@ describe(harbourOf, () => {
     }
   })
 
-  /** Exactly one node stands on the quay, and everything else hangs off something that does. */
-  it('has one root and no orphan', () => {
-    const roots = harbour.nodes.filter((node) => node.parent === null)
+  /** Every quay is joined to something — a root included, once there is more than one of them. */
+  it('leaves no orphan quay', () => {
+    const touched = new Set(harbour.ways.flatMap((way) => [way.from, way.to]))
+    const roots = harbour.quays.filter((quay) => quay.rank === 'root')
 
-    expect(roots).toHaveLength(1)
-    expect(roots[0]?.rank).toBe('root')
+    expect(roots.length).toBeGreaterThanOrEqual(1)
+    // A centre with no dock dealt to it carries no ways, and is an empty shore rather than
+    // an orphan.
+    expect(
+      harbour.quays.filter((quay) => quay.rank !== 'root' && !touched.has(quay.id)),
+    ).toStrictEqual([])
+  })
+
+  /**
+   * The tree ways alone already connect everything.
+   *
+   * That is the construction the promise rests on: `extend` cannot lay a quay without the way
+   * that reaches it, so the extras really are extras. Throwing every one of them away and asking
+   * again is how that stops being a claim in a comment.
+   */
+  it('reaches the shore on the laid ways alone, with every extra removed', () => {
+    const tree = harbour.ways.filter((way) => way.kind !== 'round')
+
+    expect(reachesShore(harbour, tree)).toBe(true)
   })
 
   /**
@@ -113,10 +136,14 @@ describe(harbourOf, () => {
    * The biggest dock takes the middle of the fan, because the middle is where there is most room.
    * Dealt outward from there, so the singletons get the shallow angles top and bottom.
    */
-  it('puts the largest organisation straight ahead of the root', () => {
-    const angles = new Map(harbour.blocks.map((one) => [one.org, Math.abs(one.angle)]))
+  it('puts the largest organisation straight ahead of its centre', () => {
+    // Bearings are measured off the centre's own inward direction, so "straight ahead" is the
+    // fan's middle rather than a fixed compass point.
+    const inward = Math.PI / 2
+    const off = (org: string): number =>
+      Math.abs((harbour.blocks.find((one) => one.org === org)?.angle ?? 0) - inward)
 
-    expect(angles.get('Wattenmeer')).toBeLessThan(angles.get('einzel') ?? 9)
+    expect(off('Wattenmeer')).toBeLessThan(off('einzel'))
   })
 
   /**
@@ -152,21 +179,28 @@ describe(harbourOf, () => {
    * number of walkway nodes between them, which is the thing a person would actually walk.
    */
   it('puts two ships of one organisation fewer steps apart', () => {
-    const byId = new Map(harbour.nodes.map((node) => [node.id, node]))
-    const toRoot = (start: number): number[] => {
-      const path: number[] = []
-      let at: number | null = start
-      while (at !== null) {
-        path.push(at)
-        at = byId.get(at)?.parent ?? null
-      }
-      return path
+    // A real walk over the ways, which is what the graph is for: hops, not parent hops.
+    const edge = new Map<number, number[]>()
+    for (const way of harbour.ways) {
+      edge.set(way.from, [...(edge.get(way.from) ?? []), way.to])
+      edge.set(way.to, [...(edge.get(way.to) ?? []), way.from])
     }
     const steps = (a: number, b: number): number => {
-      const up = toRoot(a)
-      const down = toRoot(b)
-      const meet = up.find((one) => down.includes(one)) ?? 0
-      return up.indexOf(meet) + down.indexOf(meet)
+      const seen = new Map([[a, 0]])
+      const queue = [a]
+      while (queue.length > 0) {
+        const at = queue.shift() ?? 0
+        if (at === b) {
+          return seen.get(at) ?? 0
+        }
+        for (const next of edge.get(at) ?? []) {
+          if (!seen.has(next)) {
+            seen.set(next, (seen.get(at) ?? 0) + 1)
+            queue.push(next)
+          }
+        }
+      }
+      return Number.POSITIVE_INFINITY
     }
 
     const mates = harbour.moorings.filter((one) => one.org === 'Wattenmeer')
@@ -204,11 +238,8 @@ describe(harbourOf, () => {
         height: SIZE.maxBeam,
       },
     }))
-    const lines = [
-      ...harbour.crossings,
-      // The tree too. Checking only the extras is what let a diagonal tree edge through before.
-      ...walksOf(harbour),
-    ]
+    // Every way, extras included: checking only one kind is what let a diagonal through before.
+    const lines = walksOf(harbour)
 
     // Gathered and asserted once: a quarter of a million assertions is a test that times out
     // rather than a test that tells you which plank is wrong.
@@ -223,8 +254,11 @@ describe(harbourOf, () => {
    * The extra ways are outside the tree, so none of them can be what a ship depends on. Dropping
    * every one of them must leave the harbour walkable.
    */
-  it('still reaches the shore with every extra path removed', () => {
-    expect(reachesShore({ ...harbour, crossings: [] })).toBe(true)
+  /** Somebody standing on a plank can walk somewhere: the graph answers that, a tree did not. */
+  it('says what can be walked from a plank', () => {
+    const plank = harbour.moorings[0]?.node ?? 0
+
+    expect(waysAt(harbour, plank).length).toBeGreaterThan(0)
   })
 
   /** A single ship is a harbour too, and the smallest place for an off-by-one to hide. */
@@ -257,10 +291,61 @@ describe(harbourOf, () => {
 })
 
 describe(walksOf, () => {
-  it('draws one segment per node that has a parent', () => {
+  /**
+   * One segment per way, and the tree ways are exactly one fewer than there are quays.
+   *
+   * That count *is* the construction: a tree over n quays has n−1 edges, so any other number
+   * means a quay was laid without a way or a way was laid twice. The extras are counted apart
+   * for the same reason they are a separate kind.
+   */
+  it('draws one segment per way, and the laid ways make a tree', () => {
     const harbour = harbourOf(fleetlets(fleetOf({ a: 4, b: 2 })))
+    const tree = harbour.ways.filter((way) => way.kind === 'tree')
 
-    expect(walksOf(harbour)).toHaveLength(harbour.nodes.length - 1)
+    expect(walksOf(harbour)).toHaveLength(harbour.ways.length)
+    expect(tree).toHaveLength(harbour.quays.length - 1)
+  })
+})
+
+describe('several centres', () => {
+  /**
+   * One fan wastes its own middle. Strung along one shore the centres stacked into a column and
+   * the picture came out 701 × 1252 — twice as tall as wide, the opposite of a window. Round a
+   * frame, fanning inward, six fans fought over the middle and spent five times the area the same
+   * fleet takes in lanes. A row along one shore, all fanning the same way, has neither problem.
+   */
+  it('reaches the shore in more than one place once there are docks enough', () => {
+    const many = harbourOf(fleetlets(fleetOf({ a: 4, b: 4, c: 4, d: 4, e: 4, f: 4, g: 4 })))
+    const roots = many.quays.filter((quay) => quay.rank === 'root')
+
+    expect(roots.length).toBeGreaterThan(1)
+    expect(reachesShore(many)).toBe(true)
+  })
+
+  /** And a small fleet keeps one, because two fans of one limb each is a row and not a fan. */
+  it('keeps a single centre for a handful of docks', () => {
+    expect(centresFor(1)).toBe(1)
+    expect(centresFor(3)).toBe(1)
+    expect(centresFor(25)).toBeGreaterThan(1)
+    expect(centresFor(1000)).toBeLessThanOrEqual(CENTRES_MOST)
+  })
+
+  /**
+   * Every centre counts as shore. A check seeded from the first one would have called four fifths
+   * of the harbour unreachable — a correct answer to the wrong question.
+   */
+  it('lets a ship reach whichever piece of land is nearest', () => {
+    const many = harbourOf(fleetlets(fleetOf({ a: 5, b: 5, c: 5, d: 5, e: 5, f: 5, g: 5, h: 5 })))
+
+    expect(many.quays.filter((quay) => quay.rank === 'root').length).toBeGreaterThan(1)
+    expect(reachesShore(many)).toBe(true)
+  })
+
+  /** Narrower fans where there are more of them, or each reaches round into its neighbour's. */
+  it('opens each fan less widely the more of them there are', () => {
+    expect(arcFor(1)).toBe(FAN)
+    expect(arcFor(6)).toBeLessThan(arcFor(2))
+    expect(arcFor(6)).toBeGreaterThan(0)
   })
 })
 

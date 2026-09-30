@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { bandOf, BANDS, byBand, firstBand } from './band'
+import {
+  bandOf,
+  BANDS,
+  byBand,
+  CONTRACTS,
+  draws,
+  firstBand,
+  FLEET,
+  isBand,
+  PAGE_LABEL,
+  PAGE_MEANING,
+  PAGES,
+} from './band'
 import { ship } from './testing'
 
 describe(bandOf, () => {
@@ -57,5 +69,31 @@ describe(firstBand, () => {
 
   it('answers something usable for an empty fleet', () => {
     expect(firstBand([])).toBe('active')
+  })
+})
+
+describe('the fleet page', () => {
+  /**
+   * Its own page and not a switch on the band pages, because it deliberately ignores the bands:
+   * the question is "what does this organisation own", and an answer split across three tabs by
+   * how recently each repository was touched is not that answer.
+   */
+  it('is a page that draws ships but is not a band', () => {
+    expect(isBand(FLEET)).toBe(false)
+    expect(draws(FLEET)).toBe(true)
+    expect(draws(CONTRACTS)).toBe(false)
+  })
+
+  it('is offered between the bands and the catalog', () => {
+    expect(PAGES).toContain(FLEET)
+    expect(PAGES.indexOf(FLEET)).toBeGreaterThan(PAGES.indexOf('archived'))
+    expect(PAGES.indexOf(FLEET)).toBeLessThan(PAGES.indexOf(CONTRACTS))
+  })
+
+  it('has a label and a sentence of its own', () => {
+    for (const page of PAGES) {
+      expect(PAGE_LABEL[page]).not.toBe('')
+      expect(PAGE_MEANING[page]).not.toBe('')
+    }
   })
 })

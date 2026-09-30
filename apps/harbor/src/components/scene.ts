@@ -33,7 +33,8 @@ import { PIER } from './chosen'
 import { conditionOf } from './condition'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
-import { harbourOf, MARGIN, QUAY, walksOf } from './moorings'
+import { harbourOf as laneHarbour } from './lanes'
+import { harbourOf as fanHarbour, MARGIN, QUAY, walksOf, waysAt } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
@@ -254,7 +255,7 @@ function ground(harbour: Harbour, extent: Extent): Container {
    * dock is that organisation's, the ones between docks are everybody's.
    */
   const planks = new Graphics()
-  for (const walk of walksOf(harbour)) {
+  for (const walk of walksOf(harbour).filter((one) => one.kind === 'tree')) {
     const from = project(walk.from)
     const to = project(walk.to)
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
@@ -275,7 +276,7 @@ function ground(harbour: Harbour, extent: Extent): Container {
    * them — a reader who can see that at a glance is reading the harbour correctly.
    */
   const extra = new Graphics()
-  for (const cross of harbour.crossings) {
+  for (const cross of walksOf(harbour).filter((one) => one.kind === 'round')) {
     const from = project(cross.from)
     const to = project(cross.to)
     const steps = 9
@@ -375,7 +376,11 @@ function launch(): Container {
 }
 
 export interface Scene {
-  draw: (ships: readonly Ship[], forge?: ReadonlyMap<string, ForgeStats>) => void
+  draw: (
+    ships: readonly Ship[],
+    forge?: ReadonlyMap<string, ForgeStats>,
+    layout?: 'lanes' | 'fan',
+  ) => void
   /** The ship under the pointer, or `null` on the way out. */
   onHover: (handler: (ship: Ship | null) => void) => void
   /**
@@ -997,6 +1002,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   const draw = (
     ships: readonly Ship[],
     forge: ReadonlyMap<string, ForgeStats> = new Map(),
+    layout: 'lanes' | 'fan' = 'lanes',
   ): void => {
     stats = forge
     world.removeChildren()
@@ -1011,14 +1017,13 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * Remembered so a resize can ask whether the answer changed — see `onResize`.
      */
     /*
-     * Grouped by organisation and laid out around the groups, not sorted onto a ruled grid.
+     * One of the two harbours, and the caller says which.
      *
-     * `berths` used to order the whole fleet biggest-first and hand the layout a flat list; a
-     * repository's neighbours were then whoever happened to sort next to it. Now the neighbours
-     * are the rest of the organisation, and `harbourOf` returns both the berths and the walkway
-     * tree that reaches them.
+     * Both group by organisation and both return the same graph — quays and ways — so everything
+     * from here down is written once and knows nothing about which arrangement it is drawing.
+     * They differ in what they can do: lanes pack tighter, the fan can branch at an angle.
      */
-    const harbour = harbourOf(fleetlets(ships))
+    const harbour = (layout === 'fan' ? fanHarbour : laneHarbour)(fleetlets(ships))
     const order = harbour.moorings
     extent = { width: harbour.width * UNIT, height: harbour.height * UNIT }
     lively = livelinessOf(ships)
@@ -1160,6 +1165,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      */
     const moving = new Container()
     world.addChild(moving)
+    const spots = new Map(harbour.quays.map((quay) => [quay.id, quay.spot]))
+    const quayAt = (id: number): Spot => spots.get(id) ?? { x: 0, y: 0 }
 
     for (const [index, berth] of order.entries()) {
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
@@ -1178,14 +1185,34 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         offset: (index * 0.37) % 1,
       })
 
+      /*
+       * Her authors, on the ways around her — not routed from the shore.
+       *
+       * This is what the edge list is for. A figure takes one of the ways *touching her plank*:
+       * the plank itself, the stub that reaches it, whatever else meets there. So one docker paces
+       * alongside her and the next is out on the branch, which is what a berth looks like — rather
+       * than three figures walking the same line in step.
+       *
+       * Deterministic by index, like everything else that is read repeatedly: the same fleet must
+       * draw the same harbour twice, and a random walker would make every other figure suspect.
+       */
+      const nearby = waysAt(harbour, berth.node)
       for (let hand = 0; hand < traits.crew; hand += 1) {
+        const way = nearby[hand % Math.max(nearby.length, 1)]
+        const ends =
+          way === undefined
+            ? [
+                { x: from + 1.5 * UNIT, y: plankY },
+                { x: to - 1.5 * UNIT, y: plankY },
+              ]
+            : [project(quayAt(way.from)), project(quayAt(way.to))]
+
         const figure = walker()
-        figure.position.set(from, plankY)
         moving.addChild(figure)
         traffic.push({
           node: figure,
-          a: { x: from + 1.5 * UNIT, y: plankY },
-          b: { x: to - 1.5 * UNIT, y: plankY },
+          a: ends[0] ?? { x: from, y: plankY },
+          b: ends[1] ?? { x: to, y: plankY },
           // Each at their own pace and their own place, so a berth does not march in step.
           speed: 0.02 + ((index + hand) % 5) * 0.004,
           offset: (index * 0.31 + hand * 0.41) % 1,
@@ -1200,7 +1227,9 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * water, so a boat is what moves along them. It also means a path that exists is a path
      * something is seen taking, which is the difference between a line and a route.
      */
-    for (const [index, cross] of harbour.crossings.entries()) {
+    for (const [index, cross] of walksOf(harbour)
+      .filter((one) => one.kind === 'round')
+      .entries()) {
       const boat = launch()
       moving.addChild(boat)
       traffic.push({
@@ -1220,7 +1249,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * rather than as lines: somebody is using them.
      */
     for (const [index, dock] of harbour.blocks.entries()) {
-      const limbs = harbour.nodes.filter((one) => one.org === dock.org && one.rank === 'limb')
+      const limbs = harbour.quays.filter((one) => one.org === dock.org && one.rank === 'limb')
       const tip = limbs.at(-1)
       const foot = limbs[0]
       if (tip === undefined || foot === undefined) {

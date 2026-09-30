@@ -91,18 +91,38 @@ export function firstBand(ships: readonly Ship[]): Band {
  */
 export const CONTRACTS = 'contracts'
 
-export type Page = Band | typeof CONTRACTS
+/**
+ * The whole fleet at once, drawn as a fan and grouped by organisation.
+ *
+ * Its own page and **not** a switch on the band pages, because it deliberately ignores the bands:
+ * the question it answers is "what does this organisation own", and an answer split across three
+ * tabs by how recently each repository was touched is not that answer. A dormant mirror belongs
+ * beside the product it mirrors.
+ */
+export const FLEET = 'fleet'
 
-export const PAGES: readonly Page[] = [...BANDS, CONTRACTS]
+export type Page = Band | typeof CONTRACTS | typeof FLEET
 
-export const PAGE_LABEL: Record<Page, string> = { ...BAND_LABEL, [CONTRACTS]: 'Verträge' }
+export const PAGES: readonly Page[] = [...BANDS, FLEET, CONTRACTS]
+
+export const PAGE_LABEL: Record<Page, string> = {
+  ...BAND_LABEL,
+  [FLEET]: 'Flotte',
+  [CONTRACTS]: 'Verträge',
+}
 
 export const PAGE_MEANING: Record<Page, string> = {
   ...BAND_MEANING,
+  [FLEET]: 'alle Schiffe, nach Reederei — ohne Bänder',
   [CONTRACTS]: 'was die Flotte fordert — je Forderung statt je Schiff',
 }
 
-/** Whether this page lists ships, which is what decides between the basin and the catalog. */
+/** Whether this page splits the fleet into bands at all. */
 export function isBand(page: Page): page is Band {
+  return page !== CONTRACTS && page !== FLEET
+}
+
+/** Whether this page draws a harbour — both kinds of page that do, and neither that does not. */
+export function draws(page: Page): boolean {
   return page !== CONTRACTS
 }
