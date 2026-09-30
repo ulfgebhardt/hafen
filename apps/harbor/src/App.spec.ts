@@ -370,3 +370,250 @@ describe('a snapshot older than the window', () => {
     expect(page.text()).toContain('neu messen')
   })
 })
+
+/**
+ * A bridge that answers per command, because the forge tests need two different answers out of
+ * one command: `snapshot` reads the survey or the forge file depending on `which`.
+ */
+function bridgeBy(reply: (command: string, args?: unknown) => unknown): void {
+  const invoke = vi.fn<(command: string, args?: unknown) => Promise<unknown>>(
+    async (command, args) => Promise.resolve(reply(command, args)),
+  )
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
+}
+
+/** The same, when the test also wants to see what was asked. */
+function watchedBridge(reply: (command: string, args?: unknown) => unknown) {
+  const invoke = vi.fn<(command: string, args?: unknown) => Promise<unknown>>(
+    async (command, args) => Promise.resolve(reply(command, args)),
+  )
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
+  return invoke
+}
+
+const cached = (body: unknown) => ({ path: '/cache', json: JSON.stringify(body), error: null })
+
+/** Which of the two caches is being asked for — the survey, or the forge reading beside it. */
+const which = (args: unknown): string | undefined => (args as { which?: string } | undefined)?.which
+
+const clicking = async (page: ReturnType<typeof mount>, label: string): Promise<void> => {
+  const button = page.findAll('button').find((one) => one.text() === label)
+
+  // Named rather than optional-chained: a click on a button that is not there would otherwise
+  // pass as a test of nothing, which is how a silent no-op gets committed as coverage.
+  expect(button, `kein Knopf "${label}"`).toBeDefined()
+
+  await button?.trigger('click')
+  await flushPromises()
+}
+
+const pick = async (page: ReturnType<typeof mount>, one: unknown): Promise<void> => {
+  const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+    $emit: (event: string, ...args: readonly unknown[]) => void
+  }
+  scene.$emit('update:picked', one)
+  await flushPromises()
+}
+
+describe('the forge, from the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const READING = {
+    at: '2026-09-30T08:00:00Z',
+    stats: [
+      {
+        slug: { host: 'github.com', owner: 'org', repo: 'ship' },
+        stars: 1743,
+        watchers: 64,
+        forks: 210,
+        issues: 442,
+        pulls: 53,
+        language: 'JavaScript',
+      },
+    ],
+    unread: [],
+  }
+
+  /** The ship the reading is about: matched on `origin`, which is the only thing that matches. */
+  const withOrigin = {
+    ...snapshot,
+    ships: [{ ...ship(), remotes: [{ name: 'origin', url: 'git@github.com:org/ship.git' }] }],
+  }
+
+  /**
+   * Its own button beside its own timestamp. The survey is six seconds of disk and this is
+   * seventeen of network — one timestamp for both would date the older reading by the younger.
+   */
+  it('asks the forges only when asked, and draws what came back', async () => {
+    const invoke = watchedBridge((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(withOrigin)
+      }
+      if (command === 'forge') {
+        return { json: JSON.stringify(READING), error: null }
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    // Nothing asked on start: drawing the harbour must not wait on somebody else's server.
+    expect(invoke).not.toHaveBeenCalledWith('forge', expect.anything())
+
+    await clicking(page, 'Forge fragen')
+    await pick(page, withOrigin.ships[0])
+
+    expect(page.text()).toContain('442')
+    expect(page.text()).toContain('53')
+    // Not 495, which is what GitHub's REST `open_issues_count` reports for those two.
+    expect(page.text()).not.toContain('495')
+  })
+
+  /**
+   * Thirteen of fifteen unread rows on this fleet are private Gitea repositories, and a plain
+   * "gefragt" over a reading missing a sixth of the fleet is the quiet kind of lie.
+   */
+  it('says how many went unanswered, and what the first one said', async () => {
+    const unread = {
+      ...READING,
+      unread: [
+        {
+          slug: { host: 'git.it4c.dev', owner: 'org', repo: 'zu' },
+          reason: 'HAFEN_GITEA_TOKEN setzen',
+        },
+      ],
+    }
+    bridgeBy((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(snapshot)
+      }
+      if (command === 'forge') {
+        return { json: JSON.stringify(unread), error: null }
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await clicking(page, 'Forge fragen')
+
+    expect(page.text()).toContain('1 Repositories konnten nicht gefragt werden')
+    expect(page.text()).toContain('HAFEN_GITEA_TOKEN setzen')
+  })
+
+  it('shows what a failed query said instead of an empty panel', async () => {
+    bridgeBy((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(snapshot)
+      }
+      if (command === 'forge') {
+        return { json: null, error: 'gh ist nicht installiert' }
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await clicking(page, 'Forge fragen')
+
+    expect(page.text()).toContain('gh ist nicht installiert')
+  })
+
+  /** The host is checked in Rust against a closed list; a refusal from there is shown as one. */
+  it('carries a refused host back to the reader', async () => {
+    bridgeBy((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: JSON.stringify(READING) } : cached(withOrigin)
+      }
+      if (command === 'open_url') {
+        return 'kein bekannter Forge-Host'
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await pick(page, withOrigin.ships[0])
+
+    const figure = page.findAll('button').find((one) => one.text().includes('Sterne'))
+
+    expect(figure, 'keine Forge-Kennzahl im Blatt').toBeDefined()
+
+    await figure?.trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('kein bekannter Forge-Host')
+  })
+})
+
+describe('deleting one branch, from the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const stale = {
+    ...snapshot,
+    ships: [
+      {
+        ...ship(),
+        defaultBranch: 'master',
+        branches: [
+          { name: 'master', upstream: 'origin/master', gone: false, merged: false, current: true },
+          { name: 'feat/old', upstream: null, gone: true, merged: false, current: false },
+        ],
+      },
+    ],
+  }
+
+  /**
+   * One name per click, and a fresh reading of that one repository afterwards: the list the button
+   * came from is a measurement, and one still showing a branch that is gone is exactly the kept
+   * status field this tool exists to avoid.
+   */
+  it('deletes the branch on the row and reads that repository again', async () => {
+    const invoke = watchedBridge((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(stale)
+      }
+      if (command === 'measure') {
+        return { json: JSON.stringify(stale), error: null }
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await pick(page, stale.ships[0])
+    await clicking(page, 'ausführen')
+
+    expect(invoke).toHaveBeenCalledWith('branch_delete', {
+      path: stale.ships[0]?.path,
+      branch: 'feat/old',
+    })
+    expect(invoke).toHaveBeenCalledWith('measure', { only: stale.ships[0]?.path })
+  })
+
+  /** git's refusal *is* the safety here, so its own sentence is what a reader gets. */
+  it('shows git refusing rather than a deletion that did not happen', async () => {
+    const invoke = watchedBridge((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(stale)
+      }
+      if (command === 'branch_delete') {
+        return "error: the branch 'feat/old' is not fully merged"
+      }
+      return command === 'tools' ? [] : null
+    })
+
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await pick(page, stale.ships[0])
+    await clicking(page, 'ausführen')
+
+    expect(page.text()).toContain('not fully merged')
+    expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+  })
+})

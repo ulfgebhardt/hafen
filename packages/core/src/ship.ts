@@ -620,8 +620,14 @@ export class UnreadableRootError extends Error {
  */
 export const SURVEY_LANES = 8
 
-/** Runs `work` over `items`, never more than `lanes` of them at once. */
-async function inLanes<T>(
+/**
+ * Runs `work` over `items`, never more than `lanes` of them at once.
+ *
+ * Exported because the forge reading needs the same shape for the same reason: a hundred requests
+ * handed over at once is one wall the answers all arrive behind, and somebody else's rate limit
+ * is a worse wall than this machine's.
+ */
+export async function inLanes<T>(
   items: readonly T[],
   lanes: number,
   work: (item: T) => Promise<void>,

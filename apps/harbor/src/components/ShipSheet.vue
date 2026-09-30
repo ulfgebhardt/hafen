@@ -13,6 +13,7 @@
 
   import { isQuest } from './chosen'
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
+  import ForgeFacts from './ForgeFacts.vue'
   import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
   import ShipMarks from './ShipMarks.vue'
@@ -23,7 +24,7 @@
 
   import type { Chosen } from './chosen'
   import type { ToolName } from './tools'
-  import type { Ship } from '@hafen/core'
+  import type { ForgeStats, Ship } from '@hafen/core'
 
   const {
     ship,
@@ -32,6 +33,8 @@
     busy = false,
     quest: chosenQuest = null,
     tools = [],
+    stats = null,
+    forgeAt = '',
   } = defineProps<{
     ship: Ship
     /** Whether this sheet is held by a click rather than following the pointer. */
@@ -43,6 +46,10 @@
     quest?: Chosen | null
     /** What this machine can actually run. Anything absent is not drawn rather than disabled. */
     tools?: readonly ToolName[]
+    /** What the forge said, from its own reading — absent where it was never asked. */
+    stats?: ForgeStats | null
+    /** When that reading was taken. Its own age, never the survey's. */
+    forgeAt?: string
   }>()
 
   /**
@@ -60,6 +67,7 @@
     pick: [Chosen | null]
     tool: [ToolName]
     prune: [string]
+    open: [string]
   }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
@@ -143,14 +151,36 @@
   const CLEARANCE = 10
   const headroom = computed(() => measured.value + CLEARANCE)
 
+  const sheet = useTemplateRef<HTMLElement>('sheet')
+
   const onScroll = (event: Event): void => {
     scrolled.value = (event.target as HTMLElement).scrollTop > 12
+  }
+
+  /**
+   * A click on the small plan, on nothing in particular, takes the sheet back to the top.
+   *
+   * The plan shrinks to a thumbnail once the reader is down among the rows, and at that size it is
+   * too small to read — but it is the thing on screen that says "the ship". Clicking it to get the
+   * full drawing back is what somebody tries; before, it cleared the choice instead, which is the
+   * opposite of what a click on a picture of the ship should do.
+   *
+   * Only on a background click: a box hands up its own choice and never reaches here, so the two
+   * gestures do not compete.
+   */
+  const backToTop = (pick: Chosen | null): void => {
+    if (pick === null && scrolled.value) {
+      sheet.value?.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    emit('pick', pick)
   }
 </script>
 
 <template>
   <!-- A datasheet, not a dashboard: every row is a measurement with its source. -->
   <article
+    ref="sheet"
     class="flex h-full flex-col overflow-y-auto scroll-smooth bg-slate-900/60 text-sm [&_[data-row]]:scroll-mt-[var(--headroom)]"
     :style="{ '--headroom': `${String(Math.round(headroom))}px` }"
     @scroll="onScroll"
@@ -191,10 +221,11 @@
       -->
       <ShipPlan
         class="transition-[max-height] duration-150"
-        :class="scrolled ? 'mt-1 max-h-12' : 'mt-2 max-h-36'"
+        :class="scrolled ? 'mt-1 max-h-12 cursor-zoom-in' : 'mt-2 max-h-36'"
         :ship="ship"
         :chosen="chosenQuest"
-        @pick="emit('pick', $event)"
+        :title="scrolled ? 'Ganz nach oben — Plan in voller Größe' : undefined"
+        @pick="backToTop"
       />
 
       <!--
@@ -344,6 +375,8 @@
         in CI: {{ ship.contract.inCi.join(', ') }}
       </p>
     </section>
+
+    <ForgeFacts v-if="stats !== null" :stats="stats" :at="forgeAt" @open="emit('open', $event)" />
 
     <ShipMarks :ship="ship" :chosen="chosenQuest" @pick="emit('pick', $event)" />
 

@@ -317,6 +317,8 @@ interface Placed {
   ashore: Graphics
   body: Container
   hull: Hull
+  /** How far off her pier she lies — the gangway is drawn from it, so the ring needs it too. */
+  offset: number
   restY: number
   restRotation: number
   phase: number
@@ -845,6 +847,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         ashore,
         body,
         hull,
+        offset,
         restY: side * offset * UNIT,
         restRotation: body.rotation,
         phase: drift(berth.ship.path) * 9,
@@ -1062,6 +1065,20 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
               alpha: 0.7,
             })
           }
+          /*
+           * The plank itself, redrawn in the accent.
+           *
+           * It was the one thing the choice did not mark, and it is the thing that was clicked —
+           * the crates lit up and the plank stayed grey, which reads as "that did something else".
+           * In the body, because that is where it is drawn: the gangway moves with her.
+           */
+          const plank = gangwayOf(entry.hull, entry.offset)
+          const from = project(plank.from)
+          const to = project(plank.to)
+          entry.aboard
+            .moveTo(from.x, from.y)
+            .lineTo(to.x, to.y)
+            .stroke({ width: 4, color: accent, alpha: 0.95 })
           continue
         }
 

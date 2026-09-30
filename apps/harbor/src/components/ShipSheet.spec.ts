@@ -1,6 +1,6 @@
 import { mockContract, mockRemote, NO_WORK } from '@hafen/core'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import ShipSheet from './ShipSheet.vue'
 import { quest, ship } from './testing'
@@ -238,5 +238,41 @@ describe('the plan in the sheet', () => {
       ?.trigger('click')
 
     expect(sheet.emitted('pick')).toStrictEqual([[{ kind: 'quest', id: 'lint' }]])
+  })
+})
+
+describe('the thumbnail is the way back', () => {
+  /**
+   * The plan shrinks to a thumbnail once the reader is down among the rows, and at that size it is
+   * too small to read — but it is the thing on screen that says "the ship". Clicking it used to
+   * clear the choice, which is the opposite of what a click on a picture of the ship should do.
+   */
+  it('takes the sheet back to the top rather than clearing the choice', async () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship({ quests: [quest('lint', 'violated')] }) },
+      attachTo: document.body,
+    })
+    const article = sheet.find('article')
+    const scrollTo = vi.fn<(to: ScrollToOptions) => void>()
+    Object.defineProperty(article.element, 'scrollTo', { value: scrollTo, writable: true })
+
+    // Scrolled far enough that the header has shrunk to its thumbnail.
+    Object.defineProperty(article.element, 'scrollTop', { value: 200, writable: true })
+    await article.trigger('scroll')
+    await sheet.find('svg').trigger('click')
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    expect(sheet.emitted('pick')).toBeUndefined()
+
+    sheet.unmount()
+  })
+
+  /** At the top there is nothing to go back to, so a background click means what it always did. */
+  it('still lets go of a choice while the full plan is showing', async () => {
+    const sheet = mount(ShipSheet, { props: { ship: ship() } })
+
+    await sheet.find('svg').trigger('click')
+
+    expect(sheet.emitted('pick')).toStrictEqual([[null]])
   })
 })

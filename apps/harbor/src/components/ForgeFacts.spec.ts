@@ -1,0 +1,70 @@
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+
+import ForgeFacts from './ForgeFacts.vue'
+
+import type { ForgeStats } from '@hafen/core'
+
+const STATS: ForgeStats = {
+  slug: { host: 'github.com', owner: 'Ocelot-Social-Community', repo: 'Ocelot-Social' },
+  stars: 1743,
+  watchers: 64,
+  forks: 210,
+  issues: 442,
+  pulls: 53,
+  language: 'JavaScript',
+}
+
+describe('the forge panel in the datasheet', () => {
+  /**
+   * The two apart, and both visible: GitHub's REST `open_issues_count` would report 495 here, and
+   * a figure that is sometimes the sum of two things is worse than no figure.
+   */
+  it('shows issues and pull requests as two numbers', () => {
+    const panel = mount(ForgeFacts, { props: { stats: STATS } })
+
+    expect(panel.text()).toContain('442')
+    expect(panel.text()).toContain('53')
+    expect(panel.text()).not.toContain('495')
+  })
+
+  /**
+   * Its own age beside its own figures. The survey is six seconds of disk and this is seventeen of
+   * network, so one timestamp for both would carry the older reading under the younger time.
+   */
+  it('says when it asked, and says nothing rather than now', () => {
+    const asked = mount(ForgeFacts, { props: { stats: STATS, at: '2026-09-30T08:00:00Z' } })
+
+    expect(asked.text()).toContain('gefragt')
+
+    expect(mount(ForgeFacts, { props: { stats: STATS } }).text()).not.toContain('gefragt')
+  })
+
+  /** Every figure is a way to the page it came from — nothing here is a number to take on faith. */
+  it('asks for the page each figure was read from', async () => {
+    const panel = mount(ForgeFacts, { props: { stats: STATS } })
+    const base = 'https://github.com/Ocelot-Social-Community/Ocelot-Social'
+
+    await panel
+      .findAll('button')
+      .find((one) => one.text().includes('Issues'))
+      ?.trigger('click')
+
+    expect(panel.emitted('open')).toStrictEqual([[`${base}/issues`]])
+
+    await panel
+      .findAll('button')
+      .find((one) => one.text().includes('Ocelot-Social-Community/'))
+      ?.trigger('click')
+
+    expect(panel.emitted('open')?.[1]).toStrictEqual([base])
+  })
+
+  /** A language the forge could not name is left out, not drawn as an empty word. */
+  it('leaves out a language the forge did not name', () => {
+    const panel = mount(ForgeFacts, { props: { stats: { ...STATS, language: null } } })
+
+    expect(panel.text()).not.toContain('JavaScript')
+    expect(panel.text()).toContain('Sterne')
+  })
+})

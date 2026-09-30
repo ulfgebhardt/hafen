@@ -1,0 +1,295 @@
+/**
+ * What a forge says about a repository — and the one place in this tool that goes to the network.
+ *
+ * Kept apart from the survey on purpose, and that separation is the whole design. `hafen
+ * schnappschuss` reads 92 repositories off the disk in about six seconds and asks nobody
+ * anything; folding an API call into it would make the measurement depend on a network, a login
+ * and somebody else's rate limit, and a harbour that cannot draw because GitHub is slow is a
+ * harbour that has stopped being a picture of this machine.
+ *
+ * So this is its own reading, with its own file and its own timestamp. The window shows both
+ * times, because they really are two different ages.
+ *
+ * **Read-only, always.** Every call here asks a question. Nothing posts, patches or deletes, and
+ * the tools are the ones a person already has logged in — `gh` for GitHub, `curl` for a Gitea
+ * host. The survey's promise is unchanged: the harbour changes no repository, here or there.
+ */
+
+import { forgeOf } from './forge'
+
+import type { Ports } from './ports'
+import type { Ship } from './ship'
+
+/** A repository as its forge names it — case preserved, because an API path is case-sensitive. */
+export interface Slug {
+  host: string
+  owner: string
+  repo: string
+}
+
+/**
+ * The repository a remote URL points at.
+ *
+ * Deliberately not `remoteKey`, which lowercases so two spellings of one remote compare equal.
+ * That is right for folding aliases and wrong here: `gh api repos/Ocelot-Social-Community/…`
+ * needs the name the forge actually uses.
+ */
+export function slugOf(url: string): Slug | null {
+  const trimmed = url
+    .trim()
+    .replace(/\/+$/u, '')
+    .replace(/\.git$/u, '')
+  if (trimmed === '') {
+    return null
+  }
+
+  const both = (host: string, path: string): Slug | null => {
+    const parts = path.split('/').filter((part) => part !== '')
+    const owner = parts.at(-2)
+    const repo = parts.at(-1)
+    return owner === undefined || repo === undefined ? null : { host, owner, repo }
+  }
+
+  if (trimmed.includes('://')) {
+    try {
+      const parsed = new URL(trimmed)
+      return both(parsed.hostname, parsed.pathname)
+    } catch (error) {
+      if (!(error instanceof TypeError)) {
+        throw error
+      }
+      return null
+    }
+  }
+
+  // `[user@]host:owner/repo`, git's scp-like form.
+  const colon = trimmed.indexOf(':')
+  const before = colon > 0 ? trimmed.slice(0, colon) : ''
+  if (before === '' || before.includes('/')) {
+    return null
+  }
+  return both(before.slice(before.lastIndexOf('@') + 1), trimmed.slice(colon + 1))
+}
+
+export interface ForgeStats {
+  slug: Slug
+  stars: number
+  watchers: number
+  forks: number
+  /**
+   * Open issues **without** pull requests.
+   *
+   * GitHub's `open_issues_count` counts both in one number, and a repository with forty open pull
+   * requests and no issues would report forty issues. The GraphQL query asks for the two apart,
+   * which is the only reason it is used instead of the plain REST call.
+   */
+  issues: number
+  pulls: number
+  language: string | null
+}
+
+/** A repository that could not be asked, and why — never a silently missing row. */
+export interface Unread {
+  slug: Slug
+  reason: string
+}
+
+export interface ForgeReading {
+  at: string
+  stats: readonly ForgeStats[]
+  unread: readonly Unread[]
+}
+
+/**
+ * One call per repository, and it asks for everything at once.
+ *
+ * GraphQL rather than `gh api repos/…` because of `issues` and `pullRequests`: the REST field
+ * mixes them, and a number that is sometimes the sum of two things is worse than no number.
+ */
+const QUERY = `query($owner:String!,$repo:String!){
+  repository(owner:$owner,name:$repo){
+    stargazerCount
+    forkCount
+    watchers{totalCount}
+    primaryLanguage{name}
+    issues(states:OPEN){totalCount}
+    pullRequests(states:OPEN){totalCount}
+  }
+}`
+
+interface GraphAnswer {
+  data?: {
+    repository?: {
+      stargazerCount?: number
+      forkCount?: number
+      watchers?: { totalCount?: number }
+      primaryLanguage?: { name?: string } | null
+      issues?: { totalCount?: number }
+      pullRequests?: { totalCount?: number }
+    } | null
+  }
+}
+
+interface GiteaAnswer {
+  stars_count?: number
+  watchers_count?: number
+  forks_count?: number
+  open_issues_count?: number
+  open_pr_counter?: number
+  language?: string
+}
+
+function fromGraph(slug: Slug, raw: string): ForgeStats | null {
+  let answer: GraphAnswer
+  try {
+    answer = JSON.parse(raw) as GraphAnswer
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+    return null
+  }
+
+  const repo = answer.data?.repository
+  if (repo === undefined || repo === null) {
+    return null
+  }
+  return {
+    slug,
+    stars: repo.stargazerCount ?? 0,
+    forks: repo.forkCount ?? 0,
+    watchers: repo.watchers?.totalCount ?? 0,
+    issues: repo.issues?.totalCount ?? 0,
+    pulls: repo.pullRequests?.totalCount ?? 0,
+    language: repo.primaryLanguage?.name ?? null,
+  }
+}
+
+function fromGitea(slug: Slug, raw: string): ForgeStats | null {
+  let answer: GiteaAnswer
+  try {
+    answer = JSON.parse(raw) as GiteaAnswer
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+    return null
+  }
+
+  return {
+    slug,
+    stars: answer.stars_count ?? 0,
+    watchers: answer.watchers_count ?? 0,
+    forks: answer.forks_count ?? 0,
+    /*
+     * Gitea counts them apart already: `open_issues_count` is issues and `open_pr_counter` is
+     * pull requests. One fewer thing to correct for than GitHub's REST.
+     */
+    issues: answer.open_issues_count ?? 0,
+    pulls: answer.open_pr_counter ?? 0,
+    language: answer.language ?? null,
+  }
+}
+
+/** What each forge is asked with, and what to say when that tool is not installed. */
+const TOOL: Record<'github' | 'gitea', string> = { github: 'gh', gitea: 'curl' }
+
+/**
+ * One repository's figures, or the reason there are none.
+ *
+ * A failure is reported per repository and never thrown: a token that expired, a repository that
+ * was renamed, a host that is down — each of those is a fact about *that* row, and one of them
+ * must not take the other ninety-one with it. The same rule `issues_for` follows.
+ */
+export async function readStats(
+  ports: Ports,
+  slug: Slug,
+  token: string | null = null,
+): Promise<ForgeStats | Unread> {
+  const forge = forgeOf(`https://${slug.host}/`)
+  if (forge === 'unknown') {
+    return { slug, reason: `${slug.host} ist keine Forge, die der Hafen kennt` }
+  }
+
+  if ((await ports.proc.which(TOOL[forge])) === null) {
+    return { slug, reason: `${TOOL[forge]} ist nicht installiert` }
+  }
+
+  if (forge === 'github') {
+    const answer = await ports.proc.run('gh', [
+      'api',
+      'graphql',
+      '-f',
+      `query=${QUERY}`,
+      '-F',
+      `owner=${slug.owner}`,
+      '-F',
+      `repo=${slug.repo}`,
+    ])
+    if (answer.code !== 0) {
+      return { slug, reason: answer.stderr.trim().split('\n')[0] ?? 'gh hat nicht geantwortet' }
+    }
+    return fromGraph(slug, answer.stdout) ?? { slug, reason: 'gh antwortete, aber ohne Repository' }
+  }
+
+  const answer = await ports.proc.run('curl', [
+    '--silent',
+    '--fail',
+    '--max-time',
+    '10',
+    ...(token === null ? [] : ['--header', `Authorization: token ${token}`]),
+    `https://${slug.host}/api/v1/repos/${slug.owner}/${slug.repo}`,
+  ])
+  if (answer.code !== 0) {
+    /*
+     * 22 is curl's "the server said no" under `--fail`, and on a Gitea that is almost always a
+     * repository the caller may not read. Measured here: 13 of 15 unread rows are exactly this,
+     * and every one of them is private. Saying "antwortete nicht" would send somebody looking at
+     * their network for a permission problem.
+     */
+    const reason =
+      answer.code === 22
+        ? 'nicht öffentlich oder nicht vorhanden — HAFEN_GITEA_TOKEN setzen'
+        : `${slug.host} antwortete nicht (curl ${String(answer.code)})`
+    return { slug, reason }
+  }
+  return fromGitea(slug, answer.stdout) ?? { slug, reason: 'die Antwort war kein Repository' }
+}
+
+/** Whether a reading came back with figures. */
+export function isRead(one: ForgeStats | Unread): one is ForgeStats {
+  return 'stars' in one
+}
+
+/**
+ * Every distinct repository the fleet's leading remotes point at.
+ *
+ * By `origin` only, and distinct: a mirror holds the same work, and asking it would count one
+ * project twice. Two ships that were folded into one already share a remote, so the set is what
+ * gets asked.
+ */
+export function slugsOf(ships: readonly Ship[]): readonly Slug[] {
+  const seen = new Map<string, Slug>()
+  for (const ship of ships) {
+    const origin = ship.remotes.find((remote) => remote.name === 'origin')
+    const slug = origin === undefined ? null : slugOf(origin.url)
+    if (slug !== null && forgeOf(origin?.url ?? null) !== 'unknown') {
+      seen.set(`${slug.host}/${slug.owner}/${slug.repo}`.toLowerCase(), slug)
+    }
+  }
+  return [...seen.values()]
+}
+
+/** Where a figure is looked at on the forge itself — one place, so no caller builds a URL. */
+export function forgeLinks(slug: Slug): Record<string, string> {
+  const base = `https://${slug.host}/${slug.owner}/${slug.repo}`
+  return {
+    repo: base,
+    stars: `${base}/stargazers`,
+    watchers: `${base}/watchers`,
+    forks: `${base}/forks`,
+    issues: `${base}/issues`,
+    pulls: `${base}/pulls`,
+    language: `${base}/search?l=`,
+  }
+}

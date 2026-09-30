@@ -14,6 +14,7 @@
     source,
     canMeasure = false,
     busy = false,
+    forgeAt = '',
   } = defineProps<{
     ships: readonly Ship[]
     at: string
@@ -22,9 +23,11 @@
     /** Whether this window has a shell to measure with. False in a browser. */
     canMeasure?: boolean
     busy?: boolean
+    /** When the forges were last asked. Its own age, beside its own button. */
+    forgeAt?: string
   }>()
 
-  const emit = defineEmits<{ measure: []; enlist: [string] }>()
+  const emit = defineEmits<{ measure: []; enlist: [string]; forge: [] }>()
 
   /**
    * Taking a directory on by hand — the other half of the register.
@@ -115,6 +118,26 @@
       @click="emit('measure')"
     >
       {{ busy ? 'misst …' : 'neu messen' }}
+    </button>
+
+    <!--
+      The forge reading's own age and its own button, beside each other.
+      It is a different measurement of a different thing at a different time: the survey reads this
+      disk, this one asks somebody else's server. One timestamp for both would be a lie about
+      whichever of them is older.
+    -->
+    <button
+      v-if="canMeasure"
+      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+      :disabled="busy"
+      :title="
+        forgeAt === ''
+          ? 'GitHub und Gitea fragen — lesend, dauert etwa 20 Sekunden'
+          : `Zuletzt gefragt ${new Date(forgeAt).toLocaleString('de-DE')}`
+      "
+      @click="emit('forge')"
+    >
+      {{ forgeAt === '' ? 'Forge fragen' : 'Forge neu fragen' }}
     </button>
 
     <button

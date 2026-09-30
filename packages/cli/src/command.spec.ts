@@ -403,15 +403,22 @@ describe(main, () => {
   })
 
   /**
-   * The harbor measures and draws — it changes no repository, and it goes nowhere near a network.
-   * Asserted against the port rather than trusted: this is the promise the whole tool rests on,
-   * and it runs in eighty-odd working trees that mostly are not ours alone.
+   * The harbor measures and draws — it changes no repository. Asserted against the port rather
+   * than trusted: this is the promise the whole tool rests on, and it runs in eighty-odd working
+   * trees that mostly are not ours alone.
+   *
+   * The promise used to add "and it goes nowhere near a network". That half is gone, deliberately:
+   * `hafen forge` asks GitHub and Gitea what they say about these repositories. What did **not**
+   * change is the half that matters — every one of those calls is a question. `gh api graphql` and
+   * a `curl` GET read; nothing here posts, patches or deletes. So the list below covers both
+   * commands, and the network calls are in it by name.
    *
    * An allow list and deliberately not a list of forbidden verbs, because the two fail in
    * opposite directions. A forbidden-verb list with one gap lets a write through in silence,
    * while an allow list at worst trips over a new *reading* call — a line in this test rather
    * than a commit in somebody else's repository. `git worktree list` is the proof: matching the
-   * word `worktree` called a read a write.
+   * word `worktree` called a read a write. It has earned its keep three times since, most
+   * recently on `git for-each-ref`.
    */
   it('runs nothing but reads', async () => {
     const reading: readonly string[] = [
@@ -429,6 +436,17 @@ describe(main, () => {
       // against. This list noticed both, which is the whole reason it is an allow list.
       'git log --format=',
       'git config --get user.email',
+      // Added with the branches and the carried repositories. Every one of them a question: what
+      // refs are here, which of them the default contains, what the remote calls its default, and
+      // which submodules are checked out where.
+      'git for-each-ref --format=',
+      'git branch --merged',
+      'git symbolic-ref --short refs/remotes/origin/HEAD',
+      'git submodule status',
+      // The forge reading, and the only two that leave this machine. Both are GETs: a GraphQL
+      // *query* has no side effect by definition, and `curl` is given no method and no body.
+      'gh api graphql -f query=query(',
+      'curl --silent --fail',
     ]
 
     out()
@@ -437,7 +455,10 @@ describe(main, () => {
     )
     const base = nodeShip({ 'test:lint': 'eslint .' }, storing([roleQuest('lint', 'lint')]))
 
-    await main(['hafen', ROOT, `--store=${STORE}`], { ...base, proc: { ...base.proc, run } })
+    const watched = { ...base, proc: { ...base.proc, run } }
+    await main(['hafen', ROOT, `--store=${STORE}`], watched)
+    // The network command too, because that is the half of the promise that just moved.
+    await main(['forge', ROOT, `--store=${STORE}`], watched)
 
     expect(run.mock.calls.length).toBeGreaterThan(0)
 
