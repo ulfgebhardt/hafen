@@ -1,4 +1,5 @@
 import { leaderPath, remoteKey } from './alias'
+import { BRANCH_FORMAT, parseBranches } from './branches'
 import { mergeCatalogs, readShipCatalog } from './catalog'
 import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
@@ -9,6 +10,7 @@ import { daysSince } from './time'
 import { LOG_FORMAT, NO_LEDGER, readLedger } from './work'
 import { countStash, hasOpenWork, readWorking } from './working'
 
+import type { Branch } from './branches'
 import type { QuestResult } from './chain'
 import type { Contract } from './contract'
 import type { Forge } from './forge'
@@ -90,6 +92,14 @@ export interface Ship {
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
   docks: readonly string[]
+  /**
+   * Every local branch, and what git knows about it.
+   *
+   * Measured because branch housekeeping is the one tidy job nobody does: a merged branch and one
+   * whose remote was deleted both sit there forever, cost nothing visible, and after two years a
+   * repository is carrying forty. `staleBranches` reads which of them git would let go.
+   */
+  branches: readonly Branch[]
   /**
    * Other directories that are this same project, folded into this one.
    *
@@ -327,32 +337,53 @@ export async function inspectShip(
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
 
-  const [hasGit, remotes, branch, status, lastCommit, worktrees, tracking, stashList, log] =
-    await Promise.all([
-      ports.fs.isDirectory(`${path}/.git`),
-      git(ports, path, ['remote', '-v']),
-      git(ports, path, ['rev-parse', '--abbrev-ref', 'HEAD']),
-      git(ports, path, ['status', '--porcelain']),
-      git(ports, path, ['log', '-1', '--format=%cI']),
-      git(ports, path, ['worktree', 'list', '--porcelain']),
-      git(ports, path, ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']),
-      git(ports, path, ['stash', 'list']),
-      /*
-       * The whole history in one call: author, subject and parents per commit.
-       *
-       * Measured at 0.3 s for 17 642 commits — cheaper than several of the small calls above it,
-       * because the cost here is starting a process and not reading the objects. Skipped entirely
-       * where nobody named an address to count against: there would be nothing to compare to.
-       */
-      ownEmails.length === 0
-        ? Promise.resolve(null)
-        : git(ports, path, ['log', `--format=${LOG_FORMAT}`]),
-    ])
+  const [
+    hasGit,
+    remotes,
+    branch,
+    status,
+    lastCommit,
+    worktrees,
+    tracking,
+    stashList,
+    log,
+    refs,
+    contained,
+  ] = await Promise.all([
+    ports.fs.isDirectory(`${path}/.git`),
+    git(ports, path, ['remote', '-v']),
+    git(ports, path, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    git(ports, path, ['status', '--porcelain']),
+    git(ports, path, ['log', '-1', '--format=%cI']),
+    git(ports, path, ['worktree', 'list', '--porcelain']),
+    git(ports, path, ['rev-list', '--count', '--left-right', '@{upstream}...HEAD']),
+    git(ports, path, ['stash', 'list']),
+    /*
+     * The whole history in one call: author, subject and parents per commit.
+     *
+     * Measured at 0.3 s for 17 642 commits — cheaper than several of the small calls above it,
+     * because the cost here is starting a process and not reading the objects. Skipped entirely
+     * where nobody named an address to count against: there would be nothing to compare to.
+     */
+    ownEmails.length === 0
+      ? Promise.resolve(null)
+      : git(ports, path, ['log', `--format=${LOG_FORMAT}`]),
+    /*
+     * The local branches, and which of them are already contained in this one.
+     *
+     * Two calls because they are two questions: a ref knows what it follows, but containment is
+     * a walk of the graph. Both read, and both go in this batch rather than after it — the cost
+     * of a `git` here is starting the process, not the work.
+     */
+    git(ports, path, ['for-each-ref', `--format=${BRANCH_FORMAT}`, 'refs/heads']),
+    git(ports, path, ['branch', '--merged', 'HEAD', '--format=%(refname:short)']),
+  ])
 
   // The ship's own tree is in that list and is no dock of anybody's.
   const docks = parseWorktrees(worktrees)
     .map((tree) => tree.path)
     .filter((tree) => tree !== path)
+  const localBranches = parseBranches(refs, contained)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
   // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
@@ -405,6 +436,7 @@ export async function inspectShip(
     overriddenQuests: merged.overridden,
     unreadableQuests: merged.unreadable,
     stage: stageOf({ docks, rustDays, ahead, dirty }),
+    branches: localBranches,
     archived,
     enlisted,
     hasGit,

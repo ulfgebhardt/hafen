@@ -131,6 +131,9 @@ export {
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'
 
+export type { Branch } from './branches'
+export { BRANCH_FORMAT, parseBranches, staleBranches } from './branches'
+
 /** Two directories, one project: links resolved before measuring, shared remotes folded after. */
 export { leaderPath, remoteKey } from './alias'
 

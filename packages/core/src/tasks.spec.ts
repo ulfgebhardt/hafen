@@ -44,6 +44,7 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     unreadableQuests: [],
     stage: 'sailing',
     archived: false,
+    branches: [],
     enlisted: false,
     hasGit: true,
     ...overrides,

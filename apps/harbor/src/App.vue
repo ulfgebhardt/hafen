@@ -6,9 +6,19 @@
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import ShipSheet from './components/ShipSheet.vue'
-  import { inTauri, loadSnapshot, remeasure, setRegister, SnapshotError } from './snapshot'
+  import {
+    availableTools,
+    deleteBranch,
+    inTauri,
+    loadSnapshot,
+    remeasure,
+    setRegister,
+    SnapshotError,
+    startTool,
+  } from './snapshot'
 
   import type { Band } from './components/band'
+  import type { ToolName } from './components/tools'
   import type { RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
@@ -49,6 +59,8 @@
    */
   const canAct = inTauri()
   const busy = ref(false)
+  /** What this machine can run, asked once — a button that fails in the click is worse than none. */
+  const tools = ref<readonly ToolName[]>([])
   /** What the last action said when it failed. Shown in the bar, never swallowed. */
   const trouble = ref<string | null>(null)
 
@@ -110,6 +122,48 @@
     await act(hold ? 'aufnehmen' : 'entfernen', path)
   }
 
+  /**
+   * Open a tool where the ship lies.
+   *
+   * Nothing is re-measured afterwards for the four that hand over: they outlive the click, and a
+   * measurement taken a second after lazygit opened would say what it said before. `prune` does
+   * change something, so it ends with a fresh reading of that one repository.
+   */
+  const useTool = async (name: ToolName, path: string): Promise<void> => {
+    if (busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      await startTool(name, path)
+      if (name === 'prune' && snapshot.value !== null) {
+        snapshot.value = await remeasure(snapshot.value, path)
+      }
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Delete one branch, then read that repository again so the list it came from is current. */
+  const prune = async (path: string, branch: string): Promise<void> => {
+    if (snapshot.value === null || busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      await deleteBranch(path, branch)
+      snapshot.value = await remeasure(snapshot.value, path)
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
+
   onMounted(async () => {
     try {
       const loaded = await loadSnapshot()
@@ -127,6 +181,10 @@
           ? error
           : new SnapshotError(String(error), '(unbekannt)', 'hafen schnappschuss')
     }
+
+    // After the picture and never before it: which tools exist is a detail of one panel, and a
+    // harbour that would not draw because a tool list was slow would have the priorities backwards.
+    tools.value = await availableTools()
   })
 </script>
 
@@ -183,10 +241,13 @@
             :can-act="canAct"
             :busy="busy"
             :quest="picked === null ? null : demand"
+            :tools="tools"
             @measure="measure($event)"
             @archive="archive(sheet.path, $event)"
             @enlist="enlist(sheet.path, $event)"
             @pick="demand = $event"
+            @tool="useTool($event, sheet.path)"
+            @prune="prune(sheet.path, $event)"
           />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.

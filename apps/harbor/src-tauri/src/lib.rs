@@ -1,16 +1,27 @@
 //! The window's shell.
 //!
-//! Four commands, and every one of them is *named*. There is still no shell permission and no
+//! Seven commands, and every one of them is *named*. There is still no shell permission and no
 //! filesystem plugin: the webview cannot run a command of its own choosing, cannot name a file to
-//! write, and cannot pass an argument this file did not decide the shape of. What it can do is ask
-//! for one of four things by name.
+//! write, and cannot pass an argument this file did not decide the shape of. A string from the
+//! page only ever lands in the one position its caller put it in — and for the tools, that
+//! position is a working directory.
 //!
-//! The promise that changed, and the one that did not. It used to read: the window runs nothing at
-//! all. That was too strong for what it was protecting — a harbour whose only way to refresh was a
-//! terminal is a harbour that shows yesterday. What it protects is this: **the harbour changes no
-//! repository.** Measuring is reading `git`, and the read-only command list is held by a test on
-//! the TypeScript side. Writing happens to exactly one file, the register, and what stands in it
-//! is a decision a person made — never something measured.
+//! **The promise, and how far it has moved.** It began as: the window runs nothing at all. That
+//! was too strong for what it protected — a harbour whose only way to refresh was a terminal is a
+//! harbour that shows yesterday. It then became: the harbour changes no repository. That is still
+//! the line, and here is exactly where it now runs:
+//!
+//! - **Measuring** reads `git` and writes the cache. Nothing in a repository moves.
+//! - **The register** is written, and what stands in it is a decision a person made.
+//! - **Tools hand over.** `lazygit`, an editor, a terminal, an agent — the window opens them in a
+//!   directory and a human decides inside. The harbour itself still changes nothing.
+//! - **Two writes, both narrow.** `git remote prune origin` removes remote-tracking refs for
+//!   branches the remote no longer has: no commit, no local branch, nothing anybody made. And
+//!   `git branch -d`, one branch at a time, where git's own refusal is the safety — never `-D`,
+//!   which would be a promise about somebody's work that this window cannot keep.
+//!
+//! What has *not* moved: nothing here commits, pushes, merges, rebases or resets, and no sweep
+//! deletes more than one thing per click.
 //!
 //! Neither measuring nor the register's format lives here. `hafen schnappschuss` walks the
 //! repositories, `hafen register` edits the register, and this runs them. A Rust half that knew
@@ -305,6 +316,179 @@ fn register(action: String, path: String) -> Option<String> {
     run_cli(&["register".to_owned(), action, path]).err()
 }
 
+/**
+ * Which terminal to open a terminal tool in.
+ *
+ * `$HAFEN_TERMINAL` first, then whatever of the usual ones is on the PATH. Measured and not
+ * assumed: a hardcoded `xterm` is the setting that is wrong on every desktop except one, and a
+ * button that fails in the click is worse than no button — so the window asks `tools()` which of
+ * these exist before it draws any of them.
+ */
+const TERMINALS: [&str; 6] = ["alacritty", "kitty", "wezterm", "foot", "konsole", "xterm"];
+
+fn terminal() -> Option<String> {
+    if let Ok(given) = std::env::var("HAFEN_TERMINAL") {
+        if !given.trim().is_empty() {
+            return Some(given.trim().to_owned());
+        }
+    }
+    TERMINALS
+        .iter()
+        .find(|name| on_path(name))
+        .map(|name| (*name).to_owned())
+}
+
+/// Whether a command exists, asked the way a shell asks.
+fn on_path(command: &str) -> bool {
+    std::env::var("PATH")
+        .is_ok_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(command).is_file()))
+}
+
+/// What a tool is: a program, and whether it needs a terminal around it.
+struct Tool {
+    /// The program the button stands for — what has to exist for it to be offered.
+    program: &'static str,
+    /// Arguments after the program. The path is the working directory, never an argument.
+    args: &'static [&'static str],
+    /// Whether it has to be wrapped in a terminal emulator.
+    terminal: bool,
+}
+
+/**
+ * Everything the window may start, by name.
+ *
+ * A closed list, the same shape `register` uses and for the same reason: a name the page sends is
+ * checked here and turned into a fixed argv, so nothing from the webview is ever a program, a flag
+ * or anything but a working directory.
+ *
+ * **What this does and does not break.** The harbour still changes no repository by itself. Four
+ * of these five *hand over* — they open a tool and a human decides inside it. The fifth,
+ * `git remote prune origin`, does write, and it is the one write worth having: it deletes
+ * remote-tracking refs for branches that no longer exist on the remote. No commit, no local
+ * branch, nothing anybody made. What is deliberately **not** here is `git branch -D`; deleting a
+ * branch goes one at a time through `branch_delete`, with git's own `-d` as the refusal.
+ */
+fn tool_of(name: &str) -> Option<Tool> {
+    match name {
+        "lazygit" => Some(Tool {
+            program: "lazygit",
+            args: &[],
+            terminal: true,
+        }),
+        "agent" => Some(Tool {
+            program: "claude",
+            args: &[],
+            terminal: true,
+        }),
+        "shell" => Some(Tool {
+            program: "",
+            args: &[],
+            terminal: true,
+        }),
+        "editor" => Some(Tool {
+            program: "codium",
+            args: &["."],
+            terminal: false,
+        }),
+        "prune" => Some(Tool {
+            program: "git",
+            args: &["remote", "prune", "origin"],
+            terminal: false,
+        }),
+        _ => None,
+    }
+}
+
+/// The names this machine can actually offer, so the window draws no button that would fail.
+#[tauri::command]
+fn tools() -> Vec<String> {
+    let has_terminal = terminal().is_some();
+    ["lazygit", "agent", "shell", "editor", "prune"]
+        .into_iter()
+        .filter(|name| {
+            let Some(tool) = tool_of(name) else {
+                return false;
+            };
+            if tool.terminal && !has_terminal {
+                return false;
+            }
+            tool.program.is_empty() || on_path(tool.program)
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+/**
+ * Starts a tool in a repository, and does not wait for it.
+ *
+ * Spawned rather than run to completion: lazygit and an editor outlive the click by hours, and a
+ * command that waited would freeze the window for exactly as long as the tool was useful. What
+ * comes back is whether it *started* — the only thing that can be known at this point.
+ */
+#[tauri::command]
+fn run_tool(name: String, path: String) -> Option<String> {
+    let Some(tool) = tool_of(&name) else {
+        return Some(format!("unbekanntes Werkzeug: {name}"));
+    };
+    if path.trim().is_empty() {
+        return Some("kein Pfad angegeben".to_owned());
+    }
+
+    let mut command = if tool.terminal {
+        let Some(shell) = terminal() else {
+            return Some(
+                "kein Terminal gefunden — HAFEN_TERMINAL setzen oder eines installieren".to_owned(),
+            );
+        };
+        let mut started = std::process::Command::new(shell);
+        if !tool.program.is_empty() {
+            // `-e` is the one flag every terminal here spells the same way.
+            started.arg("-e").arg(tool.program).args(tool.args);
+        }
+        started
+    } else {
+        let mut started = std::process::Command::new(tool.program);
+        started.args(tool.args);
+        started
+    };
+
+    command
+        .current_dir(&path)
+        .spawn()
+        .err()
+        .map(|error| format!("{name}: {error}"))
+}
+
+/**
+ * Deletes one local branch, with git's own refusal as the safety.
+ *
+ * `-d` and never `-D`. The lower-case one refuses a branch holding commits that are nowhere else,
+ * which means the promise "this loses no work" is kept by the program that knows rather than by a
+ * reading of ours that may be a minute old. A `-D` here would be a promise about somebody's work
+ * that this window cannot keep.
+ *
+ * One at a time, and never a sweep: forty branches deleted by one click is forty decisions nobody
+ * made.
+ */
+#[tauri::command]
+fn branch_delete(path: String, branch: String) -> Option<String> {
+    if path.trim().is_empty() || branch.trim().is_empty() {
+        return Some("Pfad und Branch werden beide gebraucht".to_owned());
+    }
+
+    let output = std::process::Command::new("git")
+        .args(["branch", "-d", &branch])
+        .current_dir(&path)
+        .output();
+
+    match output {
+        Err(error) => Some(format!("git nicht ausführbar: {error}")),
+        Ok(done) if done.status.success() => None,
+        // git says exactly why it refused, and that sentence is the whole answer.
+        Ok(done) => Some(String::from_utf8_lossy(&done.stderr).trim().to_owned()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -323,7 +507,15 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, measure, store, register])
+        .invoke_handler(tauri::generate_handler![
+            snapshot,
+            measure,
+            store,
+            register,
+            tools,
+            run_tool,
+            branch_delete
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Hafen");
 }
@@ -581,6 +773,43 @@ mod tests {
         );
         assert!(!file.with_extension("json.neu").exists());
         std::fs::remove_file(&file).ok();
+    }
+
+    /// A name it does not know is a refusal, never a program handed to the machine.
+    #[test]
+    fn refuses_a_tool_it_does_not_know() {
+        assert!(tool_of("rm").is_none());
+        assert!(
+            run_tool("rm".to_owned(), "/tmp".to_owned()).is_some_and(|said| said.contains("rm"))
+        );
+        assert!(run_tool("lazygit".to_owned(), "  ".to_owned()).is_some());
+    }
+
+    /// `-d` and never `-D`: the refusal belongs to git, which knows what is only on this branch.
+    #[test]
+    fn deletes_a_branch_only_the_way_git_allows() {
+        assert!(branch_delete(String::new(), "feat".to_owned()).is_some());
+        assert!(branch_delete("/tmp".to_owned(), String::new()).is_some());
+
+        // Nothing in the whole file may reach for the destructive one.
+        assert!(!include_str!("lib.rs").contains("\"-D\""));
+    }
+
+    /// Only what this machine can actually run — a button that fails in the click is worse than
+    /// no button, which is the same rule the measure button follows.
+    #[test]
+    fn offers_only_tools_that_exist() {
+        let offered = tools();
+
+        assert!(offered.iter().all(|name| tool_of(name).is_some()));
+        // `git` is on any machine that has a repository to look at.
+        assert!(offered.contains(&"prune".to_owned()));
+    }
+
+    #[test]
+    fn finds_a_terminal_that_was_named() {
+        let _env = Env::set(&[("HAFEN_TERMINAL", Some("meinterminal"))]);
+        assert_eq!(terminal().as_deref(), Some("meinterminal"));
     }
 
     #[test]

@@ -279,3 +279,60 @@ describe('the register, from the window', () => {
     expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toBe('lint')
   })
 })
+
+describe('the tools, from the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const read = { path: '/cache/hafen/snapshot.json', json: JSON.stringify(snapshot), error: null }
+
+  /**
+   * Four of the five hand over — they outlive the click, and a measurement taken a second after
+   * lazygit opened would say what it said before. Only `prune` changes something, so only `prune`
+   * ends with a fresh reading.
+   */
+  it('opens a tool where the ship lies and does not re-measure for it', async () => {
+    const invoke = bridge({ snapshot: read, tools: ['lazygit'], run_tool: null })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'lazygit')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(invoke).toHaveBeenCalledWith('run_tool', {
+      name: 'lazygit',
+      path: snapshot.ships[0]?.path,
+    })
+    expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+  })
+
+  it('says what went wrong rather than opening nothing quietly', async () => {
+    bridge({ snapshot: read, tools: ['shell'], run_tool: 'kein Terminal gefunden' })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'Terminal')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('kein Terminal gefunden')
+  })
+})

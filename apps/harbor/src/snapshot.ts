@@ -14,6 +14,9 @@
  * file rather than by this comment.
  */
 
+import { TOOLS } from './components/tools'
+
+import type { ToolName } from './components/tools'
 import type { Ship } from '@hafen/core'
 
 export interface Snapshot {
@@ -198,4 +201,57 @@ export async function setRegister(
     throw new Error(failure)
   }
   return await remeasure(current, path)
+}
+
+/**
+ * Which of them this machine can actually offer.
+ *
+ * Asked once and never guessed: a button for an editor nobody installed is a button that fails in
+ * the click, and the window has the same rule for measuring. Empty in a browser, where there is no
+ * shell to ask.
+ */
+export async function availableTools(): Promise<readonly ToolName[]> {
+  const invoke = caller()
+  if (invoke === null) {
+    return []
+  }
+  // An answer this cannot read is no tools rather than a thrown error: whatever went wrong with
+  // the tool list, it must not be the reason the harbour fails to draw.
+  const named: unknown = await invoke('tools')
+  return Array.isArray(named) ? TOOLS.filter((name) => named.includes(name)) : []
+}
+
+/**
+ * Starts a tool in a repository.
+ *
+ * Four of the five hand over — they open something a human then decides in. The fifth writes, and
+ * narrowly: `git remote prune origin` removes remote-tracking refs for branches the remote no
+ * longer has, which is no commit and no local branch.
+ */
+export async function startTool(name: ToolName, path: string): Promise<void> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich kein Werkzeug starten.')
+  }
+  const failure = (await invoke('run_tool', { name, path })) as string | null
+  if (failure !== null) {
+    throw new Error(failure)
+  }
+}
+
+/**
+ * Deletes one local branch, with git's own refusal as the safety.
+ *
+ * `-d` on the Rust side and never `-D`. One at a time and never a sweep: forty branches deleted by
+ * one click is forty decisions nobody made.
+ */
+export async function deleteBranch(path: string, branch: string): Promise<void> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich kein Branch loeschen.')
+  }
+  const failure = (await invoke('branch_delete', { path, branch })) as string | null
+  if (failure !== null) {
+    throw new Error(failure)
+  }
 }
