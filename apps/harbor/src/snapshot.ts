@@ -25,6 +25,33 @@ export interface Snapshot {
   ships: readonly Ship[]
 }
 
+/**
+ * Fields added to `Ship` since some snapshot on disk was written.
+ *
+ * Every one of these blanked the datasheet once: the type says a ship has `branches`, the cache
+ * written last week says nothing of the kind, and `staleBranches(undefined)` throws. Guarding at
+ * each reader was tried and is the wrong shape — the type is *right* about a freshly measured
+ * ship, so every guard reads as unnecessary and the linter says so, and the next field added has
+ * the same accident waiting for it.
+ *
+ * So it is filled in once, here, where a snapshot crosses from disk into this window. Empty and
+ * never invented: what an old measurement did not record, this cannot know, and an empty list says
+ * that honestly. The remedy is one click away and the bar says so.
+ */
+const ADDED: Partial<Ship> = {
+  branches: [],
+  submodules: [],
+  enlisted: false,
+}
+
+/** A snapshot from disk, brought up to the shape this window expects. */
+export function adopt(snapshot: Snapshot): Snapshot {
+  return {
+    ...snapshot,
+    ships: snapshot.ships.map((ship) => ({ ...ADDED, ...ship })),
+  }
+}
+
 /** What the Rust side answers: the path either way, the contents or the reason. */
 interface Read {
   path: string
@@ -83,7 +110,7 @@ async function fromTauri(invoke: (command: string) => Promise<unknown>): Promise
       'hafen schnappschuss > "$XDG_CACHE_HOME/hafen/snapshot.json"',
     )
   }
-  return { snapshot: JSON.parse(read.json) as Snapshot, source: read.path }
+  return { snapshot: adopt(JSON.parse(read.json) as Snapshot), source: read.path }
 }
 
 async function fromWeb(): Promise<Loaded> {
@@ -101,7 +128,7 @@ async function fromWeb(): Promise<Loaded> {
       'pnpm --filter @hafen/harbor snapshot',
     )
   }
-  return { snapshot: (await response.json()) as Snapshot, source: at }
+  return { snapshot: adopt((await response.json()) as Snapshot), source: at }
 }
 
 export async function loadSnapshot(): Promise<Loaded> {
@@ -162,7 +189,7 @@ export async function remeasure(current: Snapshot, only?: string): Promise<Snaps
     throw new Error(measured.error ?? 'Messung ohne Antwort')
   }
 
-  const fresh = JSON.parse(measured.json) as Snapshot
+  const fresh = adopt(JSON.parse(measured.json) as Snapshot)
   const next = only === undefined ? fresh : spliceShip(current, fresh)
 
   const failure = (await invoke('store', { json: JSON.stringify(next) })) as string | null

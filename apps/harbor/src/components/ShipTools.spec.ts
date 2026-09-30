@@ -75,3 +75,35 @@ describe('shipTools', () => {
     expect(tools.find('code').exists()).toBe(false)
   })
 })
+
+describe('the boats she carries', () => {
+  const tenders = [
+    { path: 'lib/bootstrap3', state: 'aboard' as const, at: '1a2b3c4d' },
+    { path: 'api', state: 'adrift' as const, at: '2b3c4d5e' },
+    { path: 'inspector', state: 'missing' as const, at: '3c4d5e6f' },
+  ]
+
+  /**
+   * Listed whole and not only the strays: a Beiboot is a fact about the ship worth seeing, and a
+   * list that appeared only when something was broken would teach nobody that they exist.
+   */
+  it('lists every carried repository with what is wrong with it', () => {
+    const tools = mount(ShipTools, { props: { ship: ship({ submodules: tenders }) } })
+
+    expect(tools.text()).toContain('3 mitgeführt')
+    expect(tools.text()).toContain('2 nicht an Bord')
+    expect(tools.text()).toContain('nie ausgecheckt')
+  })
+
+  it('offers the command for the ones that are not where they should be', () => {
+    const tools = mount(ShipTools, { props: { ship: ship({ submodules: tenders }) } })
+
+    expect(tools.find('code').text()).toBe('git submodule update --init api inspector')
+  })
+
+  it('says nothing about boats where none are carried', () => {
+    const tools = mount(ShipTools, { props: { ship: ship(), available: ['shell'] } })
+
+    expect(tools.text()).not.toContain('mitgeführt')
+  })
+})

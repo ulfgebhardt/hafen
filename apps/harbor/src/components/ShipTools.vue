@@ -13,7 +13,7 @@
    * for it. Never a sweep: forty branches deleted by one click is forty decisions nobody made.
    */
 
-  import { staleBranches } from '@hafen/core'
+  import { staleBranches, strayTenders } from '@hafen/core'
   import { computed } from 'vue'
 
   import { TOOL_LABEL, TOOL_MEANING, TOOLS } from './tools'
@@ -35,21 +35,29 @@
   const emit = defineEmits<{ tool: [ToolName]; prune: [string] }>()
 
   const offered = computed(() => TOOLS.filter((name) => available.includes(name)))
+  // No guard here: `adopt` fills what an older snapshot is missing, once, where it comes in.
+  const stale = computed(() => staleBranches(ship.branches))
+
   /**
-   * `?? []` because a snapshot on disk may be older than this window.
+   * The repositories this one carries, and what is wrong with them.
    *
-   * It was, and it cost the whole panel: a cache measured before `branches` existed made
-   * `staleBranches(undefined)` throw, the sheet failed to render, and what a reader saw was an
-   * empty column with no reason given. Every field added to `Ship` can do this to every snapshot
-   * already written — so the ones that are read raw defend themselves, and `App.vue` catches what
-   * gets past that rather than drawing nothing.
+   * Listed whole and not only the strays: a Beiboot is a fact about the ship worth seeing, and a
+   * list that appeared only when something was broken would teach nobody that they exist. The two
+   * states that need acting on are marked.
    */
-  const stale = computed(() => staleBranches(ship.branches ?? []))
+  const tenders = computed(() => ship.submodules)
+  const stray = computed(() => strayTenders(tenders.value))
+
+  const TENDER_MEANING: Record<string, string> = {
+    aboard: 'liegt auf dem Stand, den dieses Repo vermerkt',
+    adrift: 'liegt woanders als vermerkt — ein Bump, der es nicht in den Commit geschafft hat',
+    missing: 'nie ausgecheckt — das Verzeichnis ist leer',
+  }
 </script>
 
 <template>
   <section
-    v-if="offered.length > 0 || stale.length > 0"
+    v-if="offered.length > 0 || stale.length > 0 || tenders.length > 0"
     class="border-b border-slate-800 px-4 py-3"
   >
     <p class="text-[10px] tracking-wide text-slate-600 uppercase">Werkzeug</p>
@@ -97,6 +105,35 @@
       </ul>
       <code class="mt-1.5 block font-mono text-[11px] break-all text-slate-600 select-all"
         >git branch -d {{ stale.map((branch) => branch.name).join(' ') }}</code
+      >
+    </template>
+
+    <template v-if="tenders.length > 0">
+      <p class="mt-3 text-[10px] tracking-wide text-slate-600 uppercase">
+        Beiboote
+        <span class="text-slate-700">— {{ tenders.length }} mitgeführt</span>
+        <span v-if="stray.length > 0" class="text-amber-600"
+          >, {{ stray.length }} nicht an Bord</span
+        >
+      </p>
+      <ul class="mt-1 space-y-1">
+        <li v-for="boat in tenders" :key="boat.path" class="flex items-baseline gap-2">
+          <span
+            class="mt-px w-3 shrink-0 font-mono text-xs"
+            :class="boat.state === 'aboard' ? 'text-slate-600' : 'text-amber-500'"
+            >{{ boat.state === 'aboard' ? '·' : boat.state === 'adrift' ? '~' : '!' }}</span
+          >
+          <span class="min-w-0 flex-1">
+            <span class="block font-mono text-xs break-all text-slate-300">{{ boat.path }}</span>
+            <span class="text-[11px] text-slate-600">{{ TENDER_MEANING[boat.state] }}</span>
+          </span>
+          <span class="shrink-0 font-mono text-[10px] text-slate-600">{{ boat.at }}</span>
+        </li>
+      </ul>
+      <code
+        v-if="stray.length > 0"
+        class="mt-1.5 block font-mono text-[11px] break-all text-slate-600 select-all"
+        >git submodule update --init {{ stray.map((boat) => boat.path).join(' ') }}</code
       >
     </template>
   </section>

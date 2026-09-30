@@ -5,6 +5,7 @@
   import BandTabs from './components/BandTabs.vue'
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
+  import { filterShips } from './components/search'
   import ShipSheet from './components/ShipSheet.vue'
   import {
     availableTools,
@@ -47,8 +48,12 @@
    * be clicked away is the kind of thing a tool does once.
    */
   const band = ref<Band>('active')
+  /** What was typed into the filter. Applied to the page, never to the counts beside the tabs. */
+  const query = ref('')
   const shown = computed(() =>
-    snapshot.value === null ? [] : byBand(snapshot.value.ships)[band.value],
+    snapshot.value === null
+      ? []
+      : filterShips(byBand(snapshot.value.ships)[band.value], query.value),
   )
 
   /**
@@ -217,7 +222,18 @@
         @measure="measure()"
         @enlist="enlist($event, true)"
       />
-      <BandTabs v-model:band="band" :ships="snapshot.ships" />
+      <BandTabs v-model:band="band" v-model:query="query" :ships="snapshot.ships" />
+
+      <!--
+        Said out loud, because an empty basin and a filter that matched nothing look identical —
+        and only one of the two has a remedy the reader can act on.
+      -->
+      <p
+        v-if="query.trim() !== '' && shown.length === 0"
+        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
+      >
+        Kein Schiff auf dieser Seite passt zu „{{ query }}“.
+      </p>
 
       <!--
         Said and not swallowed: an action that quietly did nothing is the worst of the three. It
@@ -226,11 +242,17 @@
       -->
       <div
         v-if="trouble !== null"
-        class="flex items-start gap-3 border-b border-red-900 px-4 py-1 font-mono text-xs text-red-400"
+        class="flex items-start gap-2 border-b border-red-900 py-1 pr-2 pl-4 font-mono text-xs text-red-400"
       >
         <p class="min-w-0 flex-1 whitespace-pre-line">{{ trouble }}</p>
+        <!--
+          Beside the first line and not centred in the block: a two-line message put the × halfway
+          down and an arm's length from the text, which reads as belonging to nothing. `leading-*`
+          rather than a margin, so it sits on the baseline of the line it closes whatever the
+          message turns out to be.
+        -->
         <button
-          class="shrink-0 text-red-600 hover:text-red-300"
+          class="shrink-0 px-1 leading-5 text-red-600/70 hover:text-red-300"
           title="Meldung wegklicken"
           @click="trouble = null"
         >
@@ -242,7 +264,7 @@
         <main class="min-w-0 flex-1">
           <!-- Keyed on the band: a new page is a new drawing, not the old one panned. -->
           <HarborScene
-            :key="band"
+            :key="`${band}:${query}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
             v-model:quest="demand"
