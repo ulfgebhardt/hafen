@@ -102,7 +102,13 @@ export const MOLE = 7
 /** Water around the whole plan, so nothing sits flush against an edge. */
 export const MARGIN = { x: 4, y: 3 } as const
 
-/** The shape the plan is laid out towards. Asked for, and the reason `columnsFor` exists. */
+/**
+ * The shape the plan is laid out towards when nobody says otherwise.
+ *
+ * A fallback and not the rule: the shape worth matching is the *window's*, and a constant 16:9 is
+ * only right on a window that happens to be 16:9. Measured on this desktop the scene came out flat
+ * and small in the height, because the plan was built for a shape the window did not have.
+ */
 export const ASPECT = 16 / 9
 
 export function project(spot: Spot): Flat {
@@ -165,16 +171,17 @@ export function shapeAt(count: number, columns: number): { width: number; height
  * column count and keeping the one whose actual plan lands nearest 16:9 is a handful of
  * multiplications per draw and cannot be wrong about its own arithmetic.
  */
-export function columnsFor(count: number): number {
+export function columnsFor(count: number, aspect: number = ASPECT): number {
   if (count <= 0) {
     return 1
   }
 
+  const target = Number.isFinite(aspect) && aspect > 0 ? aspect : ASPECT
   let best = 1
   let closest = Number.POSITIVE_INFINITY
   for (let columns = 1; columns <= count; columns += 1) {
     const shape = shapeAt(count, columns)
-    const off = Math.abs(shape.width / shape.height - ASPECT)
+    const off = Math.abs(shape.width / shape.height - target)
     if (off < closest) {
       closest = off
       best = columns
@@ -183,8 +190,8 @@ export function columnsFor(count: number): number {
   return best
 }
 
-export function rowsFor(count: number): number {
-  return rowsAt(count, columnsFor(count))
+export function rowsFor(count: number, aspect: number = ASPECT): number {
+  return rowsAt(count, columnsFor(count, aspect))
 }
 
 /**
@@ -212,8 +219,8 @@ export interface Berth {
  * Filled in the order given, so the caller's sorting decides who lies in the front row — and the
  * front row is the top one, where a reader starts. The layout does not sort; it places.
  */
-export function berthsFor(count: number): readonly Berth[] {
-  const columns = columnsFor(count)
+export function berthsFor(count: number, aspect: number = ASPECT): readonly Berth[] {
+  const columns = columnsFor(count, aspect)
   return Array.from({ length: Math.max(0, count) }, (_, index) => {
     const column = index % columns
     const row = Math.floor(index / columns)
@@ -248,8 +255,8 @@ export interface Pier {
  * Full width even where the last row is half empty, though — a pier that stopped where the ships
  * stop would move every time a repository was added.
  */
-export function piersFor(count: number): readonly Pier[] {
-  const columns = columnsFor(count)
+export function piersFor(count: number, aspect: number = ASPECT): readonly Pier[] {
+  const columns = columnsFor(count, aspect)
   const length = MARGIN.x * 2 + columns * BERTH.pitch
 
   return Array.from({ length: pierCount(rowsAt(count, columns)) }, (_, index) => ({
@@ -261,7 +268,10 @@ export function piersFor(count: number): readonly Pier[] {
 }
 
 /** The whole plan in pixels, so the viewport can fit and clamp it. */
-export function planExtent(count: number): { width: number; height: number } {
-  const shape = shapeAt(count, columnsFor(count))
+export function planExtent(
+  count: number,
+  aspect: number = ASPECT,
+): { width: number; height: number } {
+  const shape = shapeAt(count, columnsFor(count, aspect))
   return { width: shape.width * UNIT, height: shape.height * UNIT }
 }

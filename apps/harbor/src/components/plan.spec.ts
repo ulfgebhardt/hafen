@@ -206,3 +206,44 @@ describe(piersFor, () => {
     expect(((last?.from.y ?? 0) + BERTH.pier) * UNIT).toBeLessThan(planExtent(count).height)
   })
 })
+
+describe('the shape the window has', () => {
+  /**
+   * A constant 16:9 is only right on a window that happens to be 16:9. On a taller one the harbour
+   * came out flat and small in the height, with room above and below it that nothing used — which
+   * is what "die Szene ist zu klein in der Höhe" was.
+   */
+  it('lays a tall window out in more rows than a wide one', () => {
+    const wide = columnsFor(40, 21 / 9)
+    const tall = columnsFor(40, 4 / 5)
+
+    expect(tall).toBeLessThan(wide)
+    expect(rowsFor(40, 4 / 5)).toBeGreaterThan(rowsFor(40, 21 / 9))
+  })
+
+  it('shapes the whole plan to what it was asked for, not to the constant', () => {
+    const portrait = planExtent(40, 3 / 4)
+
+    expect(portrait.width / portrait.height).toBeLessThan(1)
+  })
+
+  /** A window with no height yet — a first frame, a hidden panel — must not divide by it. */
+  it('falls back to the standing shape for a nonsense one', () => {
+    expect(columnsFor(40, 0)).toBe(columnsFor(40))
+    expect(columnsFor(40, Number.NaN)).toBe(columnsFor(40))
+    expect(columnsFor(40, Number.POSITIVE_INFINITY)).toBe(columnsFor(40))
+  })
+
+  /** Every reader of the grid has to agree about the shape, or the piers miss the berths. */
+  it('keeps berths, piers and extent in step for one shape', () => {
+    const aspect = 3 / 4
+    const berths = berthsFor(40, aspect)
+    const piers = piersFor(40, aspect)
+
+    expect(piers).toHaveLength(Math.floor(rowsFor(40, aspect) / 2) + 1)
+    for (const berth of berths) {
+      expect(piers[Math.floor(berth.row / 2) + (berth.side === 1 ? 0 : 1)]).toBeDefined()
+      expect(berth.spot.y * UNIT).toBeLessThan(planExtent(40, aspect).height)
+    }
+  })
+})

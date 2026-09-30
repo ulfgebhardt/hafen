@@ -115,6 +115,39 @@ describe('nodePorts', () => {
     })
   })
 
+  describe('writing', () => {
+    /**
+     * The one writing call in the whole tool. It makes the directory above it too, because a
+     * register is written before anybody has made a store — and a first run that fails with
+     * ENOENT is a first run that looks broken.
+     */
+    it('writes a file and the directory above it', async () => {
+      const path = join(dir, 'neu', 'tiefer', 'register.md')
+
+      await expect(nodePorts.fs.writeFile(path, 'inhalt')).resolves.toBeNull()
+      await expect(nodePorts.fs.readFile(path)).resolves.toBe('inhalt')
+    })
+
+    it('replaces what is already there', async () => {
+      const path = join(dir, 'zweimal.md')
+
+      await nodePorts.fs.writeFile(path, 'erst')
+
+      await expect(nodePorts.fs.writeFile(path, 'dann')).resolves.toBeNull()
+      await expect(nodePorts.fs.readFile(path)).resolves.toBe('dann')
+    })
+
+    /** The reason, not a throw: the caller asked for a change and has to be able to report why. */
+    it('says why it could not write rather than throwing', async () => {
+      const blocked = join(dir, 'datei.txt')
+      await nodePorts.fs.writeFile(blocked, 'x')
+
+      // A file where a directory would have to be: the one failure that is easy to arrange.
+
+      await expect(nodePorts.fs.writeFile(join(blocked, 'darin.md'), 'y')).resolves.not.toBeNull()
+    })
+  })
+
   describe('host', () => {
     it('measures the machine it runs on', async () => {
       expect(nodePorts.host.cpuCount()).toBeGreaterThan(0)

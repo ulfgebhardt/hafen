@@ -451,3 +451,126 @@ describe(main, () => {
     }
   })
 })
+
+describe('register', () => {
+  /**
+   * The only thing this tool writes, and the reason it writes it here rather than in the window's
+   * shell: the register's format then has one implementation. A Rust half that knew the file would
+   * be a second opinion about a file both of them edit.
+   */
+  it('puts a repository away and says so', async () => {
+    const setup = ports()
+    const stdout = out()
+
+    await expect(
+      main(['register', 'archivieren', '/repos/org/ship', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+
+    const written = await setup.fs.readFile(`${STORE}/register.md`)
+
+    expect(written).toContain('/repos/org/ship')
+    expect(stdout()).toContain('archivieren')
+  })
+
+  /** Fetching it back is the same file with one line fewer, not a second kind of entry. */
+  it('takes it out again', async () => {
+    const setup = ports({
+      files: { [`${STORE}/register.md`]: '# R\n\n## Archiviert\n\n- /repos/org/ship\n' },
+    })
+    out()
+
+    await expect(
+      main(['register', 'reaktivieren', '/repos/org/ship', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+    await expect(setup.fs.readFile(`${STORE}/register.md`)).resolves.not.toContain(
+      '- /repos/org/ship',
+    )
+  })
+
+  it('adopts a directory the survey would not find, and drops it again', async () => {
+    const setup = ports()
+    out()
+
+    await expect(
+      main(['register', 'aufnehmen', '/anderswo/ding', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+    await expect(setup.fs.readFile(`${STORE}/register.md`)).resolves.toContain('/anderswo/ding')
+
+    await expect(
+      main(['register', 'entfernen', '/anderswo/ding', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+    await expect(setup.fs.readFile(`${STORE}/register.md`)).resolves.not.toContain(
+      '- /anderswo/ding',
+    )
+  })
+
+  /** A word it does not know is a refusal, never a guess at which of the four was meant. */
+  it('refuses an action it does not know, and a missing path', async () => {
+    const stderr = err()
+
+    await expect(main(['register', 'verschrotten', '/repos/org/ship'], ports())).resolves.toBe(2)
+    await expect(main(['register', 'archivieren'], ports())).resolves.toBe(2)
+
+    expect(stderr()).toContain('archivieren')
+  })
+
+  /** A write that failed is reported and not swallowed: the caller asked for a change. */
+  it('says why nothing was written', async () => {
+    const base = ports()
+    const broken: Ports = {
+      ...base,
+      // eslint-disable-next-line @typescript-eslint/require-await -- a port, not a caller
+      fs: { ...base.fs, writeFile: async () => 'Platte voll' },
+    }
+    const stderr = err()
+
+    await expect(main(['register', 'archivieren', '/x', `--store=${STORE}`], broken)).resolves.toBe(
+      1,
+    )
+    expect(stderr()).toContain('Platte voll')
+  })
+
+  it('answers with the register itself where asked to', async () => {
+    const stdout = out()
+
+    await expect(
+      main(['register', 'archivieren', '/x', '--json', `--store=${STORE}`], ports()),
+    ).resolves.toBe(0)
+    expect(JSON.parse(stdout()) as { archived: string[] }).toStrictEqual({
+      archived: ['/x'],
+      enlisted: [],
+    })
+  })
+})
+
+describe('schnappschuss --nur', () => {
+  /**
+   * For the window's per-project refresh. A full survey is ninety repositories and some seconds,
+   * and asking for all of them to learn what one just did is the reason refreshing felt like
+   * something to avoid. The shape of the answer is the same either way, so the caller splices by
+   * path and needs no second format.
+   */
+  it('measures one repository and answers in the same shape', async () => {
+    const stdout = out()
+
+    await expect(
+      main(['schnappschuss', ROOT, `--nur=${ROOT}/org/ship`, `--store=${STORE}`], withShip()),
+    ).resolves.toBe(0)
+
+    const answer = JSON.parse(stdout()) as { ships: { path: string }[]; at: string }
+
+    expect(answer.ships).toHaveLength(1)
+    expect(answer.ships[0]?.path).toBe(`${ROOT}/org/ship`)
+    expect(answer.at).not.toBe('')
+  })
+
+  /** An empty value is how a shell spells "unset" by accident, and must not mean "measure /". */
+  it('treats an empty --nur as no --nur', async () => {
+    const stdout = out()
+
+    await expect(
+      main(['schnappschuss', ROOT, '--nur=', `--store=${STORE}`], withShip()),
+    ).resolves.toBe(0)
+    expect((JSON.parse(stdout()) as { ships: unknown[] }).ships).toHaveLength(1)
+  })
+})

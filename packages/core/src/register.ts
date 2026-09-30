@@ -64,7 +64,7 @@ export function renderRegister(register: Register): string {
   return [
     '# Schiffsregister',
     '',
-    'Von Werft gepflegt. Hier steht nur, was die Musterung nicht selbst sehen kann.',
+    'Vom Hafen gepflegt. Hier steht nur, was die Messung nicht selbst sehen kann.',
     '',
     section(ARCHIVED_HEADING, register.archived),
     section(ENLISTED_HEADING, register.enlisted),

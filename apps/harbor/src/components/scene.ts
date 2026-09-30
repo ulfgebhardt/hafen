@@ -33,8 +33,10 @@ import { conditionOf } from './condition'
 import { ageLabel, berths as orderBerths, drift, fit } from './fleet'
 import { drawn, isCapped, marksOf } from './marks'
 import {
+  ASPECT,
   BERTH,
   berthsFor,
+  columnsFor,
   contentHeight,
   CONTENT_TOP,
   MOLE,
@@ -161,9 +163,9 @@ function slab(shape: Graphics, at: Spot, along: number, across: number): Graphic
  * moment the fleet changes size, and a harbour that crops its own breakwater looks broken rather
  * than austere.
  */
-function ground(count: number, extent: Extent): Container {
+function ground(count: number, extent: Extent, aspect: number): Container {
   const group = new Container()
-  const piers = piersFor(count)
+  const piers = piersFor(count, aspect)
   const width = extent.width
 
   const water = new Graphics()
@@ -193,7 +195,7 @@ function ground(count: number, extent: Extent): Container {
 
   // Read from the plan rather than from the last pier: with an odd number of rows the bottom row
   // hangs *below* its pier, and measuring from the pier would run the breakwater over the ships.
-  const moleTop = (CONTENT_TOP + contentHeight(rowsFor(count))) * UNIT
+  const moleTop = (CONTENT_TOP + contentHeight(rowsFor(count, aspect))) * UNIT
   const mole = new Graphics()
   mole.rect(0, moleTop, width, extent.height - moleTop).fill(hex(SCENE.land))
   group.addChild(mole)
@@ -634,6 +636,9 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
   let zoom: number | null = null
+  /** What was drawn, and the window shape it was drawn for — so a resize can ask if it still fits. */
+  let laid: readonly Ship[] = []
+  let shaped = ASPECT
 
   const viewOf = (): Extent => ({ width: app.screen.width, height: app.screen.height })
 
@@ -652,11 +657,21 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     placed = []
     traffic = []
 
+    /*
+     * The shape the plan is laid out towards is the *window's*, not a constant.
+     *
+     * A fixed 16:9 is only right on a window that happens to be 16:9; on a taller one the harbour
+     * came out flat and small in the height, with room above and below it that nothing used.
+     * Remembered so a resize can ask whether the answer changed — see `onResize`.
+     */
+    const view = viewOf()
+    shaped = view.height > 0 ? view.width / view.height : ASPECT
     const order = orderBerths(ships)
-    const spots = berthsFor(order.length)
-    extent = planExtent(order.length)
+    const spots = berthsFor(order.length, shaped)
+    extent = planExtent(order.length, shaped)
+    laid = ships
 
-    world.addChild(ground(order.length, extent))
+    world.addChild(ground(order.length, extent, shaped))
 
     /*
      * Built once, outside the loop, and reading the handler at the moment the pointer arrives:
@@ -731,8 +746,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     // position moves — nothing here is redrawn per frame.
     const moving = new Container()
     world.addChild(moving)
-    const basinBottom = (CONTENT_TOP + contentHeight(rowsFor(order.length))) * UNIT
-    for (const pier of piersFor(order.length)) {
+    const basinBottom = (CONTENT_TOP + contentHeight(rowsFor(order.length, shaped))) * UNIT
+    for (const pier of piersFor(order.length, shaped)) {
       const node = lift()
       node.position.y = (pier.from.y + pier.depth / 2) * UNIT
       moving.addChild(node)
@@ -841,7 +856,20 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   globalThis.addEventListener('pointermove', onMove)
   globalThis.addEventListener('pointerup', onUp)
 
+  /**
+   * A resize rescales, and re-lays out only when the answer actually changed.
+   *
+   * Redrawing a hundred hulls on every pixel of a drag would be wasteful, and not redrawing at all
+   * leaves a plan built for the shape the window used to have. `columnsFor` is the whole of the
+   * decision, so asking it is the cheapest way to know which of the two this is.
+   */
   const onResize = (): void => {
+    const view = viewOf()
+    const aspect = view.height > 0 ? view.width / view.height : ASPECT
+    if (laid.length > 0 && columnsFor(laid.length, aspect) !== columnsFor(laid.length, shaped)) {
+      draw(laid)
+      return
+    }
     settle()
   }
   globalThis.addEventListener('resize', onResize)

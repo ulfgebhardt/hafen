@@ -121,3 +121,102 @@ describe('app', () => {
     expect(app.text()).toContain('/repos/org/ship')
   })
 })
+
+/**
+ * The bridge with a reply per command, so a whole action can be followed from click to picture.
+ *
+ * Stubbed at the bridge and not at `snapshot.ts`, for the reason `answersWith` is: this exercises
+ * the branch the packaged window actually takes.
+ */
+function bridge(replies: Record<string, unknown>): ReturnType<typeof vi.fn> {
+  const invoke = vi.fn<(command: string) => Promise<unknown>>(async (command) =>
+    Promise.resolve(replies[command]),
+  )
+  vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
+  return invoke
+}
+
+describe('acting on a ship', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const read = {
+    path: '/cache/hafen/snapshot.json',
+    json: JSON.stringify(snapshot),
+    error: null,
+  }
+
+  /** The one button that starts a measurement, beside the timestamp it makes stale. */
+  it('measures the fleet when the bar asks for it', async () => {
+    const fresh = { ...snapshot, at: '2026-09-30T08:00:00.000Z' }
+    const invoke = bridge({
+      snapshot: read,
+      measure: { json: JSON.stringify(fresh), error: null },
+      store: null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const button = page.findAll('button').find((one) => one.text().includes('neu messen'))
+
+    expect(button).toBeDefined()
+
+    await button?.trigger('click')
+    await flushPromises()
+
+    expect(invoke).toHaveBeenCalledWith('measure', { only: null })
+    expect(page.text()).toContain('30.9.2026')
+  })
+
+  /** Said and not swallowed: an action that quietly did nothing is the worst of the three. */
+  it('shows what a failed measurement said', async () => {
+    bridge({ snapshot: read, measure: { json: null, error: 'hafen nicht gefunden' } })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text().includes('neu messen'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('hafen nicht gefunden')
+  })
+
+  /**
+   * Archiving writes the register and then measures that one repository: `archived` travels on the
+   * ship, and flipping it here as well would be a second opinion about a file just written.
+   */
+  it('archives the pinned ship through the register', async () => {
+    const away = {
+      ...snapshot,
+      ships: [{ ...snapshot.ships[0], archived: true }],
+    }
+    const invoke = bridge({
+      snapshot: read,
+      register: null,
+      measure: { json: JSON.stringify(away), error: null },
+      store: null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'archivieren')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(invoke).toHaveBeenCalledWith('register', {
+      action: 'archivieren',
+      path: snapshot.ships[0]?.path,
+    })
+  })
+})

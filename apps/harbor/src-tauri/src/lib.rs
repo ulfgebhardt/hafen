@@ -1,10 +1,20 @@
 //! The window's shell.
 //!
-//! One command, and it reads one file. The harbour measures nothing at runtime: `hafen
-//! schnappschuss` walks the repositories and writes the snapshot, this reads it and the webview
-//! draws it. That split is the whole reason there is no shell permission in
-//! `capabilities/default.json` — a window that could run `git` would be a window that measures,
-//! and then "gemessen 29.9., 23:42" in the header would be a claim nobody checks.
+//! Four commands, and every one of them is *named*. There is still no shell permission and no
+//! filesystem plugin: the webview cannot run a command of its own choosing, cannot name a file to
+//! write, and cannot pass an argument this file did not decide the shape of. What it can do is ask
+//! for one of four things by name.
+//!
+//! The promise that changed, and the one that did not. It used to read: the window runs nothing at
+//! all. That was too strong for what it was protecting — a harbour whose only way to refresh was a
+//! terminal is a harbour that shows yesterday. What it protects is this: **the harbour changes no
+//! repository.** Measuring is reading `git`, and the read-only command list is held by a test on
+//! the TypeScript side. Writing happens to exactly one file, the register, and what stands in it
+//! is a decision a person made — never something measured.
+//!
+//! Neither measuring nor the register's format lives here. `hafen schnappschuss` walks the
+//! repositories, `hafen register` edits the register, and this runs them. A Rust half that knew
+//! the register's format would be a second opinion about a file both of them edit.
 //!
 //! Read at runtime rather than bundled with the frontend, which is the difference between a
 //! desktop app and a screenshot: a snapshot baked in at build time is as old as the build, and
@@ -27,19 +37,29 @@ const MAX_ZOOM: f64 = 3.0;
 /// one the human is looking at is the one the window opens on.
 fn parse_dpi(output: &str) -> Option<f64> {
     let line = output.lines().find(|line| line.contains(" connected"))?;
-    let resolution = line.split_whitespace().find(|word| word.contains('x') && word.contains('+'))?;
+    let resolution = line
+        .split_whitespace()
+        .find(|word| word.contains('x') && word.contains('+'))?;
     let pixels: f64 = resolution.split('x').next()?.parse().ok()?;
     let millimetres: f64 = line
         .split_whitespace()
         .zip(line.split_whitespace().skip(1))
-        .find_map(|(value, unit)| (unit == "x").then(|| value.trim_end_matches("mm").parse().ok())?)?;
+        .find_map(|(value, unit)| {
+            (unit == "x").then(|| value.trim_end_matches("mm").parse().ok())?
+        })?;
 
     (pixels > 0.0 && millimetres > 0.0).then(|| pixels / (millimetres / 25.4))
 }
 
 fn display_dpi() -> Option<f64> {
-    let output = std::process::Command::new("xrandr").arg("--query").output().ok()?;
-    output.status.success().then(|| parse_dpi(&String::from_utf8_lossy(&output.stdout)))?
+    let output = std::process::Command::new("xrandr")
+        .arg("--query")
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| parse_dpi(&String::from_utf8_lossy(&output.stdout)))?
 }
 
 /// How large to draw, before anybody has said anything.
@@ -52,7 +72,13 @@ fn display_dpi() -> Option<f64> {
 /// Reading the screen is the branch that matters here, because on this desktop neither `GDK_SCALE`
 /// nor `GDK_DPI_SCALE` is set and `Xft.dpi` says 96 — measuring beats believing the claim.
 fn zoom_from(env: &dyn Fn(&str) -> Option<String>, dpi: Option<f64>) -> f64 {
-    let read = |name: &str| env(name)?.trim().parse::<f64>().ok().filter(|value| *value > 0.0);
+    let read = |name: &str| {
+        env(name)?
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|value| *value > 0.0)
+    };
 
     if let Some(explicit) = read("HAFEN_ZOOM") {
         return explicit.min(MAX_ZOOM);
@@ -105,7 +131,11 @@ fn snapshot_path() -> Option<PathBuf> {
         .ok()
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|home| PathBuf::from(home).join(".cache")))?;
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|home| PathBuf::from(home).join(".cache"))
+        })?;
 
     Some(cache.join("hafen").join("snapshot.json"))
 }
@@ -116,15 +146,163 @@ fn snapshot() -> Snapshot {
         return Snapshot {
             path: "(unbekannt)".to_owned(),
             json: None,
-            error: Some("weder HAFEN_SNAPSHOT noch XDG_CACHE_HOME noch HOME sind gesetzt".to_owned()),
+            error: Some(
+                "weder HAFEN_SNAPSHOT noch XDG_CACHE_HOME noch HOME sind gesetzt".to_owned(),
+            ),
         };
     };
 
     let shown = path.display().to_string();
     match std::fs::read_to_string(&path) {
-        Ok(json) => Snapshot { path: shown, json: Some(json), error: None },
-        Err(error) => Snapshot { path: shown, json: None, error: Some(error.to_string()) },
+        Ok(json) => Snapshot {
+            path: shown,
+            json: Some(json),
+            error: None,
+        },
+        Err(error) => Snapshot {
+            path: shown,
+            json: None,
+            error: Some(error.to_string()),
+        },
     }
+}
+
+/// How to call the measuring half.
+///
+/// `$HAFEN_CLI` first, split on spaces so a development checkout can point at
+/// `pnpm --filter @hafen/cli exec tsx src/index.ts` without a wrapper script. Then plain `hafen`
+/// on the PATH, which is what an installed one is. Deliberately not a path baked in at build time:
+/// that is the setting that is wrong on every machine except the one it was built on.
+fn cli() -> Vec<String> {
+    match std::env::var("HAFEN_CLI") {
+        Ok(given) if !given.trim().is_empty() => {
+            given.split_whitespace().map(str::to_owned).collect()
+        }
+        _ => vec!["hafen".to_owned()],
+    }
+}
+
+/// Runs the CLI with arguments this file chose, and hands back what it printed.
+///
+/// Every caller below builds its own argument list from a fixed shape. Nothing the webview sends
+/// is ever a command, a flag or a path that is not checked first — a string from the page can only
+/// ever land in the one position the caller put it in.
+fn run_cli(args: &[String]) -> Result<String, String> {
+    let parts = cli();
+    let (program, leading) = parts.split_first().ok_or("HAFEN_CLI ist leer")?;
+
+    let output = std::process::Command::new(program)
+        .args(leading)
+        .args(args)
+        .output()
+        // The remedy and not only the failure: "No such file or directory" beside a word the
+        // reader never typed sends them looking for a bug. What is missing is a setting.
+        .map_err(|error| {
+            format!(
+                "{program} nicht ausführbar: {error}\n\
+                 Der Hafen misst über seine CLI. Entweder `hafen` auf den PATH legen, oder \
+                 HAFEN_CLI setzen — im Checkout etwa auf \
+                 \"pnpm --filter @hafen/cli exec tsx src/index.ts\"."
+            )
+        })?;
+
+    if !output.status.success() {
+        let said = String::from_utf8_lossy(&output.stderr);
+        let reason = said.trim();
+        // The exit code alone sends a person reading a manual; what it printed is the answer.
+        return Err(if reason.is_empty() {
+            format!("{program} endete mit {}", output.status)
+        } else {
+            reason.to_owned()
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// What a measurement answered: the snapshot as text, or why there is none.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Measured {
+    pub json: Option<String>,
+    pub error: Option<String>,
+}
+
+impl Measured {
+    fn of(result: Result<String, String>) -> Self {
+        match result {
+            Ok(json) => Self {
+                json: Some(json),
+                error: None,
+            },
+            Err(error) => Self {
+                json: None,
+                error: Some(error),
+            },
+        }
+    }
+}
+
+/// Measures the fleet, or one repository of it.
+///
+/// `only` is a path and lands in `--nur=…`, which is the one place a string from the page reaches
+/// the CLI — as the value of a flag this file names, never as a flag of its own. A full survey is
+/// ninety repositories and some seconds; asking for all of them to learn what one just did is the
+/// reason refreshing felt like something to avoid.
+///
+/// Nothing is written here. The window merges the answer into what it has and asks for `store`,
+/// because the merge needs to know what a snapshot is and this file deliberately does not.
+#[tauri::command]
+fn measure(only: Option<String>) -> Measured {
+    let mut args = vec!["schnappschuss".to_owned()];
+    if let Some(path) = only.filter(|path| !path.trim().is_empty()) {
+        args.push(format!("--nur={path}"));
+    }
+    Measured::of(run_cli(&args))
+}
+
+/// Writes the snapshot to the one path it can ever be written to.
+///
+/// The path is not an argument and cannot be: the page says *what*, never *where*. Through a
+/// temporary file and a rename, so a window reading the cache while this runs sees either the old
+/// snapshot or the new one and never half of one.
+#[tauri::command]
+fn store(json: String) -> Option<String> {
+    let path = snapshot_path()?;
+    if let Some(directory) = path.parent() {
+        if let Err(error) = std::fs::create_dir_all(directory) {
+            return Some(error.to_string());
+        }
+    }
+
+    let temporary = path.with_extension("json.neu");
+    if let Err(error) = std::fs::write(&temporary, json) {
+        return Some(error.to_string());
+    }
+    std::fs::rename(&temporary, &path)
+        .err()
+        .map(|error| error.to_string())
+}
+
+/// The four things the register can be told, and nothing else.
+///
+/// Checked here rather than passed through, so a typo in the page is a refusal and not an argument
+/// handed to a process. The words are the CLI's own — one vocabulary, not a mapping table that can
+/// drift out of step with the tool it names.
+const REGISTER_ACTIONS: [&str; 4] = ["archivieren", "reaktivieren", "aufnehmen", "entfernen"];
+
+/// Puts a repository away, fetches it back, takes a directory on, or drops it.
+///
+/// The one writing path in the whole window, and it writes the register — decisions a person made.
+/// Nothing measured goes through here, and no path inside a project repository.
+#[tauri::command]
+fn register(action: String, path: String) -> Option<String> {
+    if !REGISTER_ACTIONS.contains(&action.as_str()) {
+        return Some(format!("unbekannte Registeraktion: {action}"));
+    }
+    if path.trim().is_empty() {
+        return Some("kein Pfad angegeben".to_owned());
+    }
+    run_cli(&["register".to_owned(), action, path]).err()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -145,7 +323,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot])
+        .invoke_handler(tauri::generate_handler![snapshot, measure, store, register])
         .run(tauri::generate_context!())
         .expect("error while running Hafen");
 }
@@ -209,15 +387,24 @@ mod tests {
             ("XDG_CACHE_HOME", Some("/cache")),
         ]);
 
-        assert_eq!(snapshot_path(), Some(PathBuf::from("/anderswo/snapshot.json")));
+        assert_eq!(
+            snapshot_path(),
+            Some(PathBuf::from("/anderswo/snapshot.json"))
+        );
     }
 
     /// An empty variable is not an answer: it is how a shell spells "unset" by accident.
     #[test]
     fn an_empty_override_is_no_override() {
-        let _env = Env::set(&[("HAFEN_SNAPSHOT", Some("")), ("XDG_CACHE_HOME", Some("/cache"))]);
+        let _env = Env::set(&[
+            ("HAFEN_SNAPSHOT", Some("")),
+            ("XDG_CACHE_HOME", Some("/cache")),
+        ]);
 
-        assert_eq!(snapshot_path(), Some(PathBuf::from("/cache/hafen/snapshot.json")));
+        assert_eq!(
+            snapshot_path(),
+            Some(PathBuf::from("/cache/hafen/snapshot.json"))
+        );
     }
 
     #[test]
@@ -316,11 +503,94 @@ mod tests {
         assert!(parse_dpi("").is_none());
     }
 
+    /// The development checkout points at a runner with its own arguments; an installed one is a
+    /// single word. Both have to work, which is why this splits rather than taking the string.
+    #[test]
+    fn takes_a_runner_with_arguments() {
+        let _env = Env::set(&[(
+            "HAFEN_CLI",
+            Some("pnpm --filter @hafen/cli exec tsx src/index.ts"),
+        )]);
+
+        assert_eq!(
+            cli(),
+            vec![
+                "pnpm",
+                "--filter",
+                "@hafen/cli",
+                "exec",
+                "tsx",
+                "src/index.ts"
+            ]
+        );
+    }
+
+    /// An empty variable is how a shell spells "unset" by accident — the same rule the snapshot
+    /// path follows, and for the same reason.
+    #[test]
+    fn falls_back_to_the_installed_command() {
+        // Two guards, two scopes. `ENV` is not reentrant, so a second `Env::set` while the first
+        // is still alive is a deadlock — and it does not fail, it hangs: the whole run sat there
+        // with seven tests "running for over 60 seconds" and said nothing about why.
+        {
+            let _env = Env::set(&[("HAFEN_CLI", None)]);
+            assert_eq!(cli(), vec!["hafen"]);
+        }
+        let _empty = Env::set(&[("HAFEN_CLI", Some("   "))]);
+        assert_eq!(cli(), vec!["hafen"]);
+    }
+
+    /// A word it does not know is a refusal, never an argument handed to a process.
+    #[test]
+    fn refuses_a_register_action_it_does_not_know() {
+        assert!(register("verschrotten".to_owned(), "/x".to_owned())
+            .is_some_and(|said| said.contains("verschrotten")));
+        assert!(register("archivieren".to_owned(), "  ".to_owned()).is_some());
+    }
+
+    /// What it printed, and not the exit code: a number sends a person reading a manual.
+    #[test]
+    fn says_what_the_cli_said_when_it_failed() {
+        let _env = Env::set(&[("HAFEN_CLI", Some("sh -c"))]);
+
+        // `sh -c 'echo … >&2; exit 1' schnappschuss` — the extra word lands in $0 and is ignored.
+        let failed = run_cli(&["echo nicht lesbar >&2; exit 1".to_owned()]);
+
+        assert_eq!(failed.unwrap_err(), "nicht lesbar");
+    }
+
+    #[test]
+    fn says_when_there_is_nothing_to_run() {
+        let _env = Env::set(&[("HAFEN_CLI", Some("gibt-es-hier-nicht"))]);
+
+        assert!(measure(None)
+            .error
+            .is_some_and(|said| said.contains("nicht ausführbar")));
+    }
+
+    /// Through a temporary file and a rename, so a reader sees the old snapshot or the new one.
+    #[test]
+    fn writes_the_snapshot_whole_or_not_at_all() {
+        let file = std::env::temp_dir().join("hafen-test-store.json");
+        let _env = Env::set(&[("HAFEN_SNAPSHOT", Some(file.to_str().expect("utf-8")))]);
+
+        assert!(store(r#"{"ships":[]}"#.to_owned()).is_none());
+        assert_eq!(
+            std::fs::read_to_string(&file).expect("read"),
+            r#"{"ships":[]}"#
+        );
+        assert!(!file.with_extension("json.neu").exists());
+        std::fs::remove_file(&file).ok();
+    }
+
     #[test]
     fn reads_a_snapshot_that_is_there() {
         let file = std::env::temp_dir().join("hafen-test-snapshot.json");
-        std::fs::write(&file, r#"{"at":"2026-09-30T00:00:00Z","root":"/repos","ships":[]}"#)
-            .expect("write");
+        std::fs::write(
+            &file,
+            r#"{"at":"2026-09-30T00:00:00Z","root":"/repos","ships":[]}"#,
+        )
+        .expect("write");
         let _env = Env::set(&[("HAFEN_SNAPSHOT", Some(file.to_str().expect("utf-8")))]);
 
         let answer = snapshot();

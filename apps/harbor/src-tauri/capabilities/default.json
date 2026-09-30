@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Der Hafen zeichnet einen Schnappschuss, den ein anderer Prozess gemessen hat. Er ruft kein Kommando auf, öffnet keine Shell und schreibt nichts. Gelesen wird genau eine Datei, über ein eigenes Kommando statt über ein Dateisystem-Plugin.",
+  "description": "Der Hafen veraendert kein Repository. Keine Shell-Berechtigung und kein Dateisystem-Plugin: das Fenster kann kein Kommando eigener Wahl starten, keine Datei zum Schreiben benennen und kein Argument uebergeben, dessen Form nicht in lib.rs steht. Es kann vier benannte Dinge erbitten - den Schnappschuss lesen, messen lassen, das Ergebnis in den Cache legen, und eine von vier Registeraktionen. Gemessen wird ueber die CLI mit ausschliesslich lesenden git-Kommandos; geschrieben wird genau zwei Dateien, der Cache und das Register, und im Register stehen Entscheidungen eines Menschen.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }
