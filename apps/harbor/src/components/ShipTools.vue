@@ -36,7 +36,7 @@
 
   const offered = computed(() => TOOLS.filter((name) => available.includes(name)))
   // No guard here: `adopt` fills what an older snapshot is missing, once, where it comes in.
-  const stale = computed(() => staleBranches(ship.branches))
+  const stale = computed(() => staleBranches(ship.branches, ship.defaultBranch))
 
   /**
    * The repositories this one carries, and what is wrong with them.
@@ -80,6 +80,17 @@
         Branches <span class="text-slate-700">— {{ stale.length }} könnten weg</span>
       </p>
       <!--
+        What "enthalten" was measured against. A verdict without the thing it was compared to is
+        one a reader has to take on faith — and this one used to compare against `HEAD`, which on a
+        feature branch is the wrong question entirely.
+      -->
+      <p v-if="ship.defaultBranch !== null" class="text-[11px] text-slate-600">
+        verglichen mit <span class="font-mono">{{ ship.defaultBranch }}</span>
+      </p>
+      <p v-else class="text-[11px] text-amber-600">
+        Kein Default-Branch feststellbar — gelistet ist nur, was der Remote nicht mehr hat.
+      </p>
+      <!--
         Why each one is offered, per branch: "gone" and "merged" are different reasons and a reader
         deciding whether to delete wants the one that applies to this name.
       -->
@@ -90,22 +101,28 @@
             <span class="text-[11px] text-slate-600">{{
               branch.gone
                 ? 'der Remote hat diesen Branch nicht mehr'
-                : 'bereits in diesem Branch enthalten'
+                : `bereits in ${ship.defaultBranch ?? 'dem Default-Branch'} enthalten`
             }}</span>
           </span>
+          <!--
+            The command this one button runs, written out on its own row.
+            One line for the whole set used to stand under the list, and beside per-row buttons it
+            read as what a button does — so the button looked like it would take all of them. What
+            you see is now what this button runs, and nothing else.
+          -->
+          <code class="shrink-0 font-mono text-[10px] text-slate-600 select-all"
+            >git branch -d {{ branch.name }}</code
+          >
           <button
             class="shrink-0 font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
             :disabled="busy"
-            :title="`git branch -d ${branch.name} — git verweigert, wenn Commits nur hier liegen`"
+            :title="`Nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
             @click="emit('prune', branch.name)"
           >
-            löschen
+            ausführen
           </button>
         </li>
       </ul>
-      <code class="mt-1.5 block font-mono text-[11px] break-all text-slate-600 select-all"
-        >git branch -d {{ stale.map((branch) => branch.name).join(' ') }}</code
-      >
     </template>
 
     <template v-if="tenders.length > 0">

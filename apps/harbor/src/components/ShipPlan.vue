@@ -15,7 +15,7 @@
   import { shipPoints } from '@hafen/core'
   import { computed } from 'vue'
 
-  import { isMark, isQuest } from './chosen'
+  import { isMark, isPier, isQuest, PIER } from './chosen'
   import { MARK_LABEL, MARK_MEANING } from './marks'
   import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR, VERDICT_LABEL } from './theme'
   import { bridgeOf, cargoOf, gangwayOf, hullMarks, hullOf, landedOf, pierMarks } from './vessel'
@@ -130,17 +130,36 @@
       stroke-width="1"
     />
 
-    <!-- The plank from the planking to her deck, where anything is waiting on it. -->
-    <line
-      v-if="gangway !== null"
-      :x1="gangway.from.x"
-      :y1="gangway.from.y"
-      :x2="gangway.to.x"
-      :y2="gangway.to.y"
-      :stroke="SCENE.crane"
-      stroke-opacity="0.5"
-      stroke-width="3"
-    />
+    <!--
+      The plank from the planking to her deck, where anything is waiting on it.
+      Two lines: the visible one, and a wide transparent one over it that takes the click — two
+      pixels of stroke is a target nobody hits, and it stands for the whole pier rather than for
+      any one crate on it.
+    -->
+    <template v-if="gangway !== null">
+      <line
+        :x1="gangway.from.x"
+        :y1="gangway.from.y"
+        :x2="gangway.to.x"
+        :y2="gangway.to.y"
+        :stroke="isPier(chosen) ? SCENE.accent : SCENE.crane"
+        :stroke-opacity="isPier(chosen) ? 0.95 : 0.5"
+        stroke-width="3"
+      />
+      <line
+        class="cursor-pointer"
+        :x1="gangway.from.x"
+        :y1="gangway.from.y"
+        :x2="gangway.to.x"
+        :y2="gangway.to.y"
+        stroke="transparent"
+        stroke-width="2"
+        stroke-linecap="square"
+        @click.stop="emit('pick', PIER)"
+      >
+        <title>Was hier wartet — alles auf dem Steg</title>
+      </line>
+    </template>
 
     <!-- The accommodation block aft, so the drawing reads bow-forward without a label. -->
     <rect

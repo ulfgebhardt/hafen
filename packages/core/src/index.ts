@@ -145,7 +145,7 @@ export type { Tender, TenderState } from './submodules'
 export { parseSubmodules, strayTenders } from './submodules'
 
 export type { Branch } from './branches'
-export { BRANCH_FORMAT, parseBranches, staleBranches } from './branches'
+export { BRANCH_FORMAT, defaultBranchOf, parseBranches, staleBranches } from './branches'
 
 /** Two directories, one project: links resolved before measuring, shared remotes folded after. */
 export { leaderPath, remoteKey } from './alias'

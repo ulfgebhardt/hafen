@@ -12,9 +12,9 @@
    * make the cap look like the measurement.
    */
 
-  import { computed, ref, watch } from 'vue'
+  import { computed, ref, useTemplateRef, watch } from 'vue'
 
-  import { isMark } from './chosen'
+  import { isMark, isPier } from './chosen'
   import { MARK_LABEL, MARK_MEANING, marksOf } from './marks'
   import { MARK_COLOR } from './theme'
 
@@ -36,9 +36,16 @@
    * crate asked about *that*, and leaving them to find it in a panel they have to scroll is an
    * answer they have to go looking for.
    */
+  const section = useTemplateRef<HTMLElement>('section')
+
   watch(
     () => chosen,
     (pick) => {
+      // The gangway stands for the whole of this, so it brings the whole section into view.
+      if (isPier(pick)) {
+        section.value?.scrollIntoView({ block: 'start' })
+        return
+      }
       if (pick?.kind !== 'mark') {
         return
       }
@@ -56,7 +63,13 @@
 </script>
 
 <template>
-  <section v-if="marks.length > 0" class="border-b border-slate-800 px-4 py-3">
+  <section
+    v-if="marks.length > 0"
+    ref="section"
+    data-row
+    class="border-b border-slate-800 px-4 py-3"
+    :class="isPier(chosen) ? 'bg-orange-500/5 ring-1 ring-orange-500/30' : ''"
+  >
     <p class="text-[10px] tracking-wide text-slate-600 uppercase">
       Zustand <span class="text-slate-700">— {{ marks.length }} Arten</span>
     </p>

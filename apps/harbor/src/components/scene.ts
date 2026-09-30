@@ -29,6 +29,7 @@
 import { rustLevel, shipPoints } from '@hafen/core'
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 
+import { PIER } from './chosen'
 import { conditionOf } from './condition'
 import { ageLabel, berths as orderBerths, drift, fit } from './fleet'
 import {
@@ -52,6 +53,7 @@ import {
   cargoOf,
   hasPlume,
   hullOf,
+  gangwayBox,
   gangwayOf,
   hullMarks,
   landedOf,
@@ -753,7 +755,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * different frames at all.
      */
     const onTap =
-      (ship: Ship, hull: Hull, body: Container, quayside: Container) =>
+      (ship: Ship, hull: Hull, offset: number, body: Container, quayside: Container) =>
       (event: FederatedPointerEvent): void => {
         const aboard = event.getLocalPosition(body)
         const ashore = event.getLocalPosition(quayside)
@@ -774,7 +776,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         }
 
         const mark = boxAt(hullMarks(ship, hull), onDeck) ?? boxAt(pierMarks(ship), onPier)
-        selected(ship, mark === null ? null : { kind: 'mark', mark: mark.kind })
+        if (mark !== null) {
+          selected(ship, { kind: 'mark', mark: mark.kind })
+          return
+        }
+
+        // Last, because it is the widest target and stands for the least specific thing.
+        const plank =
+          pierMarks(ship).length > 0 && boxAt([gangwayBox(hull, offset)], onDeck) !== null
+        selected(ship, plank ? PIER : null)
       }
 
     const fleet = new Container()
@@ -825,7 +835,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         (BERTH.pier + BERTH.lane + BERTH.caption) * UNIT,
       )
       slot.on('pointerover', onEnter(berth.ship))
-      slot.on('pointertap', onTap(berth.ship, hull, body, quayside))
+      slot.on('pointertap', onTap(berth.ship, hull, offset, body, quayside))
 
       fleet.addChild(slot)
       placed.push({
@@ -1034,6 +1044,24 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
           }
           ring(entry.aboard, hullMarks(entry.ship, entry.hull))
           ring(entry.ashore, pierMarks(entry.ship))
+          continue
+        }
+
+        /*
+         * The planking as a whole: every box waiting on it, ringed at once.
+         *
+         * The gangway is not a thing on the pier, it is the sign that there are things on it — so
+         * it lights all of them rather than whichever happens to be first, which would make
+         * clicking the plank and clicking that one crate the same act.
+         */
+        if (chosen.kind === 'pier') {
+          for (const box of [...landedOf(entry.ship), ...pierMarks(entry.ship)]) {
+            slab(entry.ashore, box.spot, box.along + 0.4, box.across + 0.4).stroke({
+              width: 2,
+              color: accent,
+              alpha: 0.7,
+            })
+          }
           continue
         }
 
