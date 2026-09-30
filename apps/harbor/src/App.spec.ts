@@ -407,6 +407,26 @@ const clicking = async (page: ReturnType<typeof mount>, label: string): Promise<
   await flushPromises()
 }
 
+/** The same guard, for a control named by its title rather than its text. */
+const clickingTitled = async (page: ReturnType<typeof mount>, title: string): Promise<void> => {
+  const button = page.findAll('button').find((one) => one.attributes('title') === title)
+
+  expect(button, `kein Knopf mit Titel "${title}"`).toBeDefined()
+
+  await button?.trigger('click')
+  await flushPromises()
+}
+
+/** And for a control whose text carries a count after its label, like a tab. */
+const clickingStarting = async (page: ReturnType<typeof mount>, label: string): Promise<void> => {
+  const button = page.findAll('button').find((one) => one.text().startsWith(label))
+
+  expect(button, `kein Knopf, der mit "${label}" beginnt`).toBeDefined()
+
+  await button?.trigger('click')
+  await flushPromises()
+}
+
 const pick = async (page: ReturnType<typeof mount>, one: unknown): Promise<void> => {
   const scene = page.findComponent({ name: 'HarborScene' }).vm as {
     $emit: (event: string, ...args: readonly unknown[]) => void
@@ -615,5 +635,81 @@ describe('deleting one branch, from the window', () => {
 
     expect(page.text()).toContain('not fully merged')
     expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+  })
+})
+
+describe('the catalog page, from the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * Two ships, one demand, and the only two verdicts that make it a debt. Deliberately spread
+   * across bands: picking a contract has to change what every tab counts, not only the open one.
+   */
+  const catalog = {
+    ...snapshot,
+    ships: [
+      ship({ path: '/repos/a', name: 'a', quests: [quest('lint', 'violated')] }),
+      ship({ path: '/repos/b', name: 'b', quests: [quest('lint', 'met')] }),
+      ship({ path: '/repos/c', name: 'c', quests: [quest('lint', 'unmeasured')] }),
+    ],
+  }
+
+  const open = async (): Promise<ReturnType<typeof mount>> => {
+    bridgeBy((command, args) => {
+      if (command === 'snapshot') {
+        return which(args) === 'forge' ? { json: null } : cached(catalog)
+      }
+      return command === 'tools' ? [] : null
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    await clickingStarting(page, 'Verträge')
+    return page
+  }
+
+  it('offers the catalog beside the bands and draws it instead of the basin', async () => {
+    const page = await open()
+
+    expect(page.text()).toContain('lint')
+    expect(page.find('.scene-stub').exists()).toBe(false)
+  })
+
+  /**
+   * Picking leaves the catalog, and that is the design rather than a side effect: the answer to
+   * "who still owes this" is a harbour, and drawing it on the page that asked would have put two
+   * answers in one column.
+   */
+  it('narrows the basin to the ships a demand found wanting', async () => {
+    const page = await open()
+
+    await clickingStarting(page, 'lint')
+
+    expect(page.find('.scene-stub').exists()).toBe(true)
+    // One violated; the met one and the unmeasured one are both out — and for different reasons.
+    expect(page.text()).toContain('1 Schiffe')
+    expect(page.text()).toContain('Vertrag')
+
+    /*
+     * And the demand travels with it: somebody reading about `lint` should find every datasheet
+     * they open already at that line, not at the top of thirteen.
+     */
+    await pick(page, catalog.ships[0])
+
+    expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toStrictEqual({
+      kind: 'quest',
+      id: 'lint',
+    })
+  })
+
+  /** The filter is undone where it is shown, and the fleet comes back whole. */
+  it('gives the fleet back when the pick is cleared', async () => {
+    const page = await open()
+
+    await clickingStarting(page, 'lint')
+    await clickingTitled(page, 'Vertragsfilter aufheben')
+
+    expect(page.text()).toContain('3 Schiffe')
   })
 })

@@ -1,8 +1,10 @@
 <script setup lang="ts">
   import { computed, onErrorCaptured, onMounted, ref } from 'vue'
 
-  import { byBand, firstBand } from './components/band'
+  import { byBand, CONTRACTS, firstBand, isBand } from './components/band'
   import BandTabs from './components/BandTabs.vue'
+  import ContractList from './components/ContractList.vue'
+  import { filterByContract } from './components/contracts'
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import { filterShips } from './components/search'
@@ -22,8 +24,9 @@
     statsFor,
   } from './snapshot'
 
-  import type { Band } from './components/band'
+  import type { Page } from './components/band'
   import type { Chosen } from './components/chosen'
+  import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
   import type { Forge, RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
@@ -57,8 +60,31 @@
    * and the opening band is the first one with anything in it, because an empty page that has to
    * be clicked away is the kind of thing a tool does once.
    */
-  const band = ref<Band>('active')
+  const page = ref<Page>('active')
   const query = ref('')
+
+  /**
+   * Which demand the basin is narrowed to, picked on the catalog page.
+   *
+   * A second filter of the same kind as the search and applied in the same place, so the tab
+   * counts, the points beside them and the header all keep describing what is on screen. Picking
+   * a row therefore *leaves* the catalog: the answer to "who still owes this" is a harbour, and
+   * showing it on the page that asked would have been two answers in one column.
+   */
+  const contract = ref<ContractFilter | null>(null)
+
+  const chooseContract = (filter: ContractFilter): void => {
+    contract.value = filter
+    page.value = firstBand(filterByContract(fleet.value, filter))
+    /*
+     * And the demand travels with the pick.
+     *
+     * Somebody who clicked `typecheck` is reading about `typecheck`; every datasheet they open
+     * next should already be at that line rather than at the top of thirteen. It is the same
+     * `Chosen` the drawing and the sheet already share, so this sets one state and not a third.
+     */
+    demand.value = { kind: 'quest', id: filter.id }
+  }
 
   /**
    * The fleet the whole window is about, once the filter has had it.
@@ -72,7 +98,32 @@
   const fleet = computed(() =>
     snapshot.value === null ? [] : filterShips(snapshot.value.ships, query.value),
   )
-  const shown = computed(() => byBand(fleet.value)[band.value])
+  /**
+   * The catalog is tallied before the contract filter and the basin after it.
+   *
+   * Deliberately different inputs. A row that counted only the ships its own pick left would
+   * collapse to "32 verletzt, 32 im Geltungsbereich" the moment somebody clicked it — the page
+   * would answer a question nobody asked and lose the one it exists for.
+   */
+  const narrowed = computed(() => filterByContract(fleet.value, contract.value))
+
+  /**
+   * The forge reading keyed by ship, for the drawing.
+   *
+   * Built here and not in the scene, because `statsFor` already knows how a remote maps onto a
+   * slug and a second implementation of that would be a second opinion. Empty until somebody
+   * presses the button, which is what an unlit fleet means.
+   */
+  const forgeByPath = computed(
+    () =>
+      new Map(
+        fleet.value.flatMap((ship) => {
+          const stats = statsFor(forge.value, ship)
+          return stats === null ? [] : [[ship.path, stats] as const]
+        }),
+      ),
+  )
+  const shown = computed(() => (isBand(page.value) ? byBand(narrowed.value)[page.value] : []))
 
   /**
    * Whether this window can measure and write at all.
@@ -253,7 +304,7 @@
       const loaded = await loadSnapshot()
       snapshot.value = loaded.snapshot
       source.value = loaded.source
-      band.value = firstBand(loaded.snapshot.ships)
+      page.value = firstBand(loaded.snapshot.ships)
     } catch (error) {
       /**
        * Named, never blank. An empty harbor and a snapshot that could not be read are different
@@ -278,7 +329,7 @@
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
     <template v-if="snapshot !== null">
       <FleetBar
-        :ships="fleet"
+        :ships="narrowed"
         :at="snapshot.at"
         :source="source"
         :can-measure="canAct"
@@ -288,17 +339,36 @@
         @enlist="enlist($event, true)"
         @forge="askForges"
       />
-      <BandTabs v-model:band="band" v-model:query="query" :ships="fleet" />
+      <BandTabs
+        v-model:page="page"
+        v-model:query="query"
+        :ships="narrowed"
+        :contract="contract"
+        @clear="contract = null"
+      />
 
       <!--
         Said out loud, because an empty basin and a filter that matched nothing look identical —
         and only one of the two has a remedy the reader can act on.
       -->
       <p
-        v-if="query.trim() !== '' && shown.length === 0"
+        v-if="isBand(page) && shown.length === 0 && (query.trim() !== '' || contract !== null)"
         class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
       >
-        <template v-if="fleet.length === 0">Kein Schiff passt zu „{{ query }}“.</template>
+        <!--
+          The contract filter says its own sentence and never borrows the search's. A pick that
+          left the basin empty is a *finding* — nobody on this page owes that demand — and reading
+          "kein Schiff passt zu ''" for it would be the window describing the wrong filter.
+        -->
+        <template v-if="contract !== null && narrowed.length === 0"
+          >Kein Schiff schuldet {{ contract.id
+          }}{{ query.trim() === '' ? '' : ` und passt zu „${query}“` }}.</template
+        >
+        <template v-else-if="contract !== null"
+          >Auf dieser Seite schuldet keines {{ contract.id }} —
+          {{ narrowed.length }} anderswo.</template
+        >
+        <template v-else-if="fleet.length === 0">Kein Schiff passt zu „{{ query }}“.</template>
         <template v-else
           >Auf dieser Seite passt keines zu „{{ query }}“ — {{ fleet.length }} anderswo.</template
         >
@@ -331,12 +401,25 @@
 
       <div class="flex min-h-0 flex-1">
         <main class="min-w-0 flex-1">
-          <!-- Keyed on the band: a new page is a new drawing, not the old one panned. -->
+          <!--
+            The catalog is tallied off `fleet` and not `narrowed`, so its rows keep counting the
+            whole fleet the search left. Picking one narrows the *basin*, which is the next thing
+            the reader sees.
+          -->
+          <ContractList
+            v-if="page === CONTRACTS"
+            :ships="fleet"
+            :picked="contract"
+            @pick="chooseContract"
+          />
+          <!-- Keyed on the page: a new page is a new drawing, not the old one panned. -->
           <HarborScene
-            :key="`${band}:${query}`"
+            v-else
+            :key="`${page}:${query}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
             v-model:quest="demand"
+            :forge="forgeByPath"
             :ships="shown"
           />
         </main>

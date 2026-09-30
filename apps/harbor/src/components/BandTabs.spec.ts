@@ -12,7 +12,7 @@ describe('filtering a page', () => {
   it('hands the query up and counts what it was handed', async () => {
     const hafen = ship({ name: 'hafen', path: '/x/hafen' })
     const fleet = [ship({ name: 'werft' }), hafen]
-    const tabs = mount(BandTabs, { props: { band: 'active', ships: fleet } })
+    const tabs = mount(BandTabs, { props: { page: 'active', ships: fleet } })
 
     await tabs.find('input').setValue('hafen')
 
@@ -24,7 +24,7 @@ describe('filtering a page', () => {
   })
 
   it('lets the filter be dropped again', async () => {
-    const tabs = mount(BandTabs, { props: { band: 'active', ships: [ship()], query: 'x' } })
+    const tabs = mount(BandTabs, { props: { page: 'active', ships: [ship()], query: 'x' } })
 
     await tabs
       .findAll('button')
