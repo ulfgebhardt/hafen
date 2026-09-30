@@ -283,6 +283,110 @@ describe(findShipPaths, () => {
   })
 })
 
+describe(findShipPaths, () => {
+  /**
+   * The layout this was built for, and the one it must not get slower at.
+   */
+  it('finds the ordinary <org>/<repo> layout', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['org'],
+        '/repos/org': ['one', 'two'],
+        '/repos/org/one': [],
+        '/repos/org/one/.git': [],
+        '/repos/org/two': [],
+        '/repos/org/two/.git': [],
+      },
+    })
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([
+      '/repos/org/one',
+      '/repos/org/two',
+    ])
+  })
+
+  /**
+   * `kombuese/addons/AddOns`: somebody grouped two projects in a folder, and the old search
+   * looked at exactly two levels and walked past them.
+   */
+  it('finds a repository somebody filed one level deeper', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['org'],
+        '/repos/org': ['addons'],
+        '/repos/org/addons': ['AddOns'],
+        '/repos/org/addons/AddOns': [],
+        '/repos/org/addons/AddOns/.git': [],
+      },
+    })
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([
+      '/repos/org/addons/AddOns',
+    ])
+  })
+
+  /**
+   * The rule that matters: 28 of the 31 repositories the old search missed live *inside* another
+   * one — nine foreign deployments under `Leuchtturm/deployment/configurations` alone. They
+   * are parts of the repository that contains them, and listing them would count one project's
+   * contents as a fleet.
+   */
+  it('stops at a repository and does not list what is inside it', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['org'],
+        '/repos/org': ['outer'],
+        '/repos/org/outer': ['deployment'],
+        '/repos/org/outer/.git': [],
+        '/repos/org/outer/deployment': ['inner'],
+        '/repos/org/outer/deployment/inner': [],
+        '/repos/org/outer/deployment/inner/.git': [],
+      },
+    })
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual(['/repos/org/outer'])
+  })
+
+  /** Dependencies hold repositories somebody else wrote and this machine merely pulled in. */
+  it('never descends into dependencies or build output', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['org'],
+        '/repos/org': ['node_modules', '.terraform', 'target'],
+        '/repos/org/node_modules': ['pkg'],
+        '/repos/org/node_modules/pkg': [],
+        '/repos/org/node_modules/pkg/.git': [],
+        '/repos/org/.terraform': ['modules'],
+        '/repos/org/target': [],
+      },
+    })
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([])
+  })
+
+  it('answers nothing for a root that is not there', async () => {
+    await expect(findShipPaths(mockPorts(), '/nirgends')).resolves.toStrictEqual([])
+  })
+
+  /** A limit so a stray symlink cannot turn the survey into a walk of the whole disk. */
+  it('gives up below the search depth', async () => {
+    const deep = '/repos/a/b/c/d/e'
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['a'],
+        '/repos/a': ['b'],
+        '/repos/a/b': ['c'],
+        '/repos/a/b/c': ['d'],
+        '/repos/a/b/c/d': ['e'],
+        [deep]: [],
+        [`${deep}/.git`]: [],
+      },
+    })
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([])
+  })
+})
+
 describe(surveyHarbor, () => {
   it('inspects every ship it finds', async () => {
     const ports = mockPorts({

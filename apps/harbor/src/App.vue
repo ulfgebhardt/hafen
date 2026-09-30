@@ -15,7 +15,16 @@
   const snapshot = ref<Snapshot | null>(null)
   const source = ref<string>('')
   const failed = ref<SnapshotError | null>(null)
+  /**
+   * What the sheet shows: what was clicked, or failing that what the pointer is over.
+   *
+   * A pinned ship wins over a hovered one and keeps winning until something else is clicked or a
+   * click lands on open water. Reading a datasheet used to be impossible — every hull crossed on
+   * the way to it replaced the text.
+   */
   const picked = ref<Ship | null>(null)
+  const hovered = ref<Ship | null>(null)
+  const sheet = computed(() => picked.value ?? hovered.value)
 
   /**
    * Which page is open, and what is on it.
@@ -59,13 +68,18 @@
       <div class="flex min-h-0 flex-1">
         <main class="min-w-0 flex-1">
           <!-- Keyed on the band: a new page is a new drawing, not the old one panned. -->
-          <HarborScene :key="band" v-model:picked="picked" :ships="shown" />
+          <HarborScene
+            :key="band"
+            v-model:picked="picked"
+            v-model:hovered="hovered"
+            :ships="shown"
+          />
         </main>
 
         <aside class="w-96 shrink-0 border-l border-slate-800">
-          <ShipSheet v-if="picked !== null" :ship="picked" />
+          <ShipSheet v-if="sheet !== null" :ship="sheet" :pinned="picked !== null" />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
-            Ein Schiff anfahren, um sein Datenblatt zu lesen.
+            Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.
           </p>
         </aside>
       </div>

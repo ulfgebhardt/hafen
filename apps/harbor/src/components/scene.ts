@@ -25,7 +25,7 @@ import { ageLabel, berths, bindingQuests, fit, PER_LANE } from './fleet'
 import { draught, frames, HULL, MAX_DRAUGHT, outline, segments, storeys } from './hull'
 import { drawn, isCapped, isShipshape, marksOf } from './marks'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
-import { clampPan, fitScale, isPannable } from './viewport'
+import { clampPan, clampZoom, fitScale, isPannable, zoomAt, ZOOM_STEP } from './viewport'
 
 import type { Berth } from './fleet'
 import type { Extent, Pan } from './viewport'
@@ -546,7 +546,12 @@ interface Roll {
 }
 
 /** One berth: hull, caption, and the area that answers the pointer. */
-function place(berth: Berth, picked: (ship: Ship) => void, rolling: Roll[]): Container {
+function place(
+  berth: Berth,
+  hovered: (ship: Ship) => void,
+  selected: (ship: Ship) => void,
+  rolling: Roll[],
+): Container {
   const slot = new Container()
   const { root, body } = drawShip(berth.ship)
 
@@ -569,10 +574,10 @@ function place(berth: Berth, picked: (ship: Ship) => void, rolling: Roll[]): Con
   slot.cursor = 'pointer'
   slot.hitArea = new Rectangle(-4, -HULL.depth - 26, HULL.length + 8, HULL.depth + 56)
   slot.on('pointerover', () => {
-    picked(berth.ship)
+    hovered(berth.ship)
   })
-  slot.on('pointerdown', () => {
-    picked(berth.ship)
+  slot.on('pointertap', () => {
+    selected(berth.ship)
   })
 
   return slot
@@ -585,9 +590,16 @@ function place(berth: Berth, picked: (ship: Ship) => void, rolling: Roll[]): Con
  * and has to be moved across. That is the right trade — the alternative was the whole fleet at
  * 35 %, where the captions stopped being letters.
  */
-function placeWorld(app: Application, world: Container, extent: Extent, pan: Pan): number {
+function placeWorld(
+  app: Application,
+  world: Container,
+  extent: Extent,
+  pan: Pan,
+  zoom: number | null,
+): number {
   const view = { width: app.screen.width, height: app.screen.height }
-  const scale = fitScale(extent, view)
+  // A hand-set zoom wins over the fit, and keeps winning until the drawing is replaced.
+  const scale = zoom ?? fitScale(extent, view)
   world.scale.set(scale)
 
   const at = clampPan(pan, extent, view, scale)
@@ -598,8 +610,15 @@ function placeWorld(app: Application, world: Container, extent: Extent, pan: Pan
 export interface Scene {
   /** Ships in, picture out. Replaces whatever was drawn. */
   draw: (ships: readonly Ship[]) => void
-  /** Called with the ship under the pointer. */
-  onPick: (handler: (ship: Ship | null) => void) => void
+  /**
+   * The ship under the pointer, or `null` on the way out.
+   *
+   * Apart from `onSelect`, because the two are different acts: hovering is looking, clicking is
+   * deciding. Reading a datasheet was impossible while every crossed hull replaced it.
+   */
+  onHover: (handler: (ship: Ship | null) => void) => void
+  /** The ship somebody clicked, or `null` for a click on open water. */
+  onSelect: (handler: (ship: Ship | null) => void) => void
   destroy: () => void
 }
 
@@ -625,13 +644,16 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   const world = new Container()
   app.stage.addChild(world)
 
-  let picked: (ship: Ship | null) => void = () => undefined
+  let hovered: (ship: Ship | null) => void = () => undefined
+  let selected: (ship: Ship | null) => void = () => undefined
   let rolling: Roll[] = []
+  /** What a person zoomed to by hand, or `null` while the fit decides. */
+  let zoom: number | null = null
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
 
   const settle = (): void => {
-    const scale = placeWorld(app, world, extent, pan)
+    const scale = placeWorld(app, world, extent, pan, zoom)
     pan = { x: world.position.x, y: world.position.y }
     // Only offer a grab where there is somewhere to go.
     canvas.style.cursor = isPannable(
@@ -666,15 +688,19 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     // Built once outside the loop and wrapped rather than passed straight through: the handler
     // is registered by `onPick` *after* the first draw, so the hulls have to reach `picked`
     // through a closure that reads it when the pointer arrives, not when the ship was drawn.
-    const pick = (ship: Ship): void => {
-      picked(ship)
+    const onHoverShip = (ship: Ship): void => {
+      hovered(ship)
+    }
+    const onSelectShip = (ship: Ship): void => {
+      selected(ship)
     }
     for (const berth of laid) {
-      world.addChild(place(berth, pick, rolling))
+      world.addChild(place(berth, onHoverShip, onSelectShip, rolling))
     }
 
-    // A fresh drawing starts at the top left, where the worst ships are.
+    // A fresh drawing starts at the top left, where the worst ships are, and at its own size.
     pan = { x: 0, y: 0 }
+    zoom = null
     settle()
   }
 
@@ -687,6 +713,23 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
    */
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault()
+
+    /*
+     * Ctrl-wheel zooms, plain wheel scrolls — the convention every editor and map shares, and
+     * the one a trackpad's pinch already sends. Zooming on the plain wheel would fight the
+     * scrolling this scene needs more often.
+     */
+    if (event.ctrlKey || event.metaKey) {
+      const view = { width: app.screen.width, height: app.screen.height }
+      const from = zoom ?? fitScale(extent, view)
+      const to = clampZoom(from * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP))
+      const box = canvas.getBoundingClientRect()
+      pan = zoomAt(pan, from, to, { x: event.clientX - box.left, y: event.clientY - box.top })
+      zoom = to
+      settle()
+      return
+    }
+
     const sideways = event.shiftKey
     pan = {
       x: pan.x - (sideways ? event.deltaY : event.deltaX),
@@ -731,10 +774,21 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
   })
 
+  // A click that hits no ship is a click on open water, and it clears the pin.
+  canvas.addEventListener('pointerup', (event) => {
+    if (dragging === null && event.target === canvas) {
+      // Pixi stops propagation for a hull, so anything arriving here missed every one of them.
+      selected(null)
+    }
+  })
+
   return {
     draw,
-    onPick: (handler) => {
-      picked = handler
+    onHover: (handler) => {
+      hovered = handler
+    },
+    onSelect: (handler) => {
+      selected = handler
     },
     destroy: () => {
       canvas.removeEventListener('wheel', onWheel)

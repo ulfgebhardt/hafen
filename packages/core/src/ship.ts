@@ -392,30 +392,87 @@ export async function inspectShip(
  * Finds repos under `<root>/<org>/<repo>`. That layout already exists, so no
  * configuration beyond the roots is needed.
  */
+/**
+ * Directories a survey never descends into.
+ *
+ * Dependencies and build output, which hold repositories that belong to somebody else and were
+ * pulled in rather than written. `.terraform/modules` is the one that made this a list rather
+ * than a single `node_modules` check — it clones whole repositories into a cache directory.
+ */
+const NOT_A_SHIP = new Set([
+  'node_modules',
+  '.terraform',
+  'vendor',
+  'dist',
+  'build',
+  'target',
+  '.venv',
+  'venv',
+])
+
+/**
+ * How deep below the root a repository is still looked for.
+ *
+ * Four, measured: `<org>/<repo>` is two, and the deepest real project on this machine is
+ * `kombuese/addons/AddOns` at three. The limit exists so a stray symlink or a deeply nested
+ * cache cannot turn the survey into a full disk walk.
+ */
+export const SEARCH_DEPTH = 4
+
+/**
+ * Every repository under the root — including nested ones, and stopping at each.
+ *
+ * The old search looked at exactly `<root>/<org>/<repo>` and found 90. There are 121 `.git`
+ * directories out there, and the difference is the interesting part: **28 of the 31 it missed
+ * live inside another repository** — nine foreign deployments under
+ * `Leuchtturm/deployment/configurations`, four directus configs inside `peilung-app`, a
+ * terraform module cache. Those are not ships. They are parts of the repository that contains
+ * them, and listing them separately would count one project's contents as a fleet.
+ *
+ * So the rule is: descend, but **stop at a repository**. What is inside one belongs to it. That
+ * leaves the two that really were missed — `kombuese/addons/AddOns` and `AddOns_`, which sit
+ * one level deeper than the layout assumed because somebody grouped them in a folder.
+ *
+ * Breadth-first, so the shallow and ordinary case costs what it always did.
+ */
 export async function findShipPaths(ports: Ports, root: string): Promise<readonly string[]> {
-  const orgs = await ports.fs.readDir(root)
-  if (orgs === null) {
-    return []
+  const found: string[] = []
+  let level = [root]
+
+  for (let depth = 0; depth < SEARCH_DEPTH && level.length > 0; depth += 1) {
+    const next: string[] = []
+
+    await Promise.all(
+      level.map(async (dir) => {
+        const entries = await ports.fs.readDir(dir)
+        if (entries === null) {
+          return
+        }
+
+        await Promise.all(
+          entries.map(async (entry) => {
+            if (NOT_A_SHIP.has(entry) || entry.startsWith('.')) {
+              return
+            }
+            const path = `${dir}/${entry}`
+            if (!(await ports.fs.isDirectory(path))) {
+              return
+            }
+            if (await ports.fs.isDirectory(`${path}/.git`)) {
+              // A repository. Everything inside it belongs to it, so the search stops here.
+              found.push(path)
+              return
+            }
+            next.push(path)
+          }),
+        )
+      }),
+    )
+
+    level = next
   }
 
-  const paths: string[] = []
-  for (const org of orgs) {
-    const orgPath = `${root}/${org}`
-    if (!(await ports.fs.isDirectory(orgPath))) {
-      continue
-    }
-    const repos = await ports.fs.readDir(orgPath)
-    if (repos === null) {
-      continue
-    }
-    for (const repo of repos) {
-      const repoPath = `${orgPath}/${repo}`
-      if (await ports.fs.isDirectory(`${repoPath}/.git`)) {
-        paths.push(repoPath)
-      }
-    }
-  }
-  return paths.sort()
+  return found.sort()
 }
 
 export class UnreadableRootError extends Error {

@@ -7,6 +7,15 @@
   import type { Ship } from '@hafen/core'
 
   const { ships } = defineProps<{ ships: readonly Ship[] }>()
+
+  /**
+   * Two models, because hovering and clicking are different acts.
+   *
+   * `hovered` is looking; `picked` is deciding, and it stays until something else is decided.
+   * One model for both made the datasheet unreadable: every hull the pointer crossed on the way
+   * to it replaced what was being read.
+   */
+  const hovered = defineModel<Ship | null>('hovered', { required: true })
   const picked = defineModel<Ship | null>('picked', { required: true })
 
   const canvas = ref<HTMLCanvasElement | null>(null)
@@ -17,7 +26,10 @@
       return
     }
     scene = await mountScene(canvas.value)
-    scene.onPick((ship) => {
+    scene.onHover((ship) => {
+      hovered.value = ship
+    })
+    scene.onSelect((ship) => {
       picked.value = ship
     })
     scene.draw(ships)
