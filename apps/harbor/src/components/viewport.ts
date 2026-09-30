@@ -40,9 +40,31 @@ export const MIN_ZOOM = 0.35
 /** One notch of the wheel, as a factor. Multiplicative, so zooming feels the same at any size. */
 export const ZOOM_STEP = 1.15
 
-/** A zoom factor clamped to what is useful. */
-export function clampZoom(scale: number): number {
-  return Math.min(Math.max(scale, MIN_ZOOM), MAX_SCALE)
+/**
+ * The scale at which the whole drawing fits, with no floor at all.
+ *
+ * Separate from `fitScale` because the two answer different questions: `fitScale` picks the
+ * *default*, and a default that shrinks ninety captions into smudges is a bad default. This one
+ * answers "how far out is everything visible at once", which is a thing somebody asks for
+ * deliberately, and a tool that refuses it is a tool arguing with its user.
+ */
+export function wholeScale(world: Extent, view: Extent): number {
+  if (world.width <= 0 || world.height <= 0) {
+    return MIN_SCALE
+  }
+  return Math.min(view.width / world.width, view.height / world.height)
+}
+
+/**
+ * A zoom factor clamped to what is useful.
+ *
+ * The floor is the lower of the standing one and whatever it takes to see the whole harbour, so a
+ * fleet large enough to need less than `MIN_ZOOM` can still be zoomed until it fits. Measured from
+ * the drawing and the window rather than picked, because "everything fits" is a fact about those
+ * two and about nothing else.
+ */
+export function clampZoom(scale: number, floor = MIN_ZOOM): number {
+  return Math.min(Math.max(scale, Math.min(MIN_ZOOM, floor)), MAX_SCALE)
 }
 
 /**

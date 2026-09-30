@@ -1,145 +1,308 @@
 /**
- * A ship as a body: the shapes, in world coordinates, before anything is projected.
+ * A ship seen from above: the shapes, in plan coordinates, before anything is drawn.
  *
- * Separate from the renderer for the same reason `hull.ts` was — the shape of a thing is
- * arithmetic, and arithmetic is what a test can hold. `scene.ts` projects what this returns and
- * strokes it; it decides nothing.
+ * Separate from the renderer because the shape of a thing is arithmetic, and arithmetic is what a
+ * test can hold. `scene.ts` strokes what this returns and decides nothing.
  *
- * The isometric view changes what carries the contract. Flat, the deck was a row of blocks; here
- * it is **containers**, stacked on the deck as they would be — which reads better, because a
- * stack has a height the eye compares across a whole basin without counting anything.
+ * The view change moved what carries each reading, and the three stay deliberately apart — they
+ * are fixed by different work, which is the whole argument in `condition.ts`:
+ *
+ * - the **contract** is deck cargo, a grid of boxes, because that is what a container terminal
+ *   looks like from the air and a grid is countable at a glance;
+ * - **hygiene** is how the ship *lies*: snug against the quay when the tree is clean, standing off
+ *   on slack lines and a little askew when it is not. From above that is the loudest thing in the
+ *   picture, which is where the fastest fix belongs;
+ * - **freshness** is rust along the plating, and it is meant to be quiet — nobody should be pushed
+ *   into working by a drawing.
+ *
+ * Height is gone, and nothing was lost with it: freeboard was the isometric stand-in for hygiene,
+ * and lying off the quay says the same thing where it can actually be seen.
  */
 
 import { bindingQuests } from '@hafen/core'
 
-import { conditionOf, keptness } from './condition'
-import { orderedQuests } from './fleet'
+import { conditionOf, hygieneOf } from './condition'
+import { drift, orderedQuests } from './fleet'
+import { BERTH } from './plan'
 
-import type { Spot } from './iso'
+import type { Spot } from './plan'
 import type { QuestResult, Ship } from '@hafen/core'
 
 /**
- * How big a ship is drawn, in grid cells.
+ * How big a ship is drawn, in plan units.
  *
- * The length follows the project score, and that is the one place in this drawing where being
- * *busy* is rewarded with space. Bounded hard at both ends: a repository with eighteen thousand
- * points must not need its own pier, and one with four commits still has to look like a ship.
+ * Length follows the project score, and it is the one place in this drawing where being *busy*
+ * buys space. Bounded hard at both ends: a repository with eighteen thousand points must not need
+ * its own row, and one with four commits still has to look like a ship. The beam follows the
+ * length so the proportion stays a ship's rather than a plank's.
  */
 export const SIZE = {
-  minLength: 1.5,
-  maxLength: 3.2,
-  width: 0.9,
-  /** Freeboard: how far the deck sits above the water. */
-  minHeight: 10,
-  maxHeight: 22,
+  minLength: 20,
+  maxLength: 34,
+  minBeam: 5.6,
+  maxBeam: 7.2,
 } as const
 
 /** Where a project score stops buying length. A busy shared repository, measured. */
 export const LENGTH_CEILING = 6000
 
 export interface Hull {
-  /** The four corners of the deck, counter-clockwise from the stern-port corner. */
-  deck: readonly Spot[]
-  /** How far the deck sits above the water. */
-  height: number
-  /** How long, in cells — the number the caller may want for a label. */
+  /** Stem to transom. */
   length: number
+  /** Widest point. */
+  beam: number
+  /** The outline from above, counter-clockwise, stern at `x = 0` and stem at `x = length`. */
+  outline: readonly Spot[]
 }
 
 /**
- * The hull's footprint and freeboard.
+ * The outline of a hull from above.
  *
- * Height follows `keptness` rather than the score: a well-kept ship rides high, which is the same
- * sentence the draught made in the flat drawing and the one a person can change this afternoon.
- * Length follows the score, which they cannot.
+ * Eleven points and no curve command: a polygon is what a test can compare, and at these sizes the
+ * difference between a drawn spline and eleven points is under a pixel. The proportions are a
+ * cargo ship's — a long parallel body, a taper starting at three fifths, a point at the stem and a
+ * flat transom. That silhouette is the whole reason for the change of view; nobody mistakes it for
+ * a building.
  */
-export function hullOf(ship: Ship, at: Spot, points: number): Hull {
-  const reach = Math.min(points, LENGTH_CEILING) / LENGTH_CEILING
-  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * Math.sqrt(reach)
-  const height = SIZE.minHeight + (SIZE.maxHeight - SIZE.minHeight) * keptness(ship)
-
-  const halfWidth = SIZE.width / 2
-  return {
-    length,
-    height,
-    deck: [
-      { x: at.x, y: at.y - halfWidth },
-      { x: at.x + length, y: at.y - halfWidth },
-      { x: at.x + length, y: at.y + halfWidth },
-      { x: at.x, y: at.y + halfWidth },
-    ],
-  }
+export function outlineOf(length: number, beam: number): readonly Spot[] {
+  const half = beam / 2
+  return [
+    { x: 0, y: -half * 0.86 },
+    { x: length * 0.06, y: -half },
+    { x: length * 0.6, y: -half },
+    { x: length * 0.82, y: -half * 0.86 },
+    { x: length * 0.94, y: -half * 0.42 },
+    { x: length, y: 0 },
+    { x: length * 0.94, y: half * 0.42 },
+    { x: length * 0.82, y: half * 0.86 },
+    { x: length * 0.6, y: half },
+    { x: length * 0.06, y: half },
+    { x: 0, y: half * 0.86 },
+  ]
 }
+
+export function hullOf(ship: Ship, points: number): Hull {
+  const reach = Math.sqrt(Math.min(Math.max(points, 0), LENGTH_CEILING) / LENGTH_CEILING)
+  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * reach
+  const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * reach
+  return { length, beam, outline: outlineOf(length, beam) }
+}
+
+/**
+ * How far off the quay an untidy ship lies.
+ *
+ * The gamification lever, and it is deliberately the largest movement in the plan: a stash and a
+ * dirty tree push a hull most of a lane away from the concrete, and a commit brings it back. What
+ * somebody can fix in two minutes has to be what moves the picture.
+ */
+export const BERTH_SLACK = 2.4
+
+export function offsetOf(ship: Ship): number {
+  return BERTH_SLACK * (1 - hygieneOf(ship))
+}
+
+/**
+ * How far out of line she lies, in radians.
+ *
+ * Small on purpose — past about three degrees it stops reading as a badly moored ship and starts
+ * reading as a broken renderer. The side is a function of the path and never random, for the same
+ * reason `drift` is: a hull that swung the other way between two readings of the same harbour
+ * would make the picture untrustworthy.
+ */
+export const MAX_YAW = 0.05
+
+export function yawOf(ship: Ship): number {
+  const slack = 1 - hygieneOf(ship)
+  // Guarded rather than multiplied through: a tidy ship on the port side would otherwise come back
+  // as `-0`, which is a straight ship that no longer compares equal to one.
+  return slack === 0 ? 0 : MAX_YAW * slack * (drift(ship.path) < 0.5 ? -1 : 1)
+}
+
+export interface Line {
+  from: Spot
+  to: Spot
+}
+
+/**
+ * Head and stern lines, in the hull's own coordinates.
+ *
+ * They lead *away* from the ship the way real ones do, so a hull standing off the quay shows it in
+ * the length of its lines and not only in the gap. `offset` is passed in rather than read again
+ * here: the scene has already placed the body with it, and two readings of one number are two
+ * chances to disagree about where the quay is.
+ */
+export function mooringOf(hull: Hull, offset: number): readonly Line[] {
+  const quay = -BERTH.laneCentre - offset
+  const half = hull.beam / 2
+  return [
+    { from: { x: hull.length * 0.08, y: -half * 0.95 }, to: { x: -2, y: quay } },
+    { from: { x: hull.length * 0.86, y: -half * 0.78 }, to: { x: hull.length + 2, y: quay } },
+  ]
+}
+
+/** How many containers stand abreast in one bay. */
+export const BAYS_ACROSS = 3
+
+/**
+ * One container, in plan units.
+ *
+ * `across` is fixed and `along` is not: the bays are squeezed to fit the deck they have, so a
+ * short hull with nine demands keeps all nine aboard instead of stowing three over the side.
+ */
+export const CONTAINER = {
+  across: 1.3,
+  /** Between two boxes abreast. */
+  gap: 0.3,
+  /** The full length of a bay before it has to be squeezed. */
+  maxAlong: 4.4,
+  /** Between two bays. */
+  gapAlong: 0.5,
+} as const
+
+/** Where cargo may stand, as fractions of the length: clear of the house aft and the taper forward. */
+export const DECK = { from: 0.26, to: 0.82 } as const
 
 export interface Container {
-  /** Where it sits on the deck. */
-  spot: Spot
   quest: QuestResult
-  /** Which layer of the stack, 0 at the bottom. */
-  tier: number
+  /** The centre of the box. */
+  spot: Spot
+  along: number
+  across: number
 }
 
-/** How many containers stand side by side across the deck before a new row starts. */
-export const CONTAINERS_ACROSS = 2
-
-/** How tall one container is, in the same units as `Hull.height`. */
-export const CONTAINER_HEIGHT = 5
-
 /**
- * The contract as deck cargo.
+ * What is **met**, as deck cargo.
  *
- * One container per binding quest, stacked. A ship carrying nothing binding gets an empty deck,
- * and that has to look different from a deck whose cargo is all violated — so the renderer draws
- * bare planking for the first and hatched boxes for the second. "Never measured" and "measured
- * and failing" must not look alike, which is the same rule the flat deck followed.
+ * Aboard means done. Everything still owed stands on the pier instead (`landedOf`), and that
+ * split is the whole picture in one sentence: the ship carries what has been achieved, the
+ * planking beside her carries what there is to do. It is the same division the task list makes in
+ * words, and a drawing that said it differently would be a second opinion about one repository.
  *
- * Worst first, so the colour a person sees at the top of a stack is the one that matters.
+ * A bare deck therefore means "nothing met" and not "nothing demanded" — the two are told apart by
+ * the pier, which is empty for the first and loaded for the second. The renderer draws hatch lines
+ * on an empty deck either way, because an empty hold is an empty hold.
  */
-export function cargoOf(ship: Ship, hull: Hull, at: Spot): readonly Container[] {
-  const quests = orderedQuests(bindingQuests(ship.quests))
+export function cargoOf(ship: Ship, hull: Hull): readonly Container[] {
+  const quests = orderedQuests(bindingQuests(ship.quests)).filter(
+    (quest) => quest.verdict === 'met',
+  )
   if (quests.length === 0) {
     return []
   }
 
-  const usable = hull.length - 0.5
-  const perRow = CONTAINERS_ACROSS
-  const rows = Math.ceil(quests.length / perRow)
-  const step = usable / Math.max(rows, 1)
+  const from = hull.length * DECK.from
+  const usable = hull.length * (DECK.to - DECK.from)
+  const bays = Math.ceil(quests.length / BAYS_ACROSS)
+  const pitch = Math.min(CONTAINER.maxAlong + CONTAINER.gapAlong, usable / bays)
+  const along = Math.max(0.6, pitch - CONTAINER.gapAlong)
 
-  return quests.map((quest, index) => {
-    const row = Math.floor(index / perRow)
-    const acrossIndex = index % perRow
-    return {
-      quest,
-      tier: 0,
-      spot: {
-        x: at.x + 0.35 + row * step,
-        y: at.y - SIZE.width / 4 + acrossIndex * (SIZE.width / 2),
-        z: hull.height,
-      },
-    }
-  })
+  const spread = BAYS_ACROSS * CONTAINER.across + (BAYS_ACROSS - 1) * CONTAINER.gap
+  const first = -spread / 2 + CONTAINER.across / 2
+
+  return quests.map((quest, index) => ({
+    quest,
+    along,
+    across: CONTAINER.across,
+    spot: {
+      x: from + Math.floor(index / BAYS_ACROSS) * pitch + along / 2,
+      y: first + (index % BAYS_ACROSS) * (CONTAINER.across + CONTAINER.gap),
+    },
+  }))
 }
 
 /**
- * The superstructure: a block near the stern, one storey per five binding demands.
+ * A box waiting on the planking, in the same units as everything else on the pier.
  *
- * Same measurement as the flat drawing used, kept deliberately: a ship held to fifteen demands
- * is a bigger vessel, and the silhouette should say so before any label is read.
+ * Deliberately smaller than a deck container: what is waiting ashore is not yet stowed, and two
+ * boxes of the same size on either side of the ship's rail would read as one cargo that happens to
+ * be split.
  */
-export function bridgeOf(ship: Ship, hull: Hull, at: Spot): { spot: Spot; storeys: number } {
+export const LANDED = {
+  along: 2.6,
+  across: 1.2,
+  /** Between two boxes along the pier. */
+  gap: 0.5,
+  /** Between two rows across it. */
+  pitch: 1.9,
+  /** Clear of the landward edge, so a box never sits on the quay's own line. */
+  first: 1.6,
+} as const
+
+/** How many boxes stand in one row along the pier before the next row starts. */
+export const LANDED_PER_ROW = 8
+
+/** Where row `index` sits across the pier, in the hull's own coordinates. */
+export function pierRowY(index: number): number {
+  return -(BERTH.laneCentre + BERTH.pier) + LANDED.first + index * LANDED.pitch
+}
+
+/** How many rows `count` boxes fill. */
+export function pierRows(count: number): number {
+  return Math.ceil(Math.max(count, 0) / LANDED_PER_ROW)
+}
+
+export interface Landed {
+  quest: QuestResult
+  spot: Spot
+  along: number
+  across: number
+}
+
+/**
+ * What is still **owed**, standing on the pier.
+ *
+ * Everything binding that is not met — violated, waiting, and not measurable alike. Not measurable
+ * is included on purpose and is not a softer case: a demand nothing could answer is still a demand
+ * this repository has not satisfied, and leaving it off the pier would quietly turn the blind spot
+ * into a pass. What it is *not* is a violation, and the colour and the sheet keep saying so.
+ *
+ * Worst first, along the pier from the stern — the same reading order as everything else here.
+ */
+export function landedOf(ship: Ship): readonly Landed[] {
+  const quests = orderedQuests(bindingQuests(ship.quests)).filter(
+    (quest) => quest.verdict !== 'met',
+  )
+
+  return quests.map((quest, index) => ({
+    quest,
+    along: LANDED.along,
+    across: LANDED.across,
+    spot: {
+      x: 1.2 + (index % LANDED_PER_ROW) * (LANDED.along + LANDED.gap) + LANDED.along / 2,
+      y: pierRowY(Math.floor(index / LANDED_PER_ROW)),
+    },
+  }))
+}
+
+export interface Bridge {
+  /** The centre of the block. */
+  spot: Spot
+  along: number
+  across: number
+}
+
+/**
+ * The accommodation block, aft.
+ *
+ * It grows with the number of binding demands, which is the same measurement the isometric storeys
+ * used and kept for the same reason: a ship held to fifteen demands is a bigger vessel, and the
+ * silhouette should say so before any label is read. From above that is area rather than height.
+ */
+export function bridgeOf(ship: Ship, hull: Hull): Bridge {
   const binding = bindingQuests(ship.quests).length
+  const along = 2 + Math.min(binding, 12) * 0.16
   return {
-    spot: { x: at.x + 0.25, y: at.y, z: hull.height },
-    storeys: binding === 0 ? 1 : Math.min(4, Math.ceil(binding / 5)),
+    along,
+    across: hull.beam * 0.72,
+    spot: { x: hull.length * 0.06 + along / 2, y: 0 },
   }
 }
 
 /**
- * Whether this ship gets the funnel and its smoke.
+ * Whether this ship gets smoke at the funnel.
  *
- * Earned, not decorative — every binding demand met *and* a clean tree. It is the only thing in
- * the basin that moves on its own, so it is what the eye finds first.
+ * Earned and not decorative — every binding demand met *and* a clean tree. It is one of the few
+ * things in the basin that moves on its own, so it is what the eye finds first.
  */
 export function hasPlume(ship: Ship): boolean {
   const condition = conditionOf(ship)

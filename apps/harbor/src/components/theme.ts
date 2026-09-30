@@ -121,6 +121,10 @@ export const SCENE = {
   land: '#1b232d',
   crane: '#8a9db0',
   accent: '#e08a4f',
+  /** The coping along the quay edge, and the painted lines on the concrete. */
+  quayEdge: '#3b4b5e',
+  /** Mooring lines and bollards: thin, warm, and never mistaken for a verdict. */
+  mooring: '#6d7f92',
 } as const
 
 /**

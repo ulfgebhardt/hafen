@@ -8,6 +8,7 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   MIN_ZOOM,
+  wholeScale,
   zoomAt,
 } from './viewport'
 
@@ -107,6 +108,30 @@ describe(clampZoom, () => {
   it('stops at both ends', () => {
     expect(clampZoom(0.01)).toBe(MIN_ZOOM)
     expect(clampZoom(99)).toBe(MAX_SCALE)
+  })
+
+  /**
+   * The whole harbour has to fit if somebody keeps zooming out, however large the fleet gets. The
+   * floor is therefore measured from the drawing and the window and not picked — a standing
+   * minimum is a number that is right until the day it is not.
+   */
+  it('gives way to a fleet that needs more room than the standing floor', () => {
+    expect(clampZoom(0.01, 0.08)).toBe(0.08)
+  })
+
+  it('never loosens the floor for a drawing that already fits', () => {
+    expect(clampZoom(0.01, 4)).toBe(MIN_ZOOM)
+  })
+})
+
+describe(wholeScale, () => {
+  it('is the scale at which both axes fit, with no floor at all', () => {
+    expect(wholeScale({ width: 4000, height: 1000 }, { width: 400, height: 400 })).toBe(0.1)
+    expect(wholeScale({ width: 100, height: 100 }, { width: 400, height: 400 })).toBe(4)
+  })
+
+  it('answers something usable for a harbour with nothing in it', () => {
+    expect(wholeScale({ width: 0, height: 0 }, { width: 400, height: 400 })).toBe(MIN_SCALE)
   })
 })
 
