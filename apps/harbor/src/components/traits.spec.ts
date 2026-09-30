@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { quest, ship } from './testing'
 import {
+  CREW_MOST,
   livelinessOf,
   readingsOf,
   reachOf,
@@ -29,6 +30,7 @@ const reading = (over: Partial<ReturnType<typeof readingsOf>> = {}) => ({
   binding: 0,
   stars: 0,
   issues: 0,
+  authors: 1,
   asked: false,
   rustDays: 0,
   disorder: 0,
@@ -150,6 +152,37 @@ describe(traitsOf, () => {
       expect(value).toBeGreaterThanOrEqual(0)
       expect(value).toBeLessThanOrEqual(1)
     }
+  })
+})
+
+describe('the crew at a berth', () => {
+  /**
+   * People, from the one number here that counts people. Not stars — a star is somebody who
+   * watched, and drawing admirers as dockers would say something the measurement cannot know.
+   */
+  it('grows with the authors and not with the stars', () => {
+    const quiet = traitsOf(reading({ authors: 1 }))
+    const crowded = traitsOf(reading({ authors: 488 }))
+    const admired = traitsOf(reading({ authors: 1, stars: 1743 }))
+
+    expect(crowded.crew).toBeGreaterThan(quiet.crew)
+    expect(admired.crew).toBe(quiet.crew)
+  })
+
+  /**
+   * Logarithmic, because this fleet runs 1 … 488 with a **median of three**. Straight, ninety
+   * berths would carry one figure and one would carry four.
+   */
+  it('spends its figures where the repositories actually are', () => {
+    expect(traitsOf(reading({ authors: 3 })).crew).toBeGreaterThan(
+      traitsOf(reading({ authors: 1 })).crew,
+    )
+  })
+
+  /** Never empty: a berth with nobody on it reads as abandoned, which is what the rust says. */
+  it('never leaves a berth unmanned', () => {
+    expect(traitsOf(reading({ authors: 0 })).crew).toBeGreaterThanOrEqual(1)
+    expect(traitsOf(reading({ authors: 1e6 })).crew).toBeLessThanOrEqual(CREW_MOST)
   })
 })
 
