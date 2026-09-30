@@ -3,6 +3,7 @@
   import { computed } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
+  import PointValue from './PointValue.vue'
   import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_ORDER } from './theme'
 
   import type { Ship } from '@hafen/core'
@@ -62,12 +63,9 @@
     <p class="font-mono text-xs text-slate-500">{{ bound }} gebunden</p>
 
     <p
-      class="font-mono text-xs text-slate-400"
-      :title="`${mine.active} Projekte aktiv, ${mine.clean} von ${mine.fleet} Bäumen sauber`"
+      :title="`${mine.active} Projekte aktiv · ${mine.clean} von ${mine.fleet} Bäumen sauber · ${mine.met} von ${mine.binding} Quests erfüllt`"
     >
-      <span class="text-slate-600">Flotte</span> {{ fleet.toLocaleString('de-DE') }}
-      <span class="ml-2 text-slate-600">du</span>
-      <span class="ml-1 text-slate-200">{{ mine.total.toLocaleString('de-DE') }}</span>
+      <PointValue :project="fleet" :personal="mine.total" />
     </p>
     <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">gemessen {{ taken }}</p>
   </header>

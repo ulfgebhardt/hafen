@@ -408,7 +408,28 @@ const NOT_A_SHIP = new Set([
   'target',
   '.venv',
   'venv',
+  // portmod keeps twelve package sources under `<game>/portmod/repos/`. Measured on this
+  // machine: one real project under `~/.data/games` and twelve of these.
+  'portmod',
 ])
+
+/**
+ * Whether a directory name is one the survey never descends into.
+ *
+ * Matches a copy as well as the original. Copies on this machine are made by suffixing — measured:
+ * `portmod_`, `portmod_new`, `nostalgeek_`, `nostalgeek-new`, `AddOns_`, `gradido_local`. Without
+ * this, `portmod` was skipped and its two backups contributed six package caches as ships.
+ *
+ * Only after `_` or `-`, so a real project is not caught by sharing a prefix: `buildkite` is not
+ * `build`, and `vendorful` is not `vendor`.
+ */
+function isNotAShip(entry: string): boolean {
+  if (NOT_A_SHIP.has(entry)) {
+    return true
+  }
+  const cut = entry.search(/[_-]/u)
+  return cut > 0 && NOT_A_SHIP.has(entry.slice(0, cut))
+}
 
 /**
  * How deep below the root a repository is still looked for.
@@ -451,7 +472,7 @@ export async function findShipPaths(ports: Ports, root: string): Promise<readonl
 
         await Promise.all(
           entries.map(async (entry) => {
-            if (NOT_A_SHIP.has(entry) || entry.startsWith('.')) {
+            if (isNotAShip(entry) || entry.startsWith('.')) {
               return
             }
             const path = `${dir}/${entry}`
@@ -568,21 +589,44 @@ export interface SurveyOptions extends InspectOptions {
   progress?: SurveyProgress
 }
 
+/**
+ * Every repository under any of the roots.
+ *
+ * Roots plural, because a machine keeps its projects in more than one place: this one has
+ * `~/.data/sources` and `~/.data/games`, and the second holds exactly one real project among a
+ * dozen package caches. A single root meant that project simply did not exist.
+ *
+ * Deduplicated, because two roots may overlap — `~/.data` and `~/.data/sources` are a reasonable
+ * pair to hand in, and a repository found twice would be a ship counted twice.
+ */
+export async function findAcrossRoots(
+  ports: Ports,
+  roots: readonly string[],
+): Promise<readonly string[]> {
+  const found = await Promise.all(roots.map(async (root) => await findShipPaths(ports, root)))
+  return [...new Set(found.flat())].sort()
+}
+
 export async function surveyHarbor(
   ports: Ports,
-  root: string,
+  root: string | readonly string[],
   options: SurveyOptions = {},
 ): Promise<readonly Ship[]> {
   const { register = EMPTY_REGISTER, progress = {}, catalog = [], ownEmails = [] } = options
   const enlisted = register.enlisted
   const archived = new Set(register.archived)
+  const roots = typeof root === 'string' ? [root] : root
+
   // An unreadable root and an empty one both yield zero ships, but only one of them is
-  // a fault. Reporting them alike hides misconfiguration behind an empty harbor.
-  if ((await ports.fs.readDir(root)) === null) {
-    throw new UnreadableRootError(root)
+  // a fault. Reporting them alike hides misconfiguration behind an empty harbor. Every root has
+  // to be readable: a typo in the second one would otherwise just quietly halve the fleet.
+  for (const one of roots) {
+    if ((await ports.fs.readDir(one)) === null) {
+      throw new UnreadableRootError(one)
+    }
   }
 
-  const found = await findShipPaths(ports, root)
+  const found = await findAcrossRoots(ports, roots)
   const extra: string[] = []
   for (const path of enlisted) {
     if (!found.includes(path) && (await ports.fs.isDirectory(path))) {

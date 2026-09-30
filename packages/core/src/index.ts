@@ -109,12 +109,16 @@ export {
   KIND_POINTS,
   projectPoints,
   PULL_POINTS,
+  QUEST_POINTS,
   questRatio,
   scoreWork,
   SHIPSHAPE_POINTS,
   shipPoints,
   UNSCORED_POINTS,
 } from './points'
+
+export type { FleetTask, Task, TaskKind } from './tasks'
+export { commitValue, tasksAcross, tasksFor, tasksValue } from './tasks'
 
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'

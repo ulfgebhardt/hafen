@@ -113,10 +113,10 @@ describe('shipSheet', () => {
       },
     })
 
-    expect(sheet.text()).toContain('Projektpunkte')
+    expect(sheet.html()).toContain('Projektpunkte')
     expect(sheet.text()).toContain('40 Commits')
     expect(sheet.text()).toContain('7 PRs')
-    expect(sheet.text()).toContain('davon deine')
+    expect(sheet.html()).toContain('deine Punkte')
   })
 
   /** A zero share is not a row worth drawing — it is the normal case on a foreign repository. */
@@ -125,7 +125,7 @@ describe('shipSheet', () => {
       props: { ship: ship({ ledger: { total: { ...NO_WORK, commits: 5 }, own: NO_WORK } }) },
     })
 
-    expect(sheet.text()).not.toContain('davon deine')
+    expect(sheet.html()).not.toContain('deine Punkte')
   })
 
   /** The one time the catalog's lead bites has to be visible, or it is not a rule. */

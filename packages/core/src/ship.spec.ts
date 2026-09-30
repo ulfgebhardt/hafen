@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { mockPorts } from './mock'
 import {
+  findAcrossRoots,
   findShipPaths,
   inspectShip,
   mirrorsOf,
@@ -364,6 +365,27 @@ describe(findShipPaths, () => {
     await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([])
   })
 
+  /**
+   * Copies on this machine are made by suffixing — `portmod_`, `nostalgeek-new`, `AddOns_`. Until
+   * this matched, `portmod` was skipped and its two backups contributed six package caches.
+   */
+  it('skips a copy of an excluded directory as well as the original', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/repos': ['org'],
+        '/repos/org': ['portmod', 'portmod_', 'portmod-new', 'buildkite'],
+        '/repos/org/portmod': ['repos'],
+        '/repos/org/portmod_': ['repos'],
+        '/repos/org/portmod-new': ['repos'],
+        '/repos/org/buildkite': [],
+        '/repos/org/buildkite/.git': [],
+      },
+    })
+
+    // `buildkite` shares a prefix with `build` and is not a copy of it.
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual(['/repos/org/buildkite'])
+  })
+
   it('answers nothing for a root that is not there', async () => {
     await expect(findShipPaths(mockPorts(), '/nirgends')).resolves.toStrictEqual([])
   })
@@ -387,7 +409,54 @@ describe(findShipPaths, () => {
   })
 })
 
+describe(findAcrossRoots, () => {
+  /**
+   * A machine keeps its projects in more than one place: this one has `~/.data/sources` and
+   * `~/.data/games`, and the second holds six real repositories. With one root they did not exist.
+   */
+  it('reads every root that was named', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/a': ['org'],
+        '/a/org': ['one'],
+        '/a/org/one': [],
+        '/a/org/one/.git': [],
+        '/b': ['org'],
+        '/b/org': ['two'],
+        '/b/org/two': [],
+        '/b/org/two/.git': [],
+      },
+    })
+
+    await expect(findAcrossRoots(ports, ['/a', '/b'])).resolves.toStrictEqual([
+      '/a/org/one',
+      '/b/org/two',
+    ])
+  })
+
+  /** `~/.data` and `~/.data/sources` are a reasonable pair to hand in, and overlap. */
+  it('counts a repository found twice only once', async () => {
+    const ports = mockPorts({
+      dirs: {
+        '/a': ['org'],
+        '/a/org': ['one'],
+        '/a/org/one': [],
+        '/a/org/one/.git': [],
+      },
+    })
+
+    await expect(findAcrossRoots(ports, ['/a', '/a'])).resolves.toStrictEqual(['/a/org/one'])
+  })
+})
+
 describe(surveyHarbor, () => {
+  /** A typo in the second root would otherwise quietly halve the fleet. */
+  it('refuses a root it cannot read, even when another one works', async () => {
+    const ports = mockPorts({ dirs: { '/a': [] } })
+
+    await expect(surveyHarbor(ports, ['/a', '/nirgends'])).rejects.toThrow('/nirgends')
+  })
+
   it('inspects every ship it finds', async () => {
     const ports = mockPorts({
       dirs: {
