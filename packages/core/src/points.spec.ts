@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mockContract } from './mock'
+import { mockChecks, mockContract } from './mock'
 import {
   ACTIVE_WINDOW_DAYS,
   BREADTH_POINTS,
@@ -11,14 +11,20 @@ import {
   KIND_POINTS,
   projectPoints,
   PULL_POINTS,
+  QUEST_POINTS,
+  questValue,
   scoreWork,
   SHIPSHAPE_POINTS,
   shipPoints,
+  SPAN_CEILING,
+  spanOf,
+  spanWeight,
   UNSCORED_POINTS,
 } from './points'
 import { NO_LEDGER, NO_WORK } from './work'
 import { NOTHING_OPEN } from './working'
 
+import type { QuestResult } from './chain'
 import type { Ship } from './ship'
 import type { Ledger, Work } from './work'
 
@@ -257,5 +263,79 @@ describe(byProjectPoints, () => {
     const a = ship({ name: 'a' })
 
     expect([b, a].sort(byProjectPoints).map((entry) => entry.name)).toStrictEqual(['a', 'b'])
+  })
+})
+
+describe('how wide a repository is', () => {
+  const wide = (carrying: number, declared = carrying): Ship =>
+    ship({
+      contract: mockContract({
+        members: Array.from({ length: declared }, (_, index) => ({
+          dir: `packages/${String(index)}`,
+          checks:
+            index < carrying
+              ? mockChecks({ lint: true, typecheck: false, unit: false, e2e: false })
+              : [],
+        })),
+      }),
+    })
+
+  /**
+   * Carrying and not merely declared, and that distinction is the whole measurement: `gaffel` has
+   * sixty-seven `package.json` files and three of them run anything. Counting manifests would have
+   * made an examples directory the widest repository in the fleet.
+   */
+  it('counts the members that run something, not the manifests', () => {
+    expect(spanOf(wide(3, 67))).toBe(3)
+    expect(spanOf(wide(11))).toBe(11)
+  })
+
+  /** A repository with no members at all is still one repository, and a demand on it still binds. */
+  it('is one for a repository with nothing in it', () => {
+    expect(spanOf(ship({ contract: mockContract({ members: [] }) }))).toBe(1)
+    expect(spanWeight(ship({ contract: mockContract({ members: [] }) }))).toBe(1)
+  })
+
+  it('stops learning past the ceiling', () => {
+    expect(spanOf(wide(SPAN_CEILING + 20))).toBe(SPAN_CEILING)
+  })
+
+  /**
+   * More, but diminishing. Meeting `lint` in eleven packages is not eleven times meeting it in
+   * one — the config is shared and the fix is copied — but it is plainly more than once.
+   */
+  it('pays more for a wider repository, and less than proportionally', () => {
+    const one = questValue(wide(1))
+    const eleven = questValue(wide(11))
+
+    expect(one).toBe(QUEST_POINTS)
+    expect(eleven).toBeGreaterThan(one * 2)
+    expect(eleven).toBeLessThan(one * 11)
+  })
+
+  /** Whole points only: nothing in the window ever prints a fraction. */
+  it('never offers a fraction of a point', () => {
+    for (let carrying = 1; carrying <= SPAN_CEILING; carrying += 1) {
+      expect(Number.isInteger(questValue(wide(carrying)))).toBe(true)
+    }
+  })
+
+  /** The fleet total has to agree with what each ship's tasks promised. */
+  it('adds the contract points per ship, at the rate of that ship', () => {
+    const met: QuestResult = {
+      id: 'lint',
+      chain: 'werft',
+      title: 'lint',
+      why: '',
+      verdict: 'met',
+      waitingOn: [],
+      checks: [],
+      reason: 'erfuellt',
+    }
+    const narrow = ship({ quests: [met] })
+    const broad = { ...wide(9), quests: [met] }
+
+    expect(fleetPoints([broad]).contracts).toBe(questValue(broad))
+    expect(fleetPoints([broad]).contracts).toBeGreaterThan(fleetPoints([narrow]).contracts)
   })
 })

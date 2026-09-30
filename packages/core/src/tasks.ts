@@ -16,7 +16,7 @@
  */
 
 import { bindingQuests } from './chain'
-import { QUEST_POINTS, scoreWork, SHIPSHAPE_POINTS } from './points'
+import { questValue, scoreWork, SHIPSHAPE_POINTS } from './points'
 import { NO_WORK } from './work'
 
 import type { Ship } from './ship'
@@ -145,7 +145,9 @@ export function questTasks(ship: Ship): readonly Task[] {
       why: quest.why === '' ? quest.reason : quest.why,
       command: `hafen hafen --evidenz  # ${quest.id}`,
       project: 0,
-      personal: QUEST_POINTS,
+      // What it is worth *here*: a demand met across eleven packages is more than one met across
+      // one, and the number a task offers has to be the number the scoring actually pays.
+      personal: questValue(ship),
       quest: quest.id,
     }))
 }
