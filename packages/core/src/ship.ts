@@ -3,6 +3,7 @@ import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
 import { forgeOf } from './forge'
 import { measureQuests } from './probe'
+import { EMPTY_REGISTER } from './register'
 import { daysSince } from './time'
 import { LOG_FORMAT, NO_LEDGER, readLedger } from './work'
 import { countStash, hasOpenWork, readWorking } from './working'
@@ -12,6 +13,7 @@ import type { Contract } from './contract'
 import type { Forge } from './forge'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
+import type { Register } from './register'
 import type { Ledger } from './work'
 import type { Working } from './working'
 
@@ -114,6 +116,13 @@ export interface Ship {
   /** Quest files that did not read as quests, in either store. A demand nobody is held to. */
   unreadableQuests: readonly string[]
   stage: Stage
+  /**
+   * Whether the register says this ship is put away.
+   *
+   * A decision and not a measurement — the one kind of thing the register holds — but it has to
+   * travel with the ship, because the window bands on it and nothing in a repository says it.
+   */
+  archived: boolean
   /**
    * Whether this is a git repository at all. An enlisted directory may not be one, and then
    * branch, age and points are absent rather than zero — the two must not look alike.
@@ -278,12 +287,20 @@ function parseTracking(output: string | null): { ahead: number | null; behind: n
     : { ahead: null, behind: null }
 }
 
+export interface InspectOptions {
+  catalog?: readonly Quest[]
+  /** Whose commits count as the reader's own. Empty means no ledger is measured. */
+  ownEmails?: readonly string[]
+  /** Whether the register puts this one away. */
+  archived?: boolean
+}
+
 export async function inspectShip(
   ports: Ports,
   path: string,
-  catalog: readonly Quest[] = [],
-  ownEmails: readonly string[] = [],
+  options: InspectOptions = {},
 ): Promise<Ship> {
+  const { catalog = [], ownEmails = [], archived = false } = options
   const segments = path.split('/').filter((segment) => segment !== '')
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
@@ -366,6 +383,7 @@ export async function inspectShip(
     overriddenQuests: merged.overridden,
     unreadableQuests: merged.unreadable,
     stage: stageOf({ docks, rustDays, ahead, dirty }),
+    archived,
     hasGit,
   }
 }
@@ -481,14 +499,26 @@ export interface SurveyProgress {
  * demands were shown to it, and then no ship owes anything — which is not the same as meeting
  * everything, and `quests` being empty says exactly that.
  */
+export interface SurveyOptions extends InspectOptions {
+  /**
+   * The register: what is put away, and which directories to treat as ships anyway.
+   *
+   * Handed in whole rather than as two lists, because it is one file and one decision. The
+   * signature had grown to six positional parameters, which is the point at which the next one
+   * gets passed in the wrong slot.
+   */
+  register?: Register
+  progress?: SurveyProgress
+}
+
 export async function surveyHarbor(
   ports: Ports,
   root: string,
-  enlisted: readonly string[] = [],
-  progress: SurveyProgress = {},
-  catalog: readonly Quest[] = [],
-  ownEmails: readonly string[] = [],
+  options: SurveyOptions = {},
 ): Promise<readonly Ship[]> {
+  const { register = EMPTY_REGISTER, progress = {}, catalog = [], ownEmails = [] } = options
+  const enlisted = register.enlisted
+  const archived = new Set(register.archived)
   // An unreadable root and an empty one both yield zero ships, but only one of them is
   // a fault. Reporting them alike hides misconfiguration behind an empty harbor.
   if ((await ports.fs.readDir(root)) === null) {
@@ -507,7 +537,11 @@ export async function surveyHarbor(
   const measured = new Map<string, Ship>()
 
   await inLanes(surveyOrder(paths, progress.first ?? []), SURVEY_LANES, async (path) => {
-    const ship = await inspectShip(ports, path, catalog, ownEmails)
+    const ship = await inspectShip(ports, path, {
+      catalog,
+      ownEmails,
+      archived: archived.has(path),
+    })
     measured.set(path, ship)
     progress.onShip?.(ship)
   })
