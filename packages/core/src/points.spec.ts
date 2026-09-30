@@ -3,11 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { mockChecks, mockContract } from './mock'
 import {
   ACTIVE_WINDOW_DAYS,
+  AUTHOR_POINTS,
   BREADTH_POINTS,
   byProjectPoints,
+  CHECK_POINTS,
+  CI_POINTS,
+  coveredChecks,
   fleetPoints,
   isActive,
   isClean,
+  isKept,
+  KEPT_POINTS,
   KIND_POINTS,
   projectPoints,
   PULL_POINTS,
@@ -107,10 +113,69 @@ describe(shipPoints, () => {
   it('reports the project total and the own share apart', () => {
     const subject = ship({ ledger: ledger({ byKind: { feat: 10 } }, { byKind: { feat: 2 } }) })
 
-    expect(shipPoints(subject)).toStrictEqual({
+    expect(shipPoints(subject)).toMatchObject({
       project: 10 * KIND_POINTS.feat,
       own: 2 * KIND_POINTS.feat,
     })
+  })
+
+  /**
+   * The whole number looked like a commit counter, and mostly was: 107 491 commits against 206
+   * checks, so no weight a check could honestly carry would show up in one figure. What fixes that
+   * is saying what went in.
+   */
+  it('says what the project score was made of', () => {
+    const subject = ship({
+      ledger: ledger({ byKind: { feat: 1 }, authors: 3 }),
+      contract: mockContract({
+        scripts: { lint: true, typecheck: false, unit: false, e2e: false },
+        inCi: ['lint'],
+      }),
+    })
+    const points = shipPoints(subject)
+
+    expect(points.from).toStrictEqual({
+      work: KIND_POINTS.feat,
+      authors: 3 * AUTHOR_POINTS,
+      checks: CHECK_POINTS,
+      ci: CI_POINTS,
+    })
+    expect(points.project).toBe(
+      points.from.work + points.from.authors + points.from.checks + points.from.ci,
+    )
+  })
+
+  /**
+   * The authors, the checks and the CI belong to the *project*. Handing them to whoever happens to
+   * have the checkout is the conflation the two scores exist to prevent.
+   */
+  it('keeps the share of the reader to commits and pull requests', () => {
+    const subject = ship({
+      ledger: ledger({ byKind: { feat: 9 }, authors: 40 }, { byKind: { feat: 1 } }),
+      contract: mockContract({ scripts: { lint: true, typecheck: true, unit: true, e2e: true } }),
+    })
+
+    expect(shipPoints(subject).own).toBe(KIND_POINTS.feat)
+  })
+
+  /** Per member and role, never per script name: a repository does not run twice the engineering
+   * because somebody split `test` into `test:unit` and `test:integration`. */
+  it('counts a check once per member and role', () => {
+    const twice = ship({
+      contract: mockContract({
+        members: [
+          {
+            dir: '.',
+            checks: [
+              { script: 'test:unit', role: 'unit', delegates: false },
+              { script: 'test:integration', role: 'unit', delegates: false },
+            ],
+          },
+        ],
+      }),
+    })
+
+    expect(coveredChecks(twice)).toBe(1)
   })
 
   /**
@@ -191,6 +256,22 @@ describe(isActive, () => {
 })
 
 describe(fleetPoints, () => {
+  /**
+   * Beside `tidy` and measured separately: a merged branch and a submodule that was never checked
+   * out are both work lying about, and they cost nothing visible for years. Of 92 repositories, 44
+   * are clean and 29 of those also carry nothing stale.
+   */
+  it('rewards a repository tidy beyond its working tree', () => {
+    const kept = ship()
+    const trailing = ship({
+      branches: [{ name: 'feat', upstream: null, gone: true, merged: false, current: false }],
+    })
+
+    expect(isKept(kept)).toBe(true)
+    expect(isKept(trailing)).toBe(false)
+    expect(fleetPoints([kept]).tidy).toBe(fleetPoints([trailing]).tidy + KEPT_POINTS)
+  })
+
   it('adds work, breadth and tidiness', () => {
     const ships = [
       ship({ rustDays: 2, ledger: ledger({ byKind: { feat: 5 } }, { byKind: { feat: 2 } }) }),
@@ -205,7 +286,8 @@ describe(fleetPoints, () => {
       active: 1,
       clean: 1,
       breadth: BREADTH_POINTS,
-      tidy: SHIPSHAPE_POINTS,
+      // Both carry nothing stale, so the kept award lands on each of them.
+      tidy: SHIPSHAPE_POINTS + 2 * KEPT_POINTS,
     })
     expect(points.total).toBe(points.work + points.breadth + points.tidy)
   })

@@ -54,13 +54,21 @@
    * be clicked away is the kind of thing a tool does once.
    */
   const band = ref<Band>('active')
-  /** What was typed into the filter. Applied to the page, never to the counts beside the tabs. */
   const query = ref('')
-  const shown = computed(() =>
-    snapshot.value === null
-      ? []
-      : filterShips(byBand(snapshot.value.ships)[band.value], query.value),
+
+  /**
+   * The fleet the whole window is about, once the filter has had it.
+   *
+   * Filtered *before* the bands and not after, so the tab counts, the points beside them and the
+   * figures in the header all describe what is actually on screen. They described the whole fleet
+   * at first, on the argument that a tab answers a question about the fleet — and that was wrong
+   * in use: a filter that leaves three ships and a tab that still says 41 is a window disagreeing
+   * with itself, and the reader has no way to tell which half to believe.
+   */
+  const fleet = computed(() =>
+    snapshot.value === null ? [] : filterShips(snapshot.value.ships, query.value),
   )
+  const shown = computed(() => byBand(fleet.value)[band.value])
 
   /**
    * Whether this window can measure and write at all.
@@ -220,7 +228,7 @@
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
     <template v-if="snapshot !== null">
       <FleetBar
-        :ships="snapshot.ships"
+        :ships="fleet"
         :at="snapshot.at"
         :source="source"
         :can-measure="canAct"
@@ -228,7 +236,7 @@
         @measure="measure()"
         @enlist="enlist($event, true)"
       />
-      <BandTabs v-model:band="band" v-model:query="query" :ships="snapshot.ships" />
+      <BandTabs v-model:band="band" v-model:query="query" :ships="fleet" />
 
       <!--
         Said out loud, because an empty basin and a filter that matched nothing look identical —
@@ -238,7 +246,10 @@
         v-if="query.trim() !== '' && shown.length === 0"
         class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
       >
-        Kein Schiff auf dieser Seite passt zu „{{ query }}“.
+        <template v-if="fleet.length === 0">Kein Schiff passt zu „{{ query }}“.</template>
+        <template v-else
+          >Auf dieser Seite passt keines zu „{{ query }}“ — {{ fleet.length }} anderswo.</template
+        >
       </p>
 
       <!--

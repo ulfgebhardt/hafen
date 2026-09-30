@@ -7,7 +7,9 @@ import {
   bridgeOf,
   cargoOf,
   DECK,
+  gangwayOf,
   hasPlume,
+  hullMarks,
   hullOf,
   landedOf,
   LANDED_PER_ROW,
@@ -16,6 +18,7 @@ import {
   mooringOf,
   offsetOf,
   outlineOf,
+  pierMarks,
   pierRows,
   pierRowY,
   questAt,
@@ -334,5 +337,62 @@ describe(questAt, () => {
   it('says nothing for a point between the boxes', () => {
     expect(questAt(boxes, { x: 0, y: 0 })).toBeNull()
     expect(questAt([], { x: 1, y: 1 })).toBeNull()
+  })
+})
+
+describe('what waits and what she is', () => {
+  const busy = ship({
+    ahead: 2,
+    behind: 1,
+    stash: 1,
+    docks: ['/docks/one'],
+    submodules: [{ path: 'lib', state: 'aboard' as const, at: 'aaaaaaaa' }],
+    working: { staged: 0, unstaged: 0, untracked: 0, conflicted: 1 },
+  })
+  const hull = hullOf(busy, 400)
+
+  /**
+   * The complaint this answers: a flag for unpushed commits and a wake for commits upstream hung
+   * on the hull, so a repository with *more* left to do came out the more interesting drawing.
+   */
+  it('puts everything there is to do on the planking', () => {
+    const waiting = pierMarks(busy).map((box) => box.kind)
+
+    expect(waiting).toContain('pennant')
+    expect(waiting).toContain('drag')
+    expect(waiting).toContain('stash')
+  })
+
+  /** What stays aboard is what she *is*: a stop, the trees she owns, the repositories she carries. */
+  it('leaves only what she is on the hull', () => {
+    const carried = new Set(hullMarks(busy, hull).map((box) => box.kind))
+
+    expect([...carried].sort()).toStrictEqual(['boat', 'damage', 'tender'])
+  })
+
+  /** Every mark lands in exactly one of the two, or a click would answer twice. */
+  it('draws nothing in both places', () => {
+    const onPier = new Set(pierMarks(busy).map((box) => box.kind))
+
+    for (const box of hullMarks(busy, hull)) {
+      expect(onPier.has(box.kind)).toBe(false)
+    }
+  })
+})
+
+describe(gangwayOf, () => {
+  /**
+   * It has to reach: a ship standing off because her tree is untidy is exactly the ship with a
+   * loaded pier, so the plank grows with the gap.
+   */
+  it('runs from her side to the planking, however far off she lies', () => {
+    const hull = hullOf(ship(), 400)
+    const snug = gangwayOf(hull, 0)
+    const off = gangwayOf(hull, 2)
+
+    expect(snug.from.y).toBe(-hull.beam / 2)
+    expect(snug.to.y).toBeLessThan(snug.from.y)
+    expect(off.to.y).toBeLessThan(snug.to.y)
+    expect(off.from.x).toBe(snug.from.x)
   })
 })

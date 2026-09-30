@@ -391,6 +391,21 @@ export function questAt(
   return boxAt(boxes, at)?.quest.id ?? null
 }
 
+/**
+ * The plank from the planking to her deck.
+ *
+ * Drawn only where something is waiting, which makes it the one mark that says "there is work
+ * here" without counting anything — the eye finds a line between two shapes before it finds a
+ * crate among crates. It also has to reach: a ship standing off because her tree is untidy is
+ * exactly the ship with a loaded pier, so the plank grows with the gap.
+ */
+export function gangwayOf(hull: Hull, offset: number): Line {
+  return {
+    from: { x: hull.length * 0.22, y: -hull.beam / 2 },
+    to: { x: hull.length * 0.22, y: -BERTH.laneCentre - offset },
+  }
+}
+
 /** A crate, a flag, a boat: one drawn mark, with the kind it stands for. */
 export interface MarkBox extends Placed {
   kind: MarkKind
@@ -401,8 +416,23 @@ export interface MarkBox extends Placed {
 /** A box for the repository's own untidiness. Smaller than a demand, because it is a smaller thing. */
 export const MARK = { along: 1.5, gap: 0.4, across: LANDED.across * 0.8 } as const
 
-/** The kinds that wait on the planking: work that is not aboard. */
-const ON_THE_PIER = new Set<MarkKind>(['staged', 'unstaged', 'untracked', 'stash'])
+/**
+ * The kinds that wait on the planking: everything there is to tidy up.
+ *
+ * `pennant` and `drag` moved here, and the reason is what they did on the hull: unpushed commits
+ * and commits waiting upstream drew a flag and a wake, so a repository with *more* left to do came
+ * out looking more interesting than one with nothing. The pier is where work waits, and those two
+ * are work. What stays aboard is what she *is* — a conflict that has stopped her, the trees that
+ * belong to her, the repositories she carries.
+ */
+const ON_THE_PIER = new Set<MarkKind>([
+  'staged',
+  'unstaged',
+  'untracked',
+  'stash',
+  'pennant',
+  'drag',
+])
 
 /**
  * The repository's own untidiness, laid out along its reserved row of the planking.
@@ -443,11 +473,15 @@ export function pierMarks(ship: Ship): readonly MarkBox[] {
 }
 
 /**
- * What the ship herself carries: damage amidships, a flag at the stem, a drag astern, boats and
- * carried repositories alongside.
+ * What the ship herself carries: damage amidships, the trees alongside, the repositories she takes
+ * with her.
  *
- * Every one of them a rectangle, including the ones drawn as a cross or a triangle: the shape is
- * the renderer's business, the area a click may land in is this one's.
+ * What she does *not* carry is anything there is to do — that all waits on the planking. A flag
+ * for unpushed commits and a wake for commits upstream used to hang here, and they made a
+ * repository with more left to do the more interesting drawing.
+ *
+ * Every one of them a rectangle, including the ones drawn as a cross: the shape is the renderer's
+ * business, the area a click may land in is this one's.
  */
 export function hullMarks(ship: Ship, hull: Hull): readonly MarkBox[] {
   const out: MarkBox[] = []
@@ -465,18 +499,6 @@ export function hullMarks(ship: Ship, hull: Hull): readonly MarkBox[] {
         along: 2.2,
         across: 2.2,
       })
-    }
-    if (mark.kind === 'pennant') {
-      out.push({
-        kind: mark.kind,
-        capped,
-        spot: { x: hull.length + 1.8, y: 0 },
-        along: 2.4,
-        across: 1.8,
-      })
-    }
-    if (mark.kind === 'drag') {
-      out.push({ kind: mark.kind, capped, spot: { x: -2, y: 0 }, along: 3, across: 2.2 })
     }
     if (mark.kind === 'boat') {
       for (let index = 0; index < count; index += 1) {

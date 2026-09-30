@@ -13,9 +13,9 @@
   /**
    * What is typed into the filter.
    *
-   * On the band bar and not in the header: it filters *this page*, and the counts beside each tab
-   * go on counting the whole fleet — a tab that said "Aktiv 2" because somebody typed a letter
-   * would be answering a different question from the one the tab asks.
+   * On the band bar rather than in the header, because it is about which ships are listed. The
+   * counts beside each tab count what came in, and what comes in is already filtered: a filter
+   * that leaves three ships and a tab that still says 41 is a window disagreeing with itself.
    */
   const query = defineModel<string>('query', { default: '' })
 
