@@ -323,3 +323,47 @@ describe(measureQuests, () => {
     expect(measured.traits).toStrictEqual([])
   })
 })
+
+describe('datei-eine-von', () => {
+  const oneOf = (dateien: string): QuestCheck => check('datei-eine-von', { dateien })
+
+  const seen = (files: Record<string, string | null>): QuestFacts =>
+    facts({ files: new Map(Object.entries(files)) })
+
+  /**
+   * A licence is spelled `LICENSE`, `LICENSE.md`, `LICENCE` or `COPYING`. Measured over 44 node
+   * repositories here: 16 carry the first and 10 the second, so a quest naming one path would
+   * report a gap in ten repositories that do exactly what is asked.
+   */
+  it('is answered by whichever of them is there', () => {
+    const result = runCheck(
+      oneOf('LICENSE, LICENSE.md, COPYING'),
+      seen({ LICENSE: null, 'LICENSE.md': 'MIT', COPYING: null }),
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.evidence.found).toBe('LICENSE.md vorhanden')
+  })
+
+  it('says no where none of them is', () => {
+    const result = runCheck(oneOf('LICENSE, COPYING'), seen({ LICENSE: null, COPYING: null }))
+
+    expect(result.ok).toBe(false)
+    expect(result.evidence.found).toBe('keine davon vorhanden')
+  })
+
+  /**
+   * A catalog that named only paths this survey refuses has said nothing about the ship, and
+   * `null` is what that is — the same rule `datei` follows for a path climbing out of the tree.
+   */
+  it('cannot say where no named path may be read', () => {
+    expect(runCheck(oneOf('/etc/passwd, ../../.ssh/id_ed25519'), seen({})).ok).toBeNull()
+    expect(runCheck(oneOf(''), seen({})).ok).toBeNull()
+  })
+
+  it('names every path it looked at, so the answer can be argued with', () => {
+    const result = runCheck(oneOf('LICENSE, COPYING'), seen({ LICENSE: null, COPYING: null }))
+
+    expect(result.evidence.where).toBe('LICENSE, COPYING')
+  })
+})
