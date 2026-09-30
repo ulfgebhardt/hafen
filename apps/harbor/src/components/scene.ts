@@ -26,7 +26,7 @@
  * a fifth of a core.
  */
 
-import { rustLevel } from '@hafen/core'
+import { rustLevel, shipPoints } from '@hafen/core'
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 
 import { conditionOf } from './condition'
@@ -87,8 +87,26 @@ const LABEL_DIM = new TextStyle({
   letterSpacing: 0.2,
 })
 
-/** How many characters of a name fit along a berth. */
-const CAPTION_CHARS = 26
+/** The score beside a name. Warm, so it reads as a figure of merit and not as a demand. */
+const LABEL_SCORE = new TextStyle({
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 9,
+  fill: '#c08a5a',
+  letterSpacing: 0.2,
+})
+
+/** Grouped the way the rest of the window groups figures. */
+const FIGURE = new Intl.NumberFormat('de-DE')
+
+/**
+ * How many characters of a caption fit along a berth.
+ *
+ * Derived from the pitch and the font rather than picked: a berth is `BERTH.pitch` units wide at
+ * `UNIT` pixels each, and a monospace glyph is about 0.62 of its size across. Picked numbers are
+ * what ran `Leuchtturm ◆ 23.213` into the berth beside it.
+ */
+const CAPTION_CHARS = Math.floor((BERTH.pitch * UNIT) / (11 * 0.62))
+const DETAIL_CHARS = Math.floor((BERTH.pitch * UNIT) / (9 * 0.62))
 
 function hex(color: string): number {
   return Number.parseInt(color.slice(1), 16)
@@ -409,10 +427,15 @@ function shipState(ship: Ship, hull: Hull): Graphics {
   return state
 }
 
-/** A ship's project score, for how long her hull is drawn. */
+/**
+ * A ship's project score, for how long her hull is drawn.
+ *
+ * `shipPoints` and not a sum of its own: the number written under a ship and the number that made
+ * her that long have to be one number, or the drawing contradicts its own caption. It is also what
+ * `bySize` orders the harbour by, so the rows step down from the left for a visible reason.
+ */
 function scoreOf(ship: Ship): number {
-  const work = ship.ledger.total
-  return work.commits + work.pulls * 2
+  return shipPoints(ship).project
 }
 
 /**
@@ -540,11 +563,32 @@ function caption(ship: Ship, side: Side): Container {
   const met = binding.filter((quest) => quest.verdict === 'met').length
   const owed = binding.length === 0 ? 'ohne Forderung' : `${String(met)}/${String(binding.length)}`
   const detail = new Text({
-    text: fit(`${ageLabel(ship.rustDays)} · ${owed}`, CAPTION_CHARS + 6),
+    text: fit(`${ageLabel(ship.rustDays)} · ${owed}`, DETAIL_CHARS),
     style: LABEL_DIM,
   })
   detail.position.set(0, top + 14)
   group.addChild(detail)
+
+  /*
+   * The score, on its own line and in the same two marks the rest of the window uses.
+   *
+   * Its own line because it had been beside the name, and at `Leuchtturm ◆ 23.213 ● 3.796` that
+   * ran into the next berth — a caption is only allowed the width of its own pitch, and nothing
+   * here measures text. A line each is what does fit, always, without measuring anything.
+   *
+   * The personal count only where there is one: a `● 0` on eighty hulls is a column of zeroes that
+   * says nothing.
+   */
+  const points = shipPoints(ship)
+  const score = new Text({
+    text:
+      points.own > 0
+        ? `◆ ${FIGURE.format(points.project)}  ● ${FIGURE.format(points.own)}`
+        : `◆ ${FIGURE.format(points.project)}`,
+    style: LABEL_SCORE,
+  })
+  score.position.set(0, top + 26)
+  group.addChild(score)
 
   return group
 }
