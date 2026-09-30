@@ -33,16 +33,24 @@
       picked.value = ship
     })
     scene.draw(ships)
+    scene.highlight(picked.value)
   })
 
-  // Redrawn rather than diffed: a snapshot is replaced whole, and a scene of ninety-one hulls
+  // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
   // rebuilds in a frame. Diffing would be a second model of what is already on screen.
   watch(
     () => ships,
     (next) => {
       scene?.draw(next)
+      scene?.highlight(picked.value)
     },
   )
+
+  // The chosen ship is marked in the scene, not only in the sheet: a panel that says "this one"
+  // while the drawing says nothing leaves the reader to find it again by hand.
+  watch(picked, (ship) => {
+    scene?.highlight(ship)
+  })
 
   onBeforeUnmount(() => {
     scene?.destroy()
