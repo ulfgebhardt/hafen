@@ -28,6 +28,15 @@
   }>()
 
   /**
+   * Opening a row is also choosing that demand.
+   *
+   * The same choice a click on its box makes, so the box lights up in the harbour when the row is
+   * opened here. One choice and not two: a panel and a drawing that each remembered their own
+   * "current quest" would disagree the first time somebody used both.
+   */
+  const emit = defineEmits<{ choose: [string | null] }>()
+
+  /**
    * The evidence is collapsed by default and never absent.
    *
    * A verdict has to be arguable rather than believed — that is the whole reason every probe
@@ -36,6 +45,11 @@
    */
   const open = ref(false)
   const row = ref<HTMLElement | null>(null)
+
+  const toggle = (): void => {
+    open.value = !open.value
+    emit('choose', open.value ? quest.id : null)
+  }
 
   /**
    * Clicking a box in the harbour opens this row and brings it into view.
@@ -72,7 +86,7 @@
     <button
       class="flex w-full items-start gap-2 text-left hover:bg-slate-800/30"
       :aria-expanded="open"
-      @click="open = !open"
+      @click="toggle"
     >
       <span
         class="mt-px w-3 shrink-0 font-mono text-sm leading-5"

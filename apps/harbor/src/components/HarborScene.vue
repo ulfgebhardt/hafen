@@ -42,7 +42,7 @@
       demand.value = quest
     })
     scene.draw(ships)
-    scene.highlight(picked.value)
+    scene.highlight(picked.value, demand.value)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
@@ -51,14 +51,16 @@
     () => ships,
     (next) => {
       scene?.draw(next)
-      scene?.highlight(picked.value)
+      scene?.highlight(picked.value, demand.value)
     },
   )
 
   // The chosen ship is marked in the scene, not only in the sheet: a panel that says "this one"
   // while the drawing says nothing leaves the reader to find it again by hand.
-  watch(picked, (ship) => {
-    scene?.highlight(ship)
+  // One watcher for both: the drawing marks a ship *and* one of her boxes, and the two are set in
+  // the same breath — a watcher each would light the hull one tick before the box.
+  watch([picked, demand], ([ship, quest]) => {
+    scene?.highlight(ship, quest)
   })
 
   onBeforeUnmount(() => {

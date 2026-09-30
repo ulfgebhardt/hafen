@@ -14,6 +14,7 @@
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
   import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
+  import ShipPlan from './ShipPlan.vue'
   import TaskList from './TaskList.vue'
   import { RUST_LABEL, STAGE_LABEL, STAGE_MEANING } from './theme'
 
@@ -43,7 +44,13 @@
    * buttons on it. Archiving is what the register holds, and the register holds nothing else about
    * a ship — so there is no third one to add later without something changing shape first.
    */
-  const emit = defineEmits<{ measure: [string]; archive: [boolean]; enlist: [boolean] }>()
+  const emit = defineEmits<{
+    measure: [string]
+    archive: [boolean]
+    enlist: [boolean]
+    /** Which demand the reader pointed at, here or in the harbour — the same choice either way. */
+    pick: [string | null]
+  }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
   const notApplicable = computed(() =>
@@ -153,6 +160,15 @@
       </p>
     </header>
 
+    <!--
+      The same ship again, and every box on her is a target.
+      Beside the reading and not instead of it: the harbour answers "which of ninety", this
+      answers "which part of this one" — and at this size the boxes are big enough to hit.
+    -->
+    <section class="border-b border-slate-800 px-4 py-3">
+      <ShipPlan :ship="ship" :chosen="chosenQuest" @pick="emit('pick', $event)" />
+    </section>
+
     <section class="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-3">
       <div>
         <p class="text-[10px] tracking-wide text-slate-600 uppercase">Lage</p>
@@ -257,6 +273,7 @@
           :own="ship.ownQuests.includes(demand.id)"
           :task="taskForQuest(ship, demand.id)"
           :chosen="demand.id === chosenQuest"
+          @choose="emit('pick', $event)"
         />
       </div>
 

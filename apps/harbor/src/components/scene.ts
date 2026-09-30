@@ -72,7 +72,7 @@ import {
 } from './viewport'
 
 import type { Side, Spot } from './plan'
-import type { Hull } from './vessel'
+import type { Container as Container_, Hull } from './vessel'
 import type { Extent, Pan } from './viewport'
 import type { Ship } from '@hafen/core'
 import type { FederatedPointerEvent } from 'pixi.js'
@@ -295,15 +295,26 @@ export interface Scene {
    * the click that was specific.
    */
   onSelect: (handler: (ship: Ship | null, quest: string | null) => void) => void
-  /** Which ship to draw as chosen. */
-  highlight: (ship: Ship | null) => void
+  /**
+   * Which ship to draw as chosen, and which of her boxes.
+   *
+   * Both, because they mark different things: the hull says "this repository" and the box says
+   * "this demand". A reader who clicked a container and got only the hull lit up has been answered
+   * about something they did not ask.
+   */
+  highlight: (ship: Ship | null, quest?: string | null) => void
   destroy: () => void
 }
 
 /** One drawn berth, and the pieces the scene keeps a handle on. */
 interface Placed {
   ship: Ship
+  /** The halo under the hull. */
   chosen: Graphics
+  /** The ring around one box aboard — in the body, because the cargo moves with her. */
+  aboard: Graphics
+  /** The ring around one box on the planking, which does not move. */
+  ashore: Graphics
   body: Container
   hull: Hull
   restY: number
@@ -729,6 +740,9 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
       const body = new Container()
       const chosen = new Graphics()
+      const aboard = new Graphics()
+      const ashore = new Graphics()
+      quayside.addChild(ashore)
       body.scale.y = side
       body.position.y = side * offset * UNIT
       body.rotation = yawOf(berth.ship) * side
@@ -736,6 +750,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       slot.addChild(body)
 
       drawVessel(berth.ship, body, hull, offset)
+      // On top of the cargo: a ring under a box would be hidden by the box it marks.
+      body.addChild(aboard)
       slot.addChild(caption(berth.ship, side))
 
       // The whole berth — planking, ship and caption — answers to one ship. Exactly one pitch
@@ -757,6 +773,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       placed.push({
         ship: berth.ship,
         chosen,
+        aboard,
+        ashore,
         body,
         hull,
         restY: side * offset * UNIT,
@@ -847,8 +865,17 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
 
     pan = {
-      x: pan.x - (event.shiftKey ? event.deltaY : event.deltaX),
-      y: pan.y - (event.shiftKey ? 0 : event.deltaY),
+      /*
+       * Shift-wheel goes sideways — but only where the browser has not already done it.
+       *
+       * That is the bug this replaces: Chromium on Linux swaps the axes itself for a shift-wheel,
+       * so `deltaX` arrived set and `deltaY` arrived zero — and the old line, seeing `shiftKey`,
+       * read the zero. Sideways scrolling did nothing at all, on the one modifier meant for it.
+       * Asking whether there is a horizontal delta *first* covers both browsers and a trackpad,
+       * which sends both at once.
+       */
+      x: pan.x - (event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0),
+      y: pan.y - (event.deltaX === 0 && event.shiftKey ? 0 : event.deltaY),
     }
     settle()
   }
@@ -914,15 +941,43 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * ground because an outline around a body seen from a corner is a shape nobody reads at a
      * glance — that reason went with the view.
      */
-    highlight: (ship) => {
+    highlight: (ship, quest = null) => {
+      const accent = hex(SCENE.accent)
       for (const entry of placed) {
         entry.chosen.clear()
+        entry.aboard.clear()
+        entry.ashore.clear()
         if (entry.ship.path !== ship?.path) {
           continue
         }
-        const accent = hex(SCENE.accent)
+
         poly(entry.chosen, entry.hull.outline).fill({ color: accent, alpha: 0.16 })
         poly(entry.chosen, entry.hull.outline).stroke({ width: 6, color: accent, alpha: 0.9 })
+
+        if (quest === null) {
+          continue
+        }
+
+        /*
+         * The one box, ringed where it stands.
+         *
+         * Drawn rather than looked up: `cargoOf` and `landedOf` are the same two calls the drawing
+         * made, so the ring lands on the box by construction. A remembered rectangle would be a
+         * second opinion about where a box is.
+         */
+        const mark = (into: Graphics, boxes: readonly Container_[]): void => {
+          const box = boxes.find((one) => one.quest.id === quest)
+          if (box === undefined) {
+            return
+          }
+          slab(into, box.spot, box.along + 0.4, box.across + 0.4).stroke({
+            width: 2,
+            color: accent,
+            alpha: 0.95,
+          })
+        }
+        mark(entry.aboard, cargoOf(entry.ship, entry.hull))
+        mark(entry.ashore, landedOf(entry.ship))
       }
     },
     destroy: () => {
