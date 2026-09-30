@@ -33,7 +33,7 @@
 
   const hull = computed(() => hullOf(ship, shipPoints(ship).project))
   const cargo = computed(() => cargoOf(ship, hull.value))
-  const landed = computed(() => landedOf(ship))
+  const landed = computed(() => landedOf(ship, hull.value))
   const bridge = computed(() => bridgeOf(ship, hull.value))
 
   /**
@@ -43,7 +43,7 @@
    * counterpart in the detail view" is only true if the detail view draws the same elements —
    * a plan that showed the cargo and left out the stash would answer half the clicks.
    */
-  const marks = computed(() => [...pierMarks(ship), ...hullMarks(ship, hull.value)])
+  const marks = computed(() => [...pierMarks(ship, hull.value), ...hullMarks(ship, hull.value)])
 
   /**
    * The gangway, where anything is waiting on the planking.

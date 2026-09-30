@@ -72,6 +72,13 @@ import type { Extent, Pan } from './viewport'
 import type { ForgeStats, Ship } from '@hafen/core'
 import type { FederatedPointerEvent } from 'pixi.js'
 
+/**
+ * How wide a walkway is drawn, in pixels — and it is one number on purpose.
+ *
+ * The whole point of the change: a plank is a plank whether it carries the fleet or one ship.
+ */
+const PLANK = 3.4
+
 const LABEL = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 11,
@@ -170,10 +177,6 @@ function ground(harbour: Harbour, extent: Extent): Container {
   const width = extent.width
   const height = extent.height
 
-  const water = new Graphics()
-  water.rect(0, 0, width, height).fill(hex(SCENE.seaNear))
-  group.addChild(water)
-
   // A chart's ruling on the water: what gives the plan a scale at all.
   const grid = new Graphics()
   const step = 10 * UNIT
@@ -187,33 +190,44 @@ function ground(harbour: Harbour, extent: Extent): Container {
   group.addChild(grid)
 
   /*
-   * The quay: an L along the west and the south, wrapping the corner they share.
+   * The shore is the edge of the picture, all the way round.
    *
-   * Two shores and not one, because the walkways hang off it and a single wall would make every
-   * group's route start at the same point. The corner is where the trunk's root stands.
+   * It was an L along two sides, which left the basin open to the north and east and made the
+   * harbour look cropped rather than enclosed. A frame says the thing that is true: the water ends
+   * where the drawing does, and every dock reaches land because land is never far.
    */
   const quay = (MARGIN.x + QUAY) * UNIT
-  const south = height - (QUAY + GAP.y / 2) * UNIT
+  const inner = {
+    x: quay,
+    y: (MARGIN.y + QUAY / 2) * UNIT,
+    right: width - (QUAY / 2) * UNIT,
+    bottom: height - (QUAY / 2) * UNIT,
+  }
   const land = new Graphics()
-  land.rect(0, 0, quay, height).fill(hex(SCENE.land))
-  land.rect(0, south, width, height - south).fill(hex(SCENE.land))
+  land.rect(0, 0, width, height).fill(hex(SCENE.land))
   land
-    .moveTo(quay, 0)
-    .lineTo(quay, south)
-    .lineTo(width, south)
+    .rect(inner.x, inner.y, inner.right - inner.x, inner.bottom - inner.y)
+    .fill(hex(SCENE.seaNear))
+  land
+    .rect(inner.x, inner.y, inner.right - inner.x, inner.bottom - inner.y)
     .stroke({ width: 1.2, color: hex(SCENE.quayEdge), alpha: 0.55 })
   group.addChild(land)
 
   /*
-   * The riprap along the southern shore.
+   * The riprap along the shore, right round the basin.
    *
    * Irregular on purpose and irregular the same way every time: a row of identical stones reads as
    * a pattern and a random one reads as a different harbour each visit.
    */
   const stones = new Graphics()
   const next = sequence(19)
-  for (let x = quay; x < width; x += 7) {
-    stones.circle(x + next() * 5, south + next() * 8, (3.5 + next() * 3) * (UNIT / 5))
+  for (let x = inner.x; x < inner.right; x += 7) {
+    stones.circle(x + next() * 5, inner.bottom - next() * 6, (3 + next() * 2.5) * (UNIT / 5))
+    stones.circle(x + next() * 5, inner.y + next() * 6, (3 + next() * 2.5) * (UNIT / 5))
+  }
+  for (let y = inner.y; y < inner.bottom; y += 7) {
+    stones.circle(inner.x + next() * 6, y + next() * 5, (3 + next() * 2.5) * (UNIT / 5))
+    stones.circle(inner.right - next() * 6, y + next() * 5, (3 + next() * 2.5) * (UNIT / 5))
   }
   stones.fill({ color: hex(SCENE.crane), alpha: 0.14 })
   group.addChild(stones)
@@ -228,18 +242,28 @@ function ground(harbour: Harbour, extent: Extent): Container {
    * Thickness by rank: a trunk carries the whole harbour, a spine carries one group's two rows.
    * Nothing about it is measured, and it is here rather than in the layout for that reason.
    */
+  /*
+   * **One plank, and only one.**
+   *
+   * The harbour used to draw two kinds of walkway — a fourteen-unit pier that carried the cargo
+   * and a thin tube that carried nothing — and the two read as different objects rather than as
+   * the same thing serving different places. The load moved to the aprons, so a plank is a plank:
+   * the same width and the same boards under a trunk as under the last twig.
+   *
+   * What still varies is the *flag* it carries, and only where one applies: a walkway inside a
+   * dock is that organisation's, the ones between docks are everybody's.
+   */
   const planks = new Graphics()
-  const WIDTHS = { root: 5, trunk: 5, avenue: 3.4, riser: 3.4, spine: 3.6 } as const
   for (const walk of walksOf(harbour)) {
     const from = project(walk.from)
     const to = project(walk.to)
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
-    planks.stroke({ width: WIDTHS[walk.rank], color: hex(SCENE.quay), alpha: 1 })
+    planks.stroke({ width: PLANK, color: hex(SCENE.quay), alpha: 1 })
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
     planks.stroke({
-      width: WIDTHS[walk.rank],
+      width: PLANK,
       color: walk.org === null ? hex(SCENE.quayEdge) : flagTint(walk.org),
-      alpha: walk.org === null ? 0.5 : 0.3,
+      alpha: walk.org === null ? 0.5 : 0.32,
     })
   }
   group.addChild(planks)
@@ -266,14 +290,13 @@ function ground(harbour: Harbour, extent: Extent): Container {
   group.addChild(extra)
 
   /*
-   * The planking each group's ships lie against — only as long as the berths that use it.
+   * The berths' own planking, and it is the same plank as everything else.
    *
-   * Drawn from the moorings rather than from the block, and the difference shows on every group
-   * whose last row is short: a full-width slab under four ships and a gap looked like a pier
-   * somebody forgot to finish, and at 25 groups the harbour was mostly empty concrete.
+   * Drawn from the moorings rather than from the block, so it is only as long as the berths that
+   * use it: a full-width slab under four ships and a gap looked like a pier somebody forgot to
+   * finish, and at 25 docks the harbour was mostly empty concrete.
    */
-  const decks = new Graphics()
-  const marking = new Graphics()
+  const berths = new Graphics()
   for (const block of harbour.blocks) {
     const piers = Math.floor(block.rows / 2) + 1
     for (let pier = 0; pier < piers; pier += 1) {
@@ -283,24 +306,14 @@ function ground(harbour: Harbour, extent: Extent): Container {
       if (used.length === 0) {
         continue
       }
-      const from = Math.min(...used.map((one) => one.spot.x))
+      const from = Math.min(...used.map((one) => one.spot.x)) - 1
       const to = Math.max(...used.map((one) => one.spot.x)) + BERTH.pitch
-      const top = (block.at.y + pier * BLOCK) * UNIT
-      decks.rect(from * UNIT, top, (to - from) * UNIT, BERTH.pier * UNIT)
-      // Both edges are working edges: a ship lies against each of them.
-      marking.moveTo(from * UNIT, top).lineTo(to * UNIT, top)
-      marking
-        .moveTo(from * UNIT, top + BERTH.pier * UNIT)
-        .lineTo(to * UNIT, top + BERTH.pier * UNIT)
-      for (let x = from; x <= to; x += BERTH.pitch) {
-        marking.moveTo(x * UNIT, top).lineTo(x * UNIT, top + BERTH.pier * UNIT)
-      }
+      const mid = (block.at.y + pier * BLOCK + BERTH.pier / 2) * UNIT
+      berths.moveTo(from * UNIT, mid).lineTo(to * UNIT, mid)
     }
   }
-  decks.fill(hex(SCENE.quay))
-  marking.stroke({ width: 1, color: hex(SCENE.quayEdge), alpha: 0.5 })
-  group.addChild(decks)
-  group.addChild(marking)
+  berths.stroke({ width: PLANK, color: hex(SCENE.quay), alpha: 1 })
+  group.addChild(berths)
 
   return group
 }
@@ -417,10 +430,10 @@ interface Placed {
  * them answer "what is there to do here", and that is what the pier is. Everything that is
  * *finished* is aboard, and the rail between the two is the whole reading.
  */
-function pierLoad(ship: Ship): Graphics {
+function pierLoad(ship: Ship, hull: Hull): Graphics {
   const load = new Graphics()
 
-  const owed = landedOf(ship)
+  const owed = landedOf(ship, hull)
   for (const box of owed) {
     const color = hex(VERDICT_COLOR[box.quest.verdict])
     const form = SEGMENT[box.quest.verdict]
@@ -448,7 +461,7 @@ function pierLoad(ship: Ship): Graphics {
    * Placed by `pierMarks` and only stroked here: where a crate sits now has a second reader — the
    * hit test — and two placements of one crate would be two answers to "what did I just click on".
    */
-  for (const box of pierMarks(ship)) {
+  for (const box of pierMarks(ship, hull)) {
     const color = hex(MARK_COLOR[box.kind])
     const crate = slab(load, box.spot, box.along, box.across)
     if (box.kind === 'untracked') {
@@ -460,11 +473,11 @@ function pierLoad(ship: Ship): Graphics {
 
   // The `+` that says a count was cut, once per kind, after its last drawn crate.
   for (const kind of new Set(
-    pierMarks(ship)
+    pierMarks(ship, hull)
       .filter((box) => box.capped)
       .map((box) => box.kind),
   )) {
-    const last = pierMarks(ship)
+    const last = pierMarks(ship, hull)
       .filter((box) => box.kind === kind)
       .at(-1)
     if (last === undefined) {
@@ -804,7 +817,7 @@ function drawVessel(
    * is work here" without counting anything, because the eye finds a line between two shapes
    * before it finds a crate among crates.
    */
-  if (pierMarks(ship).length > 0) {
+  if (pierMarks(ship, hull).length > 0) {
     const plank = gangwayOf(hull, offset)
     const from = project(plank.from)
     const to = project(plank.to)
@@ -1042,13 +1055,13 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
          * own and cannot overlap them anyway. Hit-tested against the same lists the renderer
          * strokes, so nothing can be drawn in one place and answered for in another.
          */
-        const quest = questAt(cargoOf(ship, hull), onDeck) ?? questAt(landedOf(ship), onPier)
+        const quest = questAt(cargoOf(ship, hull), onDeck) ?? questAt(landedOf(ship, hull), onPier)
         if (quest !== null) {
           selected(ship, { kind: 'quest', id: quest })
           return
         }
 
-        const mark = boxAt(hullMarks(ship, hull), onDeck) ?? boxAt(pierMarks(ship), onPier)
+        const mark = boxAt(hullMarks(ship, hull), onDeck) ?? boxAt(pierMarks(ship, hull), onPier)
         if (mark !== null) {
           selected(ship, { kind: 'mark', mark: mark.kind })
           return
@@ -1056,7 +1069,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
         // Last, because it is the widest target and stands for the least specific thing.
         const plank =
-          pierMarks(ship).length > 0 && boxAt([gangwayBox(hull, offset)], onDeck) !== null
+          pierMarks(ship, hull).length > 0 && boxAt([gangwayBox(hull, offset)], onDeck) !== null
         selected(ship, plank ? PIER : null)
       }
 
@@ -1076,7 +1089,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       // The planking: it belongs to the berth, so it is mirrored with the side and never moved.
       const quayside = new Container()
       quayside.scale.y = side
-      quayside.addChild(pierLoad(berth.ship))
+      quayside.addChild(pierLoad(berth.ship, hull))
       slot.addChild(quayside)
 
       const body = new Container()
@@ -1347,7 +1360,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
             }
           }
           ring(entry.aboard, hullMarks(entry.ship, entry.hull))
-          ring(entry.ashore, pierMarks(entry.ship))
+          ring(entry.ashore, pierMarks(entry.ship, entry.hull))
           continue
         }
 
@@ -1359,7 +1372,10 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
          * clicking the plank and clicking that one crate the same act.
          */
         if (chosen.kind === 'pier') {
-          for (const box of [...landedOf(entry.ship), ...pierMarks(entry.ship)]) {
+          for (const box of [
+            ...landedOf(entry.ship, entry.hull),
+            ...pierMarks(entry.ship, entry.hull),
+          ]) {
             slab(entry.ashore, box.spot, box.along + 0.4, box.across + 0.4).stroke({
               width: 2,
               color: accent,
@@ -1395,7 +1411,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
           })
         }
         mark(entry.aboard, cargoOf(entry.ship, entry.hull))
-        mark(entry.ashore, landedOf(entry.ship))
+        mark(entry.ashore, landedOf(entry.ship, entry.hull))
       }
     },
     destroy: () => {

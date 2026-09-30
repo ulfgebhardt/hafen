@@ -231,41 +231,63 @@ export const LANDED = {
 } as const
 
 /**
- * How many boxes stand in one row along the pier before the next row starts.
+ * The apron: the water-level space in the berth **ahead of the bow**, where her load waits.
  *
- * As many as the pitch holds, worked out rather than picked: a berth is `BERTH.pitch` wide, a box
- * and its gap are `along + gap`, and the row starts an inset in. Picked, this was eight, and the
- * rows it cost were rows there was no room for — half a pier holds three.
+ * It used to lie on the planking, spread along a 14-unit-deep pier. That gave the harbour two
+ * kinds of walkway — a broad loaded one under the ships and a thin one between the docks — and one
+ * kind was asked for. Ahead of the bow is also where it belongs to be read: coming down the jetty
+ * you pass what she still owes before you reach her.
+ *
+ * Stacked rather than strung out. A row of eleven crates says "a lot" and nothing else; a block
+ * three deep is countable at a glance, which is the only thing a crate does better than a number.
  */
-export const LANDED_PER_ROW = Math.floor(
-  (BERTH.pitch - 2 * LANDED.first) / (LANDED.along + LANDED.gap),
-)
-
-/** How much of the pier belongs to the ship on one side of it. */
-export const PIER_SHARE = BERTH.pier / 2
+export const APRON = {
+  /** Clear of the stem, so the stack never touches her. */
+  ahead: 2.6,
+  /** And clear of the next berth's stern. */
+  behind: 2.2,
+} as const
 
 /**
- * Where row `index` sits across the pier, in the hull's own coordinates.
+ * How many boxes stand across the stack before the next row starts.
  *
- * Measured from the middle of the planking outwards, because the other half is the other ship's
- * and the two must not meet. The rows therefore start beside her and run away from her, which is
- * also the order a person reads them in: what is nearest the ship is what is most nearly aboard.
+ * Worked out from the *longest* hull rather than from each one, so the answer is a constant: a
+ * berth is `BERTH.pitch`, the biggest ship takes `SIZE.maxLength` of it, and what is left minus
+ * the two clearances is the apron every ship gets. A per-ship count would make a small repository
+ * stack its crates differently from a large one for a reason that is about the large one.
+ */
+export const LANDED_PER_ROW = Math.max(
+  1,
+  Math.floor(
+    (BERTH.pitch - SIZE.maxLength - APRON.ahead - APRON.behind + LANDED.gap) /
+      (LANDED.along + LANDED.gap),
+  ),
+)
+
+/**
+ * How deep the stack may grow, across the berth.
+ *
+ * Bounded by the ship's own beam rather than by the lane: a stack wider than the vessel it is
+ * waiting for reads as two ships' cargo run together, which is exactly the confusion the old
+ * half-a-pier-each rule existed to prevent.
+ */
+export const PIER_ROWS = Math.max(2, Math.floor(SIZE.maxBeam / LANDED.pitch))
+
+/**
+ * Where row `index` sits across the apron, in the hull's own coordinates.
+ *
+ * Centred on her centreline and growing towards the planking, so the nearest row is the one a
+ * person walking the jetty meets first — the same reading order as everything else here.
  */
 export function pierRowY(index: number): number {
-  return -(BERTH.laneCentre + PIER_SHARE) + LANDED.first + index * LANDED.pitch
+  return -((PIER_ROWS - 1) * LANDED.pitch) / 2 + index * LANDED.pitch
 }
-
-/** How many rows of boxes this ship's half of the planking holds. */
-export const PIER_ROWS =
-  Math.floor((PIER_SHARE - LANDED.first - LANDED.across / 2) / LANDED.pitch) + 1
 
 /**
  * The row the repository's own untidiness stands in: the last one, always.
  *
  * Reserved rather than appended after whatever the demands used, because the two are laid out by
- * different code and an appended row is a row that lands on top of a full one. The outermost row
- * is also the right one for it: the nearer the ship, the nearer to being aboard, and a stash is
- * the furthest thing from that.
+ * different code and an appended row is a row that lands on top of a full one.
  */
 export const MARK_ROW = PIER_ROWS - 1
 
@@ -274,8 +296,13 @@ export function pierRows(count: number): number {
   return Math.ceil(Math.max(count, 0) / LANDED_PER_ROW)
 }
 
-/** How many demands fit on the planking before the drawing would have to lie about the rest. */
+/** How many demands fit on the apron before the drawing would have to lie about the rest. */
 export const LANDED_CAP = LANDED_PER_ROW * MARK_ROW
+
+/** Where the stack begins, ahead of this ship's stem. */
+export function apronX(hull: Hull): number {
+  return hull.length + APRON.ahead
+}
 
 export interface Landed {
   quest: QuestResult
@@ -294,17 +321,18 @@ export interface Landed {
  *
  * Worst first, along the pier from the stern — the same reading order as everything else here.
  */
-export function landedOf(ship: Ship): readonly Landed[] {
+export function landedOf(ship: Ship, hull: Hull): readonly Landed[] {
   const quests = orderedQuests(bindingQuests(ship.quests))
     .filter((quest) => quest.verdict !== 'met')
     .slice(0, LANDED_CAP)
+  const from = apronX(hull)
 
   return quests.map((quest, index) => ({
     quest,
     along: LANDED.along,
     across: LANDED.across,
     spot: {
-      x: 1.2 + (index % LANDED_PER_ROW) * (LANDED.along + LANDED.gap) + LANDED.along / 2,
+      x: from + (index % LANDED_PER_ROW) * (LANDED.along + LANDED.gap) + LANDED.along / 2,
       y: pierRowY(Math.floor(index / LANDED_PER_ROW)),
     },
   }))
@@ -460,16 +488,17 @@ const ON_THE_PIER = new Set<MarkKind>([
  * One row and not one per kind: half a pier holds three rows, and a row per kind wanted five. The
  * kinds are told apart by colour and by fill, never by which row they are in.
  */
-export function pierMarks(ship: Ship): readonly MarkBox[] {
+export function pierMarks(ship: Ship, hull: Hull): readonly MarkBox[] {
   const out: MarkBox[] = []
   const y = pierRowY(MARK_ROW)
-  let at = LANDED.first
+  const edge = apronX(hull) + LANDED_PER_ROW * (LANDED.along + LANDED.gap)
+  let at = apronX(hull)
 
   for (const mark of marksOf(ship)) {
     if (!ON_THE_PIER.has(mark.kind)) {
       continue
     }
-    for (let index = 0; index < drawn(mark) && at + MARK.along < BERTH.pitch - 2; index += 1) {
+    for (let index = 0; index < drawn(mark) && at + MARK.along <= edge; index += 1) {
       out.push({
         kind: mark.kind,
         capped: isCapped(mark),
