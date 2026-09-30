@@ -19,7 +19,9 @@
  * would flatter whoever stands nearest the biggest repository.
  */
 
+import { staleBranches } from './branches'
 import { bindingQuests } from './chain'
+import { strayTenders } from './submodules'
 import { COMMIT_KINDS } from './work'
 
 import type { Ship } from './ship'
@@ -67,11 +69,65 @@ export function scoreWork(work: Work): number {
   return points + work.pulls * PULL_POINTS
 }
 
+/**
+ * What one distinct author is worth to a repository.
+ *
+ * A project 488 people built is a different thing from one person's notes, and commit count alone
+ * does not say which is which: three authors and ten thousand commits and three hundred authors
+ * and ten thousand commits are two different projects with the same history length. Measured here:
+ * 1 459 authors over 92 repositories.
+ */
+export const AUTHOR_POINTS = 20
+
+/**
+ * What one check is worth, counted per member and role.
+ *
+ * Per (member, role) and never per script name, which is the same trap `spanWeight` avoids: a
+ * repository does not run twice the engineering because somebody split `test` into `test:unit`
+ * and `test:integration`. Measured: 206 distinct pairs over the fleet, 40 in the widest.
+ *
+ * Worth more than a commit because it keeps paying — a check runs on every commit after it, for
+ * years, without anybody doing it again.
+ */
+export const CHECK_POINTS = 40
+
+/** What one role covered by CI is worth, on top of the check itself running somewhere. */
+export const CI_POINTS = 60
+
 export interface ShipPoints {
   /** Everything the repository accumulated, every author. */
   project: number
   /** The share of it belonging to the reader. */
   own: number
+  /**
+   * Where the project score came from.
+   *
+   * Broken out because the whole number looked like a commit counter, and mostly was: with 107 491
+   * commits against 206 checks, no weight a check could honestly carry would show up in one
+   * figure. What fixes that is saying what went in, not inflating the smaller terms until they
+   * look important.
+   */
+  from: {
+    work: number
+    authors: number
+    checks: number
+    ci: number
+  }
+}
+
+/**
+ * Distinct (member, role) pairs — the checks a repository actually runs.
+ *
+ * A script whose role could not be read counts once for its member and no more: it is a check,
+ * and which of the four it is does not change that. Counting it by name instead would pay a
+ * repository for how many ways it spells "test".
+ */
+export function coveredChecks(ship: Ship): number {
+  return new Set(
+    ship.contract.members.flatMap((member) =>
+      member.checks.map((check) => `${member.dir}:${check.role ?? '?'}`),
+    ),
+  ).size
 }
 
 /**
@@ -83,9 +139,19 @@ export interface ShipPoints {
  * would let a repository buy its way out of a violated contract with commit volume.
  */
 export function shipPoints(ship: Ship): ShipPoints {
+  const from = {
+    work: scoreWork(ship.ledger.total),
+    authors: ship.ledger.total.authors * AUTHOR_POINTS,
+    checks: coveredChecks(ship) * CHECK_POINTS,
+    ci: ship.contract.inCi.length * CI_POINTS,
+  }
   return {
-    project: scoreWork(ship.ledger.total),
+    project: from.work + from.authors + from.checks + from.ci,
+    // The reader's share stays commits and pull requests alone: the authors, the checks and the
+    // CI belong to the *project*, and handing them to whoever happens to have the checkout is the
+    // conflation the two scores exist to prevent.
     own: scoreWork(ship.ledger.own),
+    from,
   }
 }
 
@@ -202,9 +268,31 @@ export interface FleetPoints {
   clean: number
   /** And how many are active. */
   active: number
+  /** And how many carry no stale branch and no stray submodule. */
+  kept: number
   /** Quests met, over quests that bind — so `contracts` reads as a ratio. */
   met: number
   binding: number
+}
+
+/**
+ * Points for a repository carrying no stale branch and no stray submodule.
+ *
+ * Beside `tidy` and not folded into it, because `isClean` answers a question other readers already
+ * ask — the stage, the bands, the exemplary flourish — and widening it there would change all of
+ * them at once for a reason that belongs to the score. Measured: 44 of 92 repositories are clean,
+ * 29 of those also carry nothing stale. Achievable, and not already true.
+ */
+export const KEPT_POINTS = 4
+
+/**
+ * Whether a repository is tidy *beyond* its working tree.
+ *
+ * A merged branch and a submodule that was never checked out are both work lying about — they cost
+ * nothing visible and accumulate for years. This is the part of the score that notices.
+ */
+export function isKept(ship: Ship): boolean {
+  return staleBranches(ship.branches).length === 0 && strayTenders(ship.submodules).length === 0
 }
 
 /** Whether a repository is in a state its owner could walk away from. */
@@ -232,8 +320,9 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
   const quests = ships.flatMap((ship) => bindingQuests(ship.quests))
   const met = quests.filter((quest) => quest.verdict === 'met').length
 
+  const kept = ships.filter(isKept).length
   const breadth = active * BREADTH_POINTS
-  const tidy = clean * SHIPSHAPE_POINTS
+  const tidy = clean * SHIPSHAPE_POINTS + kept * KEPT_POINTS
   // Per ship and not over the flat list: what a demand is worth depends on how wide the repository
   // it was met on is, and a flat count cannot see which ship a quest came from.
   const contracts = ships.reduce(
@@ -253,6 +342,7 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
     fleet: ships.length,
     clean,
     active,
+    kept,
     met,
     binding: quests.length,
   }
@@ -260,7 +350,7 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
 
 /** The fleet's own total, for the harbour's header. */
 export function projectPoints(ships: readonly Ship[]): number {
-  return ships.reduce((sum, ship) => sum + scoreWork(ship.ledger.total), 0)
+  return ships.reduce((sum, ship) => sum + shipPoints(ship).project, 0)
 }
 
 /**
@@ -271,7 +361,7 @@ export function projectPoints(ships: readonly Ship[]): number {
  */
 export function byProjectPoints(a: Ship, b: Ship): number {
   return (
-    scoreWork(b.ledger.total) - scoreWork(a.ledger.total) ||
+    shipPoints(b).project - shipPoints(a).project ||
     `${a.org}/${a.name}`.localeCompare(`${b.org}/${b.name}`)
   )
 }

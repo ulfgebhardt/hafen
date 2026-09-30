@@ -71,6 +71,20 @@
   const checks = computed(() => contractChecks(ship.contract))
   const points = computed(() => shipPoints(ship))
 
+  /** The named parts of the project score, in the order they are worth reading. */
+  const PART_LABEL = {
+    work: 'Commits & PRs',
+    authors: 'Autoren',
+    checks: 'Prüfungen',
+    ci: 'in CI',
+  } as const
+
+  const breakdown = computed(() =>
+    (Object.keys(PART_LABEL) as (keyof typeof PART_LABEL)[])
+      .map((key) => ({ name: PART_LABEL[key], value: points.value.from[key] }))
+      .filter((part) => part.value > 0),
+  )
+
   /**
    * Only what the repository itself is asking for.
    *
@@ -103,20 +117,31 @@
    * a panel starts stuttering.
    */
   const head = useTemplateRef<HTMLElement>('head')
-  const headroom = ref(0)
+  const measured = ref(0)
 
   onMounted(() => {
     if (head.value === null) {
       return
     }
     const watcher = new ResizeObserver(([entry]) => {
-      headroom.value = entry?.target.getBoundingClientRect().height ?? 0
+      measured.value = entry?.target.getBoundingClientRect().height ?? 0
     })
     watcher.observe(head.value)
     onBeforeUnmount(() => {
       watcher.disconnect()
     })
   })
+
+  /**
+   * A little more than the header is tall.
+   *
+   * Two reasons it has to be more, and both showed up as a row clipped along its top edge. The
+   * header *shrinks* as the scroll happens, so at the moment the browser computes where to stop it
+   * is still measuring the tall one — and the marked row is drawn with a ring a pixel outside its
+   * own box, which a margin of exactly the header's height cuts through.
+   */
+  const CLEARANCE = 10
+  const headroom = computed(() => measured.value + CLEARANCE)
 
   const onScroll = (event: Event): void => {
     scrolled.value = (event.target as HTMLElement).scrollTop > 12
@@ -259,6 +284,20 @@
       <p v-if="ship.ledger.total.unscored > 0" class="text-[11px] text-slate-600">
         {{ ship.ledger.total.unscored }} ohne Convention
       </p>
+
+      <!--
+        Where the project score came from.
+        The whole figure looked like a commit counter, and mostly was: with a hundred thousand
+        commits against two hundred checks, no weight a check could honestly carry would show up
+        in one number. Saying what went in is what fixes that — not inflating the smaller terms
+        until they look important. A term worth nothing is left out rather than written as zero.
+      -->
+      <dl class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[11px]">
+        <template v-for="part in breakdown" :key="part.name">
+          <dt class="text-slate-600">{{ part.name }}</dt>
+          <dd class="text-slate-500">{{ part.value.toLocaleString('de-DE') }}</dd>
+        </template>
+      </dl>
     </section>
 
     <section class="border-b border-slate-800 px-4 py-3">

@@ -52,6 +52,7 @@ import {
   cargoOf,
   hasPlume,
   hullOf,
+  gangwayOf,
   hullMarks,
   landedOf,
   mooringOf,
@@ -549,14 +550,32 @@ function drawVessel(ship: Ship, into: Container, hull: Hull, offset: number): vo
   const condition = conditionOf(ship)
   const plate = hex(HULL_COLOR[rustLevel(ship.rustDays)])
 
-  const mooring = new Graphics()
+  const rigging = new Graphics()
+  /*
+   * The gangway, where anything is waiting on the planking.
+   *
+   * Thicker than a mooring line and drawn in the same steel: it is the one mark that says "there
+   * is work here" without counting anything, because the eye finds a line between two shapes
+   * before it finds a crate among crates.
+   */
+  if (pierMarks(ship).length > 0) {
+    const plank = gangwayOf(hull, offset)
+    const from = project(plank.from)
+    const to = project(plank.to)
+    rigging
+      .moveTo(from.x, from.y)
+      .lineTo(to.x, to.y)
+      .stroke({ width: 3, color: hex(SCENE.crane), alpha: 0.5 })
+  }
+
+  const mooring = rigging
   for (const line of mooringOf(hull, offset)) {
     const from = project(line.from)
     const to = project(line.to)
     mooring.moveTo(from.x, from.y).lineTo(to.x, to.y)
   }
   mooring.stroke({ width: 1, color: hex(SCENE.mooring), alpha: 0.55 })
-  into.addChild(mooring)
+  into.addChild(rigging)
 
   const shape = new Graphics()
   poly(shape, hull.outline).fill({ color: plate, alpha: 0.22 })
@@ -576,6 +595,25 @@ function drawVessel(ship: Ship, into: Container, hull: Hull, offset: number): vo
       shape.moveTo(at.x, at.y - 0.3 * UNIT).lineTo(at.x + 0.9 * UNIT, at.y)
     }
     shape.stroke({ width: 1.2, color: hex('#b08a68'), alpha: 0.6 })
+  }
+  /*
+   * Scuffing across the plating, one streak per unit of untidiness.
+   *
+   * The complaint this answers: the marks that stood for work-to-do made a ship *more* interesting
+   * to look at, so a neglected repository was the better drawing. They live on the pier now, and
+   * what is left on the hull goes the other way — the more there is to tidy, the worse she looks.
+   * Short cross-strokes and not a wash, for the same reason the rust marks are strokes: colour is
+   * spoken for by the verdicts, and a stroke survives greyscale.
+   */
+  const scuff = Math.round((1 - condition.hygiene) * 7)
+  for (let index = 0; index < scuff; index += 1) {
+    const t = 0.12 + (index / Math.max(scuff, 1)) * 0.7
+    const at = project({ x: hull.length * t, y: 0 })
+    const arm = hull.beam * 0.22 * UNIT
+    shape.moveTo(at.x - arm * 0.5, at.y - arm).lineTo(at.x + arm * 0.5, at.y + arm)
+  }
+  if (scuff > 0) {
+    shape.stroke({ width: 1, color: hex(SCENE.skyTop), alpha: 0.5 })
   }
   into.addChild(shape)
 

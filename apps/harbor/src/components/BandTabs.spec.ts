@@ -6,17 +6,21 @@ import { ship } from './testing'
 
 describe('filtering a page', () => {
   /**
-   * The counts beside each tab go on counting the whole fleet: a tab that said "Aktiv 2" because
-   * somebody typed a letter would answer a different question from the one the tab asks.
+   * It hands the query up and counts whatever it is given back. Filtering happens above it, so the
+   * counts and the points beside each tab describe what is actually on screen.
    */
-  it('hands the query up and leaves the counts alone', async () => {
-    const fleet = [ship({ name: 'werft' }), ship({ name: 'hafen', path: '/x/hafen' })]
+  it('hands the query up and counts what it was handed', async () => {
+    const hafen = ship({ name: 'hafen', path: '/x/hafen' })
+    const fleet = [ship({ name: 'werft' }), hafen]
     const tabs = mount(BandTabs, { props: { band: 'active', ships: fleet } })
 
     await tabs.find('input').setValue('hafen')
 
     expect(tabs.emitted('update:query')).toStrictEqual([['hafen']])
-    expect(tabs.text()).toContain('2')
+
+    await tabs.setProps({ ships: [hafen] })
+
+    expect(tabs.text()).toContain('Aktiv1')
   })
 
   it('lets the filter be dropped again', async () => {

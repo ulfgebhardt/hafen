@@ -18,7 +18,7 @@
   import { isMark, isQuest } from './chosen'
   import { MARK_LABEL, MARK_MEANING } from './marks'
   import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR, VERDICT_LABEL } from './theme'
-  import { bridgeOf, cargoOf, hullMarks, hullOf, landedOf, pierMarks } from './vessel'
+  import { bridgeOf, cargoOf, gangwayOf, hullMarks, hullOf, landedOf, pierMarks } from './vessel'
 
   import type { Chosen } from './chosen'
   import type { Ship } from '@hafen/core'
@@ -44,6 +44,16 @@
    * a plan that showed the cargo and left out the stash would answer half the clicks.
    */
   const marks = computed(() => [...pierMarks(ship), ...hullMarks(ship, hull.value)])
+
+  /**
+   * The gangway, where anything is waiting on the planking.
+   *
+   * The same line the harbour draws, from the same function — it says "there is work here" without
+   * counting anything, and a plan that left it out would be a plan of a different ship.
+   */
+  const gangway = computed(() =>
+    marks.value.some((box) => box.spot.y < -hull.value.beam / 2) ? gangwayOf(hull.value, 0) : null,
+  )
 
   /**
    * The drawing's own box, in the ship's coordinates.
@@ -118,6 +128,18 @@
       :stroke="SCENE.crane"
       stroke-opacity="0.8"
       stroke-width="1"
+    />
+
+    <!-- The plank from the planking to her deck, where anything is waiting on it. -->
+    <line
+      v-if="gangway !== null"
+      :x1="gangway.from.x"
+      :y1="gangway.from.y"
+      :x2="gangway.to.x"
+      :y2="gangway.to.y"
+      :stroke="SCENE.crane"
+      stroke-opacity="0.5"
+      stroke-width="3"
     />
 
     <!-- The accommodation block aft, so the drawing reads bow-forward without a label. -->
