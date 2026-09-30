@@ -55,10 +55,19 @@ Was die Flotte fordert, liegt als Markdown im Store — `$HAFEN_STORE`, sonst
 
 ```
 ~/.local/share/hafen/
-  quests/werft/lint.md
-  quests/werft/typecheck.md
+  quests/werft/lint.md              # ein Schritt misst Lint, und die CI ruft ihn auf
+  quests/werft/gitignore.md         # .gitignore liegt im Wurzelverzeichnis
+  quests/werft/env-ignoriert.md     # sie nennt .env, bevor jemand eine anlegt
+  quests/flagge/lizenz.md           # LICENSE, LICENCE oder COPYING — eine davon
+  quests/auslauf/release-please.md  # der Release-Weg liegt im Repo
   register.md
 ```
+
+Die Kette vor der Id ist keine Ordnung zum Sortieren, sondern die aus Konzept §4: `werft` ist
+Technik, `auslauf` der Weg nach draußen, `flagge` was das Projekt über sich sagt. Eine Quest
+nennt ihre Prüfung im Frontmatter, ihre Begründung im Fließtext, und was sie **nicht** messen
+kann, benennt sie als `manuell` — der blinde Fleck soll klein und benannt sein, statt still zu
+wachsen.
 
 Der Store bleibt **lokal**. `register.md` führt jedes Repo mit absolutem Pfad, und das ist eine
 Liste von Projekten und Kunden — nichts, was in ein öffentliches Repository gehört.
@@ -91,13 +100,13 @@ Schlüssel und nie erster, denn frisch ist nicht dasselbe wie wichtig.
 **Daneben steht, was das Repo selbst gerade tut** — zwei verschiedene Fragen, also zwei Orte am
 Schiff. Das Deck ist die Forderung der Flotte, Fracht und Flaggen sind der lokale Stand:
 
-| Zeichen | Bedeutung | Zeichen | Bedeutung |
-| --- | --- | --- | --- |
-| Kiste, gefüllt | vorgemerkt (staged) | Wimpel am Mast | nicht gepusht |
-| Kiste, offen | geändert | Schleifspur am Heck | Remote ist voraus |
-| Kiste, gestrichelt | unverzeichnet | Kisten am Kai | Stash |
-| Bruch im Rumpf | Konflikt — hier ist Schluss | Boote längsseits | weitere Worktrees |
-| Haken | sauber, auf seinem Branch | | |
+| Zeichen            | Bedeutung                   | Zeichen             | Bedeutung         |
+| ------------------ | --------------------------- | ------------------- | ----------------- |
+| Kiste, gefüllt     | vorgemerkt (staged)         | Wimpel am Mast      | nicht gepusht     |
+| Kiste, offen       | geändert                    | Schleifspur am Heck | Remote ist voraus |
+| Kiste, gestrichelt | unverzeichnet               | Kisten am Kai       | Stash             |
+| Bruch im Rumpf     | Konflikt — hier ist Schluss | Boote längsseits    | weitere Worktrees |
+| Haken              | sauber, auf seinem Branch   |                     |                   |
 
 Der Bruch steht für sich, weil ein Konflikt keine schwerere Fracht ist, sondern **gestoppte**
 Arbeit. Der Haken ist da, damit „sauber" sichtbar ist statt als Abwesenheit von Zeichen — so
@@ -120,11 +129,11 @@ pnpm hafen punkte
 
 Zwei Zahlen, nebeneinander und **nie addiert**:
 
-- **Projektpunkte** sagen, was ein *Repository* angesammelt hat — alle Autoren. Ein geschäftiges
+- **Projektpunkte** sagen, was ein _Repository_ angesammelt hat — alle Autoren. Ein geschäftiges
   gemeinsames Projekt steht hoch, und das ist richtig: die Zahl beschreibt das Projekt.
-- **Deine Punkte** sagen, was *du* mit deiner Flotte gemacht hast. Eigene Commits, plus zwei
+- **Deine Punkte** sagen, was _du_ mit deiner Flotte gemacht hast. Eigene Commits, plus zwei
   Dinge, die kein einzelnes Repository zeigen kann: wie viele Projekte du gleichzeitig hältst
-  (*Breite*) und wie viele Bäume du sauber hinterlässt (*Ordnung*).
+  (_Breite_) und wie viele Bäume du sauber hinterlässt (_Ordnung_).
 
 Die Trennung ist der Punkt: 23 000 Punkte aus einem Projekt mit 110 Mitwirkenden sind keine
 persönliche Leistung.
@@ -134,7 +143,7 @@ gelandetem Pull Request. Ein Commit ohne Convention zählt trotzdem — eine Nul
 wäre eine fehlende Konvention und keine Untätigkeit, und wie viele es sind, steht dabei.
 
 PRs werden **lokal** gezählt, ohne die Forge zu fragen: als Menge von Nummern aus Merge-Commits
-(`Merge pull request #123`) *und* Squashes (`… (#123)`). Beide Formen kommen vor, oft im selben
+(`Merge pull request #123`) _und_ Squashes (`… (#123)`). Beide Formen kommen vor, oft im selben
 Repo — wer nur Merge-Commits zählt, meldet für ein squash-merging Projekt eine glatte Null.
 
 Der Snapshot trägt die **Rohzahlen**, nicht die Punkte. Eine andere Gewichtung kostet damit keine
@@ -154,7 +163,7 @@ apps/harbor     Das Fenster. Liest einen Snapshot, misst nichts.
 `packages/core` importiert kein `node:fs` und kein `child_process`. Dadurch läuft dieselbe Logik
 in der CLI, im Fenster und im Test gegen einen Mock.
 
-Im Fenster gilt derselbe Schnitt noch einmal: `fleet.ts` und `hull.ts` rechnen aus, *was*
+Im Fenster gilt derselbe Schnitt noch einmal: `fleet.ts` und `hull.ts` rechnen aus, _was_
 gezeichnet wird — Reihenfolge, Segmente, Tiefgang — und sind zu 100 % gemessen. `scene.ts`
 zeichnet nur und ist als einziges von der Coverage ausgenommen, weil über Pixel keine Zusicherung
 möglich ist, die kein Screenshot wäre. Der Blindfleck ist damit klein und benannt.
