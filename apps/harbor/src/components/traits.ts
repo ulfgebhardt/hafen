@@ -50,6 +50,8 @@ export interface Readings {
   binding: number
   stars: number
   issues: number
+  /** How many addresses have committed here. The only number in the tool that counts people. */
+  authors: number
   /** Whether the forge was asked about this ship at all. */
   asked: boolean
   rustDays: number | null
@@ -65,6 +67,7 @@ export function readingsOf(ship: Ship, stats: ForgeStats | null): Readings {
     binding: binding.length,
     stars: stats?.stars ?? 0,
     issues: stats?.issues ?? 0,
+    authors: ship.ledger.total.authors,
     asked: stats !== null,
     rustDays: ship.rustDays,
     disorder:
@@ -135,6 +138,14 @@ export interface Traits {
   scuff: number
   /** 0 … 1 traffic at *her* berth: a big ship is worked on by more people. */
   bustle: number
+  /**
+   * 0 … 4 figures working her berth. Authors, and only authors.
+   *
+   * The one trait that stands for *people*, so it is measured from the only number here that
+   * counts people: how many addresses have committed. Not stars — a star is somebody who watched,
+   * and a harbour that drew admirers as dockers would be saying something it cannot know.
+   */
+  crew: number
 }
 
 /** Where rust is total. Two years, the same scale `rustLevel` bands on. */
@@ -143,6 +154,19 @@ export const RUST_CEILING = 730
 export const DISORDER_CEILING = 12
 /** Where the windows are fully lit. The brightest repository on this fleet, measured. */
 export const STAR_CEILING = 1800
+
+/**
+ * Where a berth is as busy as it gets. The most-authored repository on this fleet, measured.
+ *
+ * Logarithmic like the stars and for the same reason: 1 to 488 authors with a median of **three**.
+ * On a straight scale ninety berths would have one figure on them and one would have four.
+ *
+ * And counted as *one plus three more*, not as four. Rounding a share straight onto four buckets
+ * put the median repository on the same bucket as a solo one — the whole visible range was spent
+ * on the tail. One figure is the floor, and the other three are what the log actually buys.
+ */
+export const CREW_CEILING = 500
+export const CREW_MOST = 4
 
 export function traitsOf(readings: Readings): Traits {
   const standing = standingOf(readings)
@@ -175,6 +199,16 @@ export function traitsOf(readings: Readings): Traits {
     glow: Math.min(1, Math.log1p(Math.max(0, readings.stars)) / Math.log1p(STAR_CEILING)),
     rust: readings.rustDays === null ? 0 : share(readings.rustDays, RUST_CEILING),
     scuff: share(readings.disorder, DISORDER_CEILING),
+    /*
+     * At least one, because a repository with a commit had somebody write it — and a berth with
+     * nobody on it reads as abandoned, which is what the *rust* says and not what this says.
+     */
+    crew:
+      1 +
+      Math.round(
+        (CREW_MOST - 1) *
+          Math.min(1, Math.log1p(Math.max(0, readings.authors)) / Math.log1p(CREW_CEILING)),
+      ),
     /*
      * Traffic at her own berth, from her size and not from her condition.
      *

@@ -33,8 +33,8 @@ import { PIER } from './chosen'
 import { conditionOf } from './condition'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
-import { GAP, harbourOf, MARGIN, QUAY, walksOf } from './moorings'
-import { ASPECT, BERTH, BLOCK, project, UNIT } from './plan'
+import { harbourOf, MARGIN, QUAY, walksOf } from './moorings'
+import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
 import {
@@ -289,32 +289,6 @@ function ground(harbour: Harbour, extent: Extent): Container {
   extra.stroke({ width: 1.6, color: hex(SCENE.walk), alpha: 0.55 })
   group.addChild(extra)
 
-  /*
-   * The berths' own planking, and it is the same plank as everything else.
-   *
-   * Drawn from the moorings rather than from the block, so it is only as long as the berths that
-   * use it: a full-width slab under four ships and a gap looked like a pier somebody forgot to
-   * finish, and at 25 docks the harbour was mostly empty concrete.
-   */
-  const berths = new Graphics()
-  for (const block of harbour.blocks) {
-    const piers = Math.floor(block.rows / 2) + 1
-    for (let pier = 0; pier < piers; pier += 1) {
-      const used = harbour.moorings.filter(
-        (one) => one.org === block.org && Math.floor((one.row + 1) / 2) === pier,
-      )
-      if (used.length === 0) {
-        continue
-      }
-      const from = Math.min(...used.map((one) => one.spot.x)) - 1
-      const to = Math.max(...used.map((one) => one.spot.x)) + BERTH.pitch
-      const mid = (block.at.y + pier * BLOCK + BERTH.pier / 2) * UNIT
-      berths.moveTo(from * UNIT, mid).lineTo(to * UNIT, mid)
-    }
-  }
-  berths.stroke({ width: PLANK, color: hex(SCENE.quay), alpha: 1 })
-  group.addChild(berths)
-
   return group
 }
 
@@ -334,6 +308,26 @@ function dockLabels(harbour: Harbour): Container {
     mark.fill({ color: flagTint(block.org), alpha: 0.9 })
     group.addChild(mark)
   }
+  return group
+}
+
+/**
+ * One person, at their own origin so they can walk.
+ *
+ * Three strokes and a dot: from above at this zoom a person is a head and a pair of shoulders,
+ * and anything more becomes a smudge that reads as dirt on the plan. The scale is deliberately
+ * near the limit of what is visible — a harbour whose figures are legible individually is a
+ * harbour drawn at the wrong zoom for ninety ships.
+ */
+function walker(): Container {
+  const group = new Container()
+  const body = new Graphics()
+  body.circle(0, 0, 0.42 * UNIT).fill({ color: hex(SCENE.crane), alpha: 0.85 })
+  body
+    .moveTo(-0.5 * UNIT, 0.15 * UNIT)
+    .lineTo(0.5 * UNIT, 0.15 * UNIT)
+    .stroke({ width: 1, color: hex(SCENE.crane), alpha: 0.6 })
+  group.addChild(body)
   return group
 }
 
@@ -959,13 +953,23 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   let hovered: (ship: Ship | null) => void = () => undefined
   let selected: (ship: Ship | null, chosen: Chosen | null) => void = () => undefined
   let placed: Placed[] = []
-  let traffic: { node: Container; from: number; span: number; speed: number; offset: number }[] = []
+  /**
+   * Everything that moves, and each one moves along **a segment** rather than along x.
+   *
+   * It used to be `{from, span}` on the x axis, which was enough while every pier ran east–west.
+   * A fan's limbs point anywhere, and a docker who walked east along a limb that runs north-east
+   * would be walking on water.
+   */
+  let traffic: {
+    node: Container
+    a: { x: number; y: number }
+    b: { x: number; y: number }
+    speed: number
+    offset: number
+  }[] = []
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
   let zoom: number | null = null
-  /** What was drawn, and the window shape it was drawn for — so a resize can ask if it still fits. */
-  let laid: readonly Ship[] = []
-  let shaped = ASPECT
   /** How busy the page is, from the ships on it. Scales every moving thing in the picture. */
   let lively = 1
   /**
@@ -1006,8 +1010,6 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * came out flat and small in the height, with room above and below it that nothing used.
      * Remembered so a resize can ask whether the answer changed — see `onResize`.
      */
-    const view = viewOf()
-    shaped = view.height > 0 ? view.width / view.height : ASPECT
     /*
      * Grouped by organisation and laid out around the groups, not sorted onto a ruled grid.
      *
@@ -1016,10 +1018,9 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * are the rest of the organisation, and `harbourOf` returns both the berths and the walkway
      * tree that reaches them.
      */
-    const harbour = harbourOf(fleetlets(ships), shaped)
+    const harbour = harbourOf(fleetlets(ships))
     const order = harbour.moorings
     extent = { width: harbour.width * UNIT, height: harbour.height * UNIT }
-    laid = ships
     lively = livelinessOf(ships)
 
     world.addChild(ground(harbour, extent))
@@ -1145,56 +1146,94 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
 
     /*
-     * The traffic: one lift working each group's planking, one launch in the water beside it.
+     * The traffic: people, and the machine they work.
      *
-     * Per group and no longer per full-width pier, because a pier is now only as long as its
-     * organisation. That also makes the busy-ness local, which is what was asked for: a lift on a
-     * dock of eighteen large repositories runs faster than one on a dock holding a single
-     * abandoned mirror.
+     * Per **berth** and no longer per pier, because a pier is now one ship's plank. What walks it
+     * is measured: `crew` counts the addresses that have committed to that repository, so a
+     * repository three people share has three figures on its plank and one nobody but its author
+     * has touched has one. Not stars — a star is somebody who watched, and drawing admirers as
+     * dockers would say something the measurement cannot know.
+     *
+     * The lift is one per berth and works the same plank. Its speed is `bustle`, which is size:
+     * a big repository is worked harder, and that is a different reading from how many people
+     * have ever touched it.
      */
     const moving = new Container()
     world.addChild(moving)
-    for (const [index, block] of harbour.blocks.entries()) {
-      const mine = harbour.moorings.filter((one) => one.org === block.org)
-      const busy =
-        mine.length === 0
-          ? 0
-          : mine.reduce(
-              (sum, one) => sum + traitsOf(readingsOf(one.ship, statsOf(one.ship))).bustle,
-              0,
-            ) / mine.length
 
-      const piers = Math.floor(block.rows / 2) + 1
-      for (let pier = 0; pier < piers; pier += 1) {
-        const node = lift()
-        node.position.y = (block.at.y + pier * BLOCK + BERTH.pier / 2) * UNIT
-        node.position.x = block.at.x * UNIT
-        moving.addChild(node)
+    for (const [index, berth] of order.entries()) {
+      const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
+      const plankY = (berth.spot.y - berth.side * BERTH.laneCentre) * UNIT
+      const from = berth.spot.x * UNIT
+      const to = (berth.spot.x + BERTH.pitch) * UNIT
+
+      const node = lift()
+      node.position.set(from, plankY)
+      moving.addChild(node)
+      traffic.push({
+        node,
+        a: { x: from + 2 * UNIT, y: plankY },
+        b: { x: to - 2 * UNIT, y: plankY },
+        speed: 0.004 + traits.bustle * 0.009,
+        offset: (index * 0.37) % 1,
+      })
+
+      for (let hand = 0; hand < traits.crew; hand += 1) {
+        const figure = walker()
+        figure.position.set(from, plankY)
+        moving.addChild(figure)
         traffic.push({
-          node,
-          from: block.at.x * UNIT + 3 * UNIT,
-          span: Math.max(6, block.width - 6) * UNIT,
-          speed: 0.004 + busy * 0.009,
-          offset: (index * 0.37 + pier * 0.21) % 1,
+          node: figure,
+          a: { x: from + 1.5 * UNIT, y: plankY },
+          b: { x: to - 1.5 * UNIT, y: plankY },
+          // Each at their own pace and their own place, so a berth does not march in step.
+          speed: 0.02 + ((index + hand) % 5) * 0.004,
+          offset: (index * 0.31 + hand * 0.41) % 1,
         })
       }
+    }
 
-      /*
-       * One launch per group, in the water south of its block.
-       *
-       * Only where there *is* water south of it: the old version drew a boat in every fairway and
-       * had to check the breakwater by hand. A group's own gap is its own, so the check is the
-       * gap rather than the basin.
-       */
+    /*
+     * And a launch on every way round, out in the open water between two docks.
+     *
+     * The crossings are the one part of the network that is not a walkway — a boat is what uses
+     * water, so a boat is what moves along them. It also means a path that exists is a path
+     * something is seen taking, which is the difference between a line and a route.
+     */
+    for (const [index, cross] of harbour.crossings.entries()) {
       const boat = launch()
-      boat.position.y = (block.at.y + block.height + GAP.y * 0.45) * UNIT
       moving.addChild(boat)
       traffic.push({
         node: boat,
-        from: block.at.x * UNIT - 5 * UNIT,
-        span: (block.width + 10) * UNIT,
-        speed: 0.008 + busy * 0.012,
-        offset: (index * 0.29) % 1,
+        a: project(cross.from),
+        b: project(cross.to),
+        speed: 0.005 + (index % 3) * 0.0018,
+        offset: (index * 0.41) % 1,
+      })
+    }
+
+    /*
+     * And people on the limbs themselves, walking out to the docks and back.
+     *
+     * One per dock, along its own limb — which is the piece of this drawing that only works now
+     * that a mover follows a segment. It is the thing that makes the walkways read as walkways
+     * rather than as lines: somebody is using them.
+     */
+    for (const [index, dock] of harbour.blocks.entries()) {
+      const limbs = harbour.nodes.filter((one) => one.org === dock.org && one.rank === 'limb')
+      const tip = limbs.at(-1)
+      const foot = limbs[0]
+      if (tip === undefined || foot === undefined) {
+        continue
+      }
+      const figure = walker()
+      moving.addChild(figure)
+      traffic.push({
+        node: figure,
+        a: project(foot.spot),
+        b: project(tip.spot),
+        speed: 0.006 + (index % 4) * 0.0015,
+        offset: (index * 0.23) % 1,
       })
     }
 
@@ -1219,10 +1258,13 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
        * dormant by definition. Never zero — a still picture reads as a broken one.
        */
       const t = (mover.offset + now * mover.speed * lively) % 2
-      // There and back, so a lift does not teleport to the far end of its own pier.
+      // There and back, so nothing teleports to the far end of its own walk.
       const along = t < 1 ? t : 2 - t
-      mover.node.position.x = mover.from + along * mover.span
-      mover.node.scale.x = t < 1 ? 1 : -1
+      mover.node.position.set(
+        mover.a.x + (mover.b.x - mover.a.x) * along,
+        mover.a.y + (mover.b.y - mover.a.y) * along,
+      )
+      mover.node.scale.x = mover.b.x >= mover.a.x === t < 1 ? 1 : -1
     }
   })
 
@@ -1290,21 +1332,14 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   globalThis.addEventListener('pointerup', onUp)
 
   /**
-   * A resize rescales, and re-lays out only when the answer actually changed.
+   * A resize only rescales, and that is now the whole of it.
    *
-   * Redrawing a hundred hulls on every pixel of a drag would be wasteful, and not redrawing at all
-   * leaves a plan built for the shape the window used to have. The whole of the decision is how
-   * wide the lanes came out, so laying the groups out again and comparing that one number is the
-   * cheapest way to know which of the two this is — and it cannot disagree with the real layout,
-   * which a re-derived column count could.
+   * The lane layouts before this one were laid out *towards* the window's shape, so a resize could
+   * change the answer and had to ask whether it had. A fan has no such parameter: the harbour is
+   * the shape the fleet makes, and the window is a viewport onto it. One less thing that can be
+   * built for a shape the window used to have.
    */
   const onResize = (): void => {
-    const view = viewOf()
-    const aspect = view.height > 0 ? view.width / view.height : ASPECT
-    if (laid.length > 0 && harbourOf(fleetlets(laid), aspect).width !== extent.width / UNIT) {
-      draw(laid)
-      return
-    }
     settle()
   }
   globalThis.addEventListener('resize', onResize)
