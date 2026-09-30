@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, stat, statfs } from 'node:fs/promises'
+import { readdir, readFile, realpath, stat, statfs } from 'node:fs/promises'
 import { cpus, totalmem } from 'node:os'
 import { promisify } from 'node:util'
 
@@ -62,6 +62,7 @@ export const nodePorts: Ports = {
       await stat(path)
         .then((entry) => entry.isDirectory())
         .catch(() => false),
+    realPath: async (path) => await realpath(path).catch(() => null),
   },
   host: {
     cpuCount: () => cpus().length,

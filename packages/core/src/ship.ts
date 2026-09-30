@@ -1,3 +1,4 @@
+import { leaderPath, remoteKey } from './alias'
 import { mergeCatalogs, readShipCatalog } from './catalog'
 import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
@@ -89,6 +90,16 @@ export interface Ship {
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
   docks: readonly string[]
+  /**
+   * Other directories that are this same project, folded into this one.
+   *
+   * Absent where there are none, which is nearly always. Not the same thing as `docks`: a worktree
+   * is one repository with two trees and git knows about it, while these are separate clones of
+   * the same remote that nothing but their `origin` connects. Kept rather than discarded silently,
+   * because "this project is checked out three times" is a fact about the machine somebody may
+   * want to act on.
+   */
+  aliases?: readonly string[]
   /** Commits on the current branch not yet pushed. `null` without an upstream. */
   ahead: number | null
   /** Commits on the upstream not yet merged locally. */
@@ -590,21 +601,75 @@ export interface SurveyOptions extends InspectOptions {
 }
 
 /**
- * Every repository under any of the roots.
+ * Every repository under any of the roots, each of them once.
  *
  * Roots plural, because a machine keeps its projects in more than one place: this one has
  * `~/.data/sources` and `~/.data/games`, and the second holds exactly one real project among a
  * dozen package caches. A single root meant that project simply did not exist.
  *
- * Deduplicated, because two roots may overlap — `~/.data` and `~/.data/sources` are a reasonable
- * pair to hand in, and a repository found twice would be a ship counted twice.
+ * Deduplicated **after resolving links**, and the second half is what the first could not do.
+ * Overlapping roots were always folded — `~/.data` and `~/.data/sources` are a reasonable pair to
+ * hand in — but a link is invisible to a string comparison. Measured on this machine:
+ * `kombuese/addons/AddOns` is linked into five game directories and drew as six identical ships
+ * of 948 days, filling a third of the basin with one repository.
+ *
+ * What survives is the **real** path and never the link, even where the real one lies outside
+ * every root. A link is a name for a repository and the repository is the thing being surveyed;
+ * keeping the name would put a ship where there is only a pointer, and the next measurement of it
+ * — a commit, a worktree — would be made somewhere else than it is reported.
  */
 export async function findAcrossRoots(
   ports: Ports,
   roots: readonly string[],
 ): Promise<readonly string[]> {
   const found = await Promise.all(roots.map(async (root) => await findShipPaths(ports, root)))
-  return [...new Set(found.flat())].sort()
+  const real = await Promise.all(
+    [...new Set(found.flat())].map(async (path) => (await ports.fs.realPath(path)) ?? path),
+  )
+  return [...new Set(real)].sort()
+}
+
+/**
+ * Ships folded down to projects: two checkouts of one remote become one ship and an alias.
+ *
+ * Here and not in `alias.ts` because it is a rule about `Ship`, and `alias.ts` has to stay a file
+ * `ship.ts` can import — the two rules it holds need no ship to state. What survives keeps its
+ * place in the order it came in, so a fold does not quietly rewrite the caller's sorting.
+ *
+ * A ship with no `origin` is **never** folded. Nothing about two unrelated directories says they
+ * are one project, and guessing from the name would fold two unrelated `notes` together. That is
+ * also why this cannot answer the symlink case: those six `AddOns` have no remote at all.
+ */
+export function foldAliases(ships: readonly Ship[]): readonly Ship[] {
+  const groups = new Map<string, string[]>()
+  for (const ship of ships) {
+    const origin = originOf(ship.remotes)
+    const key = origin === null ? null : remoteKey(origin.url)
+    if (key === null) {
+      continue
+    }
+    groups.set(key, [...(groups.get(key) ?? []), ship.path])
+  }
+
+  // Path to the aliases it absorbs. An empty list means somebody else leads this project.
+  const folded = new Map<string, readonly string[]>()
+  for (const paths of groups.values()) {
+    if (paths.length < 2) {
+      continue
+    }
+    const leader = leaderPath(paths)
+    for (const path of paths) {
+      folded.set(path, path === leader ? paths.filter((other) => other !== leader) : [])
+    }
+  }
+
+  return ships.flatMap((ship) => {
+    const aliases = folded.get(ship.path)
+    if (aliases === undefined) {
+      return [ship]
+    }
+    return aliases.length === 0 ? [] : [{ ...ship, aliases }]
+  })
 }
 
 export async function surveyHarbor(
@@ -649,8 +714,13 @@ export async function surveyHarbor(
 
   // By path, however it was measured: the measurement order is a decision about what the human
   // sees first, and it must not turn into the order the fleet is listed in.
-  return paths.flatMap((path) => {
-    const ship = measured.get(path)
-    return ship === undefined ? [] : [ship]
-  })
+  //
+  // Folded at the end and not during the search: what says two directories are one project is what
+  // each of them reports as `origin`, and that is not known until both have been measured.
+  return foldAliases(
+    paths.flatMap((path) => {
+      const ship = measured.get(path)
+      return ship === undefined ? [] : [ship]
+    }),
+  )
 }

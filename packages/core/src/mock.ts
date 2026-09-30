@@ -15,6 +15,8 @@ export interface MockSetup {
   files?: Record<string, string>
   /** Absolute paths to directory entry names. */
   dirs?: Record<string, readonly string[]>
+  /** Symbolic links: a path, and what it really is. Anything absent is itself. */
+  links?: Record<string, string>
   commands?: CommandMap
   onPath?: readonly string[]
   cpuCount?: number
@@ -45,6 +47,9 @@ export function mockPorts(setup: MockSetup = {}): Ports {
       readFile: async (path) => files[path] ?? null,
       readDir: async (path) => dirs[path] ?? null,
       isDirectory: async (path) => Object.hasOwn(dirs, path),
+      // Nothing is a link unless a test says so: a mock that resolved paths of its own would be
+      // answering a question the test never asked.
+      realPath: async (path) => setup.links?.[path] ?? path,
     },
     host: {
       cpuCount: () => setup.cpuCount ?? 8,

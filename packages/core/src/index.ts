@@ -123,6 +123,9 @@ export { commitValue, tasksAcross, tasksFor, tasksValue } from './tasks'
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'
 
+/** Two directories, one project: links resolved before measuring, shared remotes folded after. */
+export { leaderPath, remoteKey } from './alias'
+
 export type { Activity, Fleet, RustLevel } from './fleet'
 export { ACTIVE_DAYS, activityOf, byActivity, RUST_TIERS, rustLevel, summarizeFleet } from './fleet'
 
