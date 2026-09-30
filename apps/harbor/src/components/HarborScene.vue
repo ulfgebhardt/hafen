@@ -7,8 +7,14 @@
   import type { Scene } from './scene'
   import type { ForgeStats, Ship } from '@hafen/core'
 
-  const { ships, forge = new Map() } = defineProps<{
+  const {
+    ships,
+    forge = new Map(),
+    layout = 'lanes',
+  } = defineProps<{
     ships: readonly Ship[]
+    /** Which harbour to draw: docks in lanes, or the fan that can branch. */
+    layout?: 'lanes' | 'fan'
     /**
      * What the forges said, by ship path.
      *
@@ -53,16 +59,16 @@
       picked.value = ship
       demand.value = chosen
     })
-    scene.draw(ships, forge)
+    scene.draw(ships, forge, layout)
     scene.highlight(picked.value, demand.value)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
   // rebuilds in a frame. Diffing would be a second model of what is already on screen.
   watch(
-    () => [ships, forge] as const,
-    ([next, stats]) => {
-      scene?.draw(next, stats)
+    () => [ships, forge, layout] as const,
+    ([next, stats, kind]) => {
+      scene?.draw(next, stats, kind)
       scene?.highlight(picked.value, demand.value)
     },
   )

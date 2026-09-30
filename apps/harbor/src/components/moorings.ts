@@ -13,11 +13,15 @@
  * diagonal between two points crosses the block in between, so an angled plank had nowhere to go
  * that was not over somebody else's ships. A fan has the gaps a diagonal needs.
  *
- * **The walkways are a tree, not a drawing.** Every node names its parent and the root stands on
- * the shore, so "every ship can reach the shore" is true by construction and provable by following
- * parents — not something a renderer happens to achieve and a later change quietly breaks. The
- * extra paths between neighbours (`crossings`) are deliberately outside that tree: nothing depends
- * on them, so adding or dropping one can never strand a ship.
+ * **The walkways are a graph**: quays and the ways between them. It is built as a tree — every way
+ * but the extras joins a new quay to one already reachable, in that order — so "every ship can
+ * reach the shore" is still true *by construction* and not merely checked afterwards. What the
+ * edge list adds is that the extra ways round are now ordinary ways rather than a second list the
+ * reachability check does not look at, and that questions like "what does this plank serve" and
+ * "where can somebody standing here walk" have an answer at all.
+ *
+ * No store and no database: the graph is derived from the fleet every draw, like everything else
+ * here. A kept graph could disagree with the ships it is about.
  *
  * **Where a ship goes is searched, not calculated.** Each berth is pushed outward along its limb
  * until its footprint clears everything already placed. A closed form would have to know how long
@@ -52,11 +56,93 @@ export const GAP = { x: 11, y: 9 } as const
  * Not a full half-turn: a limb at ninety degrees runs straight up the shore and its ships lie
  * along it in a column, which is a column and not a branch. Eighty degrees keeps every limb
  * visibly leaving the shore while still spending the whole height of the picture.
+ *
+ * That is the width for **one** centre. Several have to share the water, and a fan that keeps its
+ * eighty degrees reaches round into its neighbour's — the six-centre harbour came out at 1074k
+ * square units against 210k for the same fleet in lanes, because every fan was pushing ships
+ * through every other one. `arcFor` divides the turn instead.
  */
 export const FAN = 1.4
 
+/**
+ * How wide one centre's fan may open, with this many centres round the frame.
+ *
+ * A share of the whole turn and never more than `FAN`. The tenth extra is deliberate: neighbouring
+ * fans overlapping a little is what makes the harbour read as one place rather than as six
+ * separate diagrams, and the placement search resolves the overlap by moving a ship, which it can
+ * do. What it cannot do is invent room where two fans have claimed the same water outright.
+ */
+export function arcFor(centres: number): number {
+  return Math.min(FAN, ((Math.PI * 2) / Math.max(1, centres) / 2) * 1.1)
+}
+
 /** Where the first berth on a limb may stand, and how finely the search steps outward. */
 export const REACH = { first: 22, step: 3 } as const
+
+/**
+ * How many places the shore is reached at.
+ *
+ * One fan wastes its own middle: the wedges are narrow where they meet and the picture is mostly
+ * empty near the root. Several smaller fans along the shore waste less of it, and it is what a
+ * real waterfront looks like — a marina does not have one jetty system, it has a few.
+ *
+ * The count comes off the group count and is deliberately flat: too many centres and each fan is
+ * a single limb, which is a row and not a fan. Three organisations per centre keeps a fan wide
+ * enough to be one.
+ */
+export const PER_CENTRE = 3
+export const CENTRES_MOST = 6
+
+export function centresFor(groups: number): number {
+  return Math.max(1, Math.min(CENTRES_MOST, Math.round(groups / PER_CENTRE)))
+}
+
+/** What one berth takes up: her hull, the apron ahead of her bow, her lane and her caption. */
+export const FOOTPRINT = {
+  along: BERTH.pitch,
+  across: 2 * (BERTH.lane + BERTH.caption * 0.55),
+} as const
+
+/**
+ * How much room a fan wastes, as a multiple of the berths it holds.
+ *
+ * Measured rather than guessed: the same 92 berths came out in 210k square units packed in lanes
+ * and 877k fanned, so a fan spends about four times the area a rectangle does. The frame the
+ * centres stand on is sized from that, which is the only way to place them before knowing how big
+ * the harbour turns out to be.
+ */
+export const FAN_SLACK = 3.4
+
+/**
+ * Where the centres stand: a row along the north shore, every fan pointing south.
+ *
+ * Two arrangements were measured before this one, and both failed on *shape* rather than on
+ * anything subtle. A column along the west shore gave 701 × 1252 — twice as tall as wide, the
+ * opposite of a window. Round the whole frame, fanning inward, gave 1202 × 894 and **five times
+ * the area the same fleet takes in lanes**, because six fans all reaching for the middle spend
+ * the whole picture fighting over it.
+ *
+ * A row fanning one way has neither problem: the fans run beside each other instead of into each
+ * other, and the harbour grows along the shore, which is the direction a window has room in.
+ */
+export function centresOn(count: number, berths: number, aspect: number): readonly Berth[] {
+  const area = Math.max(1, berths) * FOOTPRINT.along * FOOTPRINT.across * FAN_SLACK
+  const width = Math.sqrt(area * aspect)
+  const pitch = width / Math.max(1, count)
+
+  return Array.from({ length: count }, (_, index) => ({
+    // Half a pitch in, so the first and last fans have shore either side of them rather than
+    // hanging off the corner.
+    spot: { x: (index + 0.5) * pitch, y: 0 },
+    angle: Math.PI / 2,
+  }))
+}
+
+/** A place on the shore and the way its fan points. */
+export interface Berth {
+  spot: Spot
+  angle: number
+}
 
 /**
  * How many ranks deep a limb may carry ships on one side.
@@ -68,12 +154,6 @@ export const REACH = { first: 22, step: 3 } as const
  * a branch, and the first thing in this harbour that is a tree more than one level deep.
  */
 export const RANKS = 4
-
-/** What one berth takes up: her hull, the apron ahead of her bow, her lane and her caption. */
-export const FOOTPRINT = {
-  along: BERTH.pitch,
-  across: 2 * (BERTH.lane + BERTH.caption * 0.55),
-} as const
 
 /** Clear water between a limb and the berths hanging off it, over and above what they need. */
 export const OFFSET = BERTH.lane
@@ -146,6 +226,9 @@ export function cuts(from: Spot, to: Spot, box: Box): boolean {
   return false
 }
 
+/** The point a bearing is measured from when nobody says otherwise. */
+const ORIGIN: Spot = { x: 0, y: 0 }
+
 /**
  * Whether a limb pointing this way would pass through this box.
  *
@@ -158,12 +241,12 @@ export function cuts(from: Spot, to: Spot, box: Box): boolean {
  * hers — which makes it an invariant rather than a special case. What it catches is the other
  * fifteen: a berth pushed far enough out along a shallow sector to drift under a steeper one.
  */
-export function inTheWayOf(box: Box, along: Spot, square: Spot): boolean {
+export function inTheWayOf(box: Box, along: Spot, square: Spot, from: Spot = ORIGIN): boolean {
   const corners = [
-    { x: box.x, y: box.y },
-    { x: box.x + box.width, y: box.y },
-    { x: box.x, y: box.y + box.height },
-    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x - from.x, y: box.y - from.y },
+    { x: box.x + box.width - from.x, y: box.y - from.y },
+    { x: box.x - from.x, y: box.y + box.height - from.y },
+    { x: box.x + box.width - from.x, y: box.y + box.height - from.y },
   ]
   const sides = corners.map((corner) => Math.sign(corner.x * square.x + corner.y * square.y))
   if (sides.every((one) => one > 0) || sides.every((one) => one < 0)) {
@@ -172,21 +255,36 @@ export function inTheWayOf(box: Box, along: Spot, square: Spot): boolean {
   return corners.some((corner) => corner.x * along.x + corner.y * along.y > 0)
 }
 
-/**
- * A walkway node. `parent` is the one thing that makes this a harbour and not a scatter of piers.
- *
- * `null` only for the root, which stands on the shore. Everything else hangs off something that
- * eventually does, which is what "jedes Boot hat Zugang zum Ufer" means when it is checked rather
- * than hoped for.
- */
+/** What a quay is for, which is also how wide a thing is drawn and what colour it carries. */
 export type Rank = 'root' | 'limb' | 'stub' | 'plank'
 
-export interface Node {
+/** A place on the network: a corner, a junction, the end of a plank. */
+export interface Quay {
   id: number
-  parent: number | null
   spot: Spot
   rank: Rank
   /** Which group this piece of walkway serves, for colouring it with their flag. */
+  org: string | null
+}
+
+/**
+ * A way between two quays.
+ *
+ * `kind` is the load-bearing field. A `tree` way was laid joining a new quay to one already
+ * reachable, so the tree ways alone already connect everything — that is the construction the
+ * promise rests on. A `round` way is an extra: it joins two quays that could both already be
+ * reached, so removing every one of them changes nothing about who can get ashore.
+ *
+ * A `tender` is a tree way that could not be a plank. It counts for reachability exactly as a
+ * tree way does — she *is* reached — but no straight or right-angled run to her crossed open
+ * water, so what reaches her is a boat. Three berths in ninety-two are like that in the fan and
+ * none in the lanes. The alternative was drawing a plank over somebody's deck and calling the
+ * promise kept, which is the one thing this module is for not doing.
+ */
+export interface Way {
+  from: number
+  to: number
+  kind: 'tree' | 'round' | 'tender'
   org: string | null
 }
 
@@ -203,15 +301,6 @@ export interface Mooring {
   angle: number
 }
 
-/** An extra way round, outside the tree. Nothing depends on one. */
-export interface Crossing {
-  from: Spot
-  to: Spot
-  /** Both ends belong to the same organisation, which is the denser half of the network. */
-  within: boolean
-  org: string | null
-}
-
 /** A group's own patch of water, for its name and for the machine that works it. */
 export interface Dock {
   org: string
@@ -222,9 +311,9 @@ export interface Dock {
 }
 
 export interface Harbour {
-  nodes: readonly Node[]
+  quays: readonly Quay[]
+  ways: readonly Way[]
   moorings: readonly Mooring[]
-  crossings: readonly Crossing[]
   blocks: readonly Dock[]
   width: number
   height: number
@@ -233,9 +322,9 @@ export interface Harbour {
 }
 
 const EMPTY: Harbour = {
-  nodes: [],
+  quays: [],
+  ways: [],
   moorings: [],
-  crossings: [],
   blocks: [],
   width: 1,
   height: 1,
@@ -265,12 +354,12 @@ export function sectorsOf(weights: readonly number[]): readonly number[] {
  */
 function shift(harbour: Harbour): Harbour {
   const xs = [
-    ...harbour.nodes.map((one) => one.spot.x),
+    ...harbour.quays.map((one) => one.spot.x),
     ...harbour.blocks.map((one) => one.at.x),
     ...harbour.blocks.map((one) => one.at.x + one.width),
   ]
   const ys = [
-    ...harbour.nodes.map((one) => one.spot.y),
+    ...harbour.quays.map((one) => one.spot.y),
     ...harbour.blocks.map((one) => one.at.y),
     ...harbour.blocks.map((one) => one.at.y + one.height),
   ]
@@ -283,9 +372,9 @@ function shift(harbour: Harbour): Harbour {
   const move = (spot: Spot): Spot => ({ x: spot.x + dx, y: spot.y + dy })
 
   return {
-    nodes: harbour.nodes.map((one) => ({ ...one, spot: move(one.spot) })),
+    quays: harbour.quays.map((one) => ({ ...one, spot: move(one.spot) })),
+    ways: harbour.ways,
     moorings: harbour.moorings.map((one) => ({ ...one, spot: move(one.spot) })),
-    crossings: harbour.crossings.map((one) => ({ ...one, from: move(one.from), to: move(one.to) })),
     blocks: harbour.blocks.map((one) => ({ ...one, at: move(one.at) })),
     width: Math.max(...xs) + dx + QUAY + MARGIN.x,
     height: Math.max(...ys) + dy + QUAY + MARGIN.y,
@@ -301,7 +390,7 @@ function shift(harbour: Harbour): Harbour {
  * at the top and bottom. Dealt from the middle because the middle of a fan is where there is most
  * room, and that is where an eighteen-ship dock has to go.
  */
-export function harbourOf(groups: readonly Fleetlet[]): Harbour {
+export function harbourOf(groups: readonly Fleetlet[], aspect = 16 / 9): Harbour {
   if (groups.length === 0) {
     return EMPTY
   }
@@ -316,9 +405,9 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
     }
   })
 
-  const nodes: Node[] = []
+  const quays: Quay[] = []
+  const ways: Way[] = []
   const moorings: Mooring[] = []
-  const crossings: Crossing[] = []
   const blocks: Dock[] = []
   const taken: Box[] = []
   /**
@@ -343,14 +432,47 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
   /**
    * Every plank end put down so far, as somewhere the next ship might hang off.
    *
-   * Ends *and* middles: an end is often round the wrong side of a neighbour, and a plank is
-   * walkable along its whole length, so its middle is a real place to branch from. With ends
-   * alone one berth in sixty-four had nowhere clear to attach.
+   * Ends only. A midpoint is a real place to walk from and was offered as one, which made three
+   * routes score clear at a point the drawn way never touched — see where they are pushed.
    */
   const planks: { id: number; spot: Spot }[] = []
 
-  const root: Spot = { x: 0, y: 0 }
-  nodes.push({ id: 0, parent: null, spot: root, rank: 'root', org: null })
+  /*
+   * Several places the shore is reached at, not one.
+   *
+   * One fan wastes its own middle — the wedges are narrow where they meet, so the picture is
+   * emptiest exactly where the eye starts. A few smaller fans strung along the shore waste less of
+   * it, and it is what a waterfront actually looks like: a marina has a few jetty systems, not one
+   * enormous one.
+   *
+   * The groups are dealt round-robin so that every centre carries a comparable load: handed out in
+   * blocks, the first centre would get the three biggest docks and the last three singletons.
+   */
+  const centres = centresFor(groups.length)
+  const berths = groups.reduce((sum, one) => sum + one.ships.length, 0)
+  const roots = centresOn(centres, berths, aspect).map((one, index) => ({
+    id: quays.length + index,
+    spot: one.spot,
+    angle: one.angle,
+  }))
+  for (const one of roots) {
+    quays.push({ id: one.id, spot: one.spot, rank: 'root', org: null })
+  }
+  const root: Spot = roots[0]?.spot ?? { x: 0, y: 0 }
+
+  /**
+   * Lay a quay and the way that reaches it, in one act.
+   *
+   * The two cannot be separated without losing the promise: a quay added without a way to an
+   * already-reachable one is a quay nobody can get to, and there would be no moment at which that
+   * is obvious. Here it cannot be written.
+   */
+  const extend = (from: number, spot: Spot, rank: Rank, org: string | null): number => {
+    const id = quays.length
+    quays.push({ id, spot, rank, org })
+    ways.push({ from, to: id, kind: 'tree', org })
+    return id
+  }
 
   /*
    * Every limb's bearing, worked out before a single berth is placed.
@@ -360,36 +482,54 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
    * limb-by-limb check can never see. The angles are a function of the sectors alone, so they can
    * be known before anything is placed — which is the only reason this works.
    */
-  const bearings: number[] = []
-  let sweep = -FAN
-  for (const index of order) {
-    const share = shares[index] ?? 0
-    bearings.push(sweep + share * FAN)
-    sweep += share * 2 * FAN
-  }
-  const rays = bearings.map((angle) => ({
-    along: { x: Math.cos(angle), y: Math.sin(angle) },
-    square: { x: -Math.sin(angle), y: Math.cos(angle) },
+  /*
+   * Which centre each group hangs off, and its bearing from that centre — all before a berth is
+   * placed.
+   *
+   * Needed up front because a berth has to clear *every* limb in the harbour, not only her own:
+   * the first pass kept each ship off her own and four still ended up under a neighbour's, which a
+   * limb-by-limb check can never see. Sectors are a function of the shares alone, so they can be
+   * known before anything is laid down — which is the only reason this works.
+   */
+  const berthed = order.map((index, seat) => {
+    const at = seat % centres
+    const mates = order.filter((_, other) => other % centres === at)
+    const local = shares.filter((_, other) => order.indexOf(other) % centres === at)
+    const whole = local.reduce((sum, one) => sum + one, 0)
+    const before = mates
+      .slice(0, mates.indexOf(index))
+      .reduce((sum, one) => sum + (shares[one] ?? 0), 0)
+    const share = (shares[index] ?? 0) / (whole === 0 ? 1 : whole)
+    const centre = roots[at] ?? { id: 0, spot: { x: 0, y: 0 }, angle: 0 }
+    const arc = arcFor(centres)
+    return {
+      index,
+      root: centre,
+      // The sector, turned to face whichever way this centre's shore looks.
+      angle: centre.angle + (-arc + ((before / (whole === 0 ? 1 : whole)) * 2 + share) * arc),
+    }
+  })
+
+  const rays = berthed.map((one) => ({
+    from: one.root.spot,
+    along: { x: Math.cos(one.angle), y: Math.sin(one.angle) },
+    square: { x: -Math.sin(one.angle), y: Math.cos(one.angle) },
   }))
 
-  let edge = -FAN
   const tips: { id: number; org: string }[] = []
 
-  for (const index of order) {
+  for (const { index, root: centre, angle } of berthed) {
     const group = groups[index]
-    const share = shares[index]
-    if (group === undefined || share === undefined) {
+    if (group === undefined) {
       continue
     }
-    const angle = edge + (share * 2 * FAN) / 2
-    edge += share * 2 * FAN
 
     const along = { x: Math.cos(angle), y: Math.sin(angle) }
     const square = { x: -Math.sin(angle), y: Math.cos(angle) }
 
     const clearance = clearanceOn(square)
     let reach: number = REACH.first
-    let onLimb = 0
+    let onLimb = centre.id
     const mine: Box[] = []
 
     for (const ship of group.ships) {
@@ -408,29 +548,32 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
         for (let rank = 0; rank < RANKS && placed === null; rank += 1) {
           for (const side of [-1, 1] as const) {
             const off = clearance + rank * FOOTPRINT.across
-            const centre = {
-              x: along.x * radius + square.x * side * off,
-              y: along.y * radius + square.y * side * off,
+            const middle = {
+              x: centre.spot.x + along.x * radius + square.x * side * off,
+              y: centre.spot.y + along.y * radius + square.y * side * off,
             }
             const box: Box = {
-              x: centre.x - FOOTPRINT.along / 2,
-              y: centre.y - FOOTPRINT.across / 2,
+              x: middle.x - FOOTPRINT.along / 2,
+              y: middle.y - FOOTPRINT.across / 2,
               width: FOOTPRINT.along,
               height: FOOTPRINT.across,
             }
             if (taken.some((one) => overlaps(box, one))) {
               continue
             }
-            if (rays.some((ray) => inTheWayOf(box, ray.along, ray.square))) {
+            if (rays.some((ray) => inTheWayOf(box, ray.along, ray.square, ray.from))) {
               continue
             }
             taken.push(box)
             mine.push(box)
             placed = {
               // `vessel.ts` draws from the stern: she starts at the landward end of her berth.
-              spot: { x: box.x, y: centre.y },
+              spot: { x: box.x, y: middle.y },
               side,
-              at: { x: along.x * radius, y: along.y * radius },
+              at: {
+                x: centre.spot.x + along.x * radius,
+                y: centre.spot.y + along.y * radius,
+              },
             }
             reach = radius
             break
@@ -442,8 +585,7 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
       }
 
       // A node on the limb at her radius, chained to the one before: the limb *is* the chain.
-      const limb = nodes.length
-      nodes.push({ id: limb, parent: onLimb, spot: placed.at, rank: 'limb', org: group.org })
+      const limb = extend(onLimb, placed.at, 'limb', group.org)
       onLimb = limb
 
       hulls.push({
@@ -528,10 +670,15 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
      * the next one along the limb is usually clear. Restricting her to *her* radius left one berth
      * in sixty-four with nowhere clean to attach; the whole limb leaves none.
      */
-    const anchors = [
-      ...nodes.filter((one) => one.org === berth.org && one.rank === 'limb'),
-      ...planks,
-    ]
+    /*
+     * Any limb in the harbour and any plank, not only her own organisation's.
+     *
+     * Restricting her to her own dock left three berths in ninety-two with no clear route to any
+     * of the candidates, so each took the least bad one — a plank over a deck. A walkway does not
+     * care whose dock it started at, and a berth boxed in by her own neighbours is very often one
+     * step from the dock next door.
+     */
+    const anchors = [...quays.filter((one) => one.rank === 'limb'), ...planks]
       /*
        * Nearest first, and stop at the first clear one.
        *
@@ -548,7 +695,15 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
         ),
       }))
       .sort((a, b) => a.far - b.far)
-      .slice(0, 24)
+      /*
+       * How many anchors are worth trying before giving up on a clear route.
+       *
+       * Twenty-four was enough while there was one wide fan. Narrow arcs pack the berths closer,
+       * so the nearest two dozen quays are all behind the same neighbour and three berths took a
+       * route over a deck. Forty-eight costs nothing — the search stops at the first clear one —
+       * and it is the difference between the promise holding and nearly holding.
+       */
+      .slice(0, 48)
 
     for (const anchor of anchors) {
       if (best.cut === 0) {
@@ -571,12 +726,24 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
           { x: anchor.spot.x, y: head.y },
           { x: head.x, y: anchor.spot.y },
         ]) {
+          /*
+           * The plank counts as part of the route, and leaving it out was the last crossing.
+           *
+           * Only the *way to* her plank was scored, never the plank itself — fifty-two units
+           * running alongside her, which is longer than a hull and quite able to lie across the
+           * neighbour beyond her. Three berths in ninety-two had a clear stub to a plank that was
+           * itself over a deck, and the search happily called that a clear route.
+           */
           const legs: readonly (readonly [Spot, Spot])[] =
             corner === null
-              ? [[anchor.spot, head]]
+              ? [
+                  [anchor.spot, head],
+                  [head, tail],
+                ]
               : [
                   [anchor.spot, corner],
                   [corner, head],
+                  [head, tail],
                 ]
           const cut = legs.reduce<number>(
             (sum, [a, b]) => sum + hulls.filter((one) => cuts(a, b, one)).length,
@@ -598,21 +765,42 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
       }
     }
 
-    let hangsOff = parent
-    if (via !== null) {
-      const corner = nodes.length
-      nodes.push({ id: corner, parent, spot: via, rank: 'stub', org: berth.org })
-      hangsOff = corner
+    /*
+     * Where nothing clear was found, she is reached by water instead of by a plank over a deck.
+     *
+     * One way straight from the anchor to her plank, marked as a tender. It connects her — so the
+     * reachability check is satisfied and honestly so — and the drawing can say what it is rather
+     * than pretending there are boards there.
+     */
+    if (best.cut > 0) {
+      const landing = quays.length
+      quays.push({ id: landing, spot: stubFrom, rank: 'plank', org: berth.org })
+      ways.push({ from: parent, to: landing, kind: 'tender', org: berth.org })
+      const along = extend(landing, stubTo, 'plank', berth.org)
+      moorings.push({
+        ship: berth.ship,
+        org: berth.org,
+        spot: berth.spot,
+        side: berth.side,
+        node: along,
+        angle: berth.angle,
+      })
+      planks.push({ id: along, spot: stubTo }, { id: landing, spot: stubFrom })
+      continue
     }
-    const stub = nodes.length
-    nodes.push({ id: stub, parent: hangsOff, spot: stubFrom, rank: 'stub', org: berth.org })
-    const plank = nodes.length
-    nodes.push({ id: plank, parent: stub, spot: stubTo, rank: 'plank', org: berth.org })
-    planks.push(
-      { id: plank, spot: stubTo },
-      { id: stub, spot: stubFrom },
-      { id: plank, spot: { x: (stubFrom.x + stubTo.x) / 2, y: stubFrom.y } },
-    )
+
+    const hangsOff = via === null ? parent : extend(parent, via, 'stub', berth.org)
+    const stub = extend(hangsOff, stubFrom, 'stub', berth.org)
+    const plank = extend(stub, stubTo, 'plank', berth.org)
+    /*
+     * The two ends, and **not** the middle.
+     *
+     * A midpoint was offered as an anchor too, on the reasoning that a plank is walkable along its
+     * whole length. It is — but the way that gets *drawn* runs to the quay, not to the point that
+     * was scored, so three routes were judged clear at the middle and drawn from the end, across a
+     * deck. An anchor has to be a quay, or the drawing and the check are about different lines.
+     */
+    planks.push({ id: plank, spot: stubTo }, { id: stub, spot: stubFrom })
 
     moorings.push({
       ship: berth.ship,
@@ -634,8 +822,8 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
   for (let index = 1; index < tips.length; index += 1) {
     const before = tips[index - 1]
     const after = tips[index]
-    const from = before === undefined ? undefined : nodes[before.id]?.spot
-    const to = after === undefined ? undefined : nodes[after.id]?.spot
+    const from = before === undefined ? undefined : quays[before.id]?.spot
+    const to = after === undefined ? undefined : quays[after.id]?.spot
     if (before === undefined || after === undefined || from === undefined || to === undefined) {
       continue
     }
@@ -649,15 +837,15 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
     if (taken.some((box) => cuts(from, to, box))) {
       continue
     }
-    crossings.push({
-      from,
-      to,
-      within: before.org === after.org,
+    ways.push({
+      from: before.id,
+      to: after.id,
+      kind: 'round',
       org: before.org === after.org ? before.org : null,
     })
   }
 
-  return shift({ nodes, moorings, crossings, blocks, width: 1, height: 1, root })
+  return shift({ quays, ways, moorings, blocks, width: 1, height: 1, root })
 }
 
 /**
@@ -667,26 +855,54 @@ export function harbourOf(groups: readonly Fleetlet[]): Harbour {
  * the drawing: a walkway that *looks* joined and a walkway that *is* joined are different claims,
  * and only one of them survives somebody moving a constant.
  */
-export function reachesShore(harbour: Harbour): boolean {
-  const byId = new Map(harbour.nodes.map((node) => [node.id, node]))
-
-  const ashore = (start: number): boolean => {
-    let at = start
-    // Bounded by the node count: a cycle would otherwise hang the window rather than fail a test.
-    for (let step = 0; step <= harbour.nodes.length; step += 1) {
-      const node = byId.get(at)
-      if (node === undefined) {
-        return false
-      }
-      if (node.parent === null) {
-        return node.rank === 'root'
-      }
-      at = node.parent
-    }
-    return false
+export function reachesShore(harbour: Harbour, ways: readonly Way[] = harbour.ways): boolean {
+  /*
+   * Every root, not the first one.
+   *
+   * The shore is reached at several places now, and a check that seeded from one of them would
+   * have called four fifths of the harbour unreachable — a correct answer to the wrong question.
+   * "Can she get to land" does not care which piece of land.
+   */
+  const roots = harbour.quays.filter((quay) => quay.rank === 'root')
+  if (roots.length === 0) {
+    return harbour.moorings.length === 0
   }
 
-  return harbour.moorings.every((mooring) => ashore(mooring.node))
+  /*
+   * A walk outward from the shore, and whoever it reaches can get back.
+   *
+   * A traversal and not a parent chain: with an edge list the question is "is this connected",
+   * which is what a person on a quay actually cares about. The *promise* is still constructed —
+   * `extend` cannot lay a quay without the way that reaches it — and this is the check that the
+   * construction was not worked around, which is a different job from being the guarantee.
+   */
+  const met = new Set(roots.map((one) => one.id))
+  const edge = new Map<number, number[]>()
+  for (const way of ways) {
+    edge.set(way.from, [...(edge.get(way.from) ?? []), way.to])
+    edge.set(way.to, [...(edge.get(way.to) ?? []), way.from])
+  }
+
+  const queue = roots.map((one) => one.id)
+  while (queue.length > 0) {
+    const at = queue.pop()
+    if (at === undefined) {
+      continue
+    }
+    for (const next of edge.get(at) ?? []) {
+      if (!met.has(next)) {
+        met.add(next)
+        queue.push(next)
+      }
+    }
+  }
+
+  return harbour.moorings.every((mooring) => met.has(mooring.node))
+}
+
+/** Which ways touch this quay — what somebody standing on it can walk. */
+export function waysAt(harbour: Harbour, quay: number): readonly Way[] {
+  return harbour.ways.filter((way) => way.from === quay || way.to === quay)
 }
 
 /** What one berth occupies, for the checks that ask whether two of them can both be right. */
@@ -699,15 +915,16 @@ export function berthBox(mooring: Mooring): Box {
   }
 }
 
-/** The walkway segments, one per node that has a parent. For drawing only. */
+/** Every way as two points, for drawing and for walking along. */
 export function walksOf(
   harbour: Harbour,
-): readonly { from: Spot; to: Spot; rank: Rank; org: string | null }[] {
-  const byId = new Map(harbour.nodes.map((node) => [node.id, node]))
-  return harbour.nodes.flatMap((node) => {
-    const parent = node.parent === null ? undefined : byId.get(node.parent)
-    return parent === undefined
+): readonly { from: Spot; to: Spot; rank: Rank; kind: Way['kind']; org: string | null }[] {
+  const byId = new Map(harbour.quays.map((quay) => [quay.id, quay]))
+  return harbour.ways.flatMap((way) => {
+    const from = byId.get(way.from)
+    const to = byId.get(way.to)
+    return from === undefined || to === undefined
       ? []
-      : [{ from: parent.spot, to: node.spot, rank: node.rank, org: node.org }]
+      : [{ from: from.spot, to: to.spot, rank: to.rank, kind: way.kind, org: way.org }]
   })
 }

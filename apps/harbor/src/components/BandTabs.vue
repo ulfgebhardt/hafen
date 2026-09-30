@@ -1,7 +1,17 @@
 <script setup lang="ts">
   import { computed } from 'vue'
 
-  import { BANDS, bandPoints, byBand, isBand, PAGE_LABEL, PAGE_MEANING, PAGES } from './band'
+  import {
+    BANDS,
+    bandPoints,
+    byBand,
+    CONTRACTS,
+    draws,
+    isBand,
+    PAGE_LABEL,
+    PAGE_MEANING,
+    PAGES,
+  } from './band'
   import { tallyContracts } from './contracts'
   import PointValue from './PointValue.vue'
   import { VERDICT_LABEL } from './theme'
@@ -40,6 +50,9 @@
    * disagree. It moves with the search for the same reason every other count does.
    */
   const demands = computed(() => tallyContracts(ships).flatMap((chain) => chain.contracts).length)
+
+  /** What the fleet page is worth: every ship on it, because that page has no band to split by. */
+  const whole = computed(() => bandPoints(ships))
 </script>
 
 <template>
@@ -63,8 +76,13 @@
       @click="page = name"
     >
       <span class="font-mono text-xs tracking-wide">{{ PAGE_LABEL[name] }}</span>
+      <!--
+        Ships on every page that draws ships, demands on the one that draws demands.
+        The fleet tab counted demands at first, because it is not a band and the only other case
+        was the catalog — a tab that says 13 beside a harbour of 92 is a window lying about itself.
+      -->
       <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{
-        isBand(name) ? grouped[name].length : demands
+        name === CONTRACTS ? demands : isBand(name) ? grouped[name].length : ships.length
       }}</span>
 
       <!--
@@ -77,10 +95,10 @@
         repository buy its way out of a broken one with commit volume.
       -->
       <PointValue
-        v-if="isBand(name)"
+        v-if="draws(name)"
         class="ml-1.5 scale-90 opacity-70"
-        :project="scores[name]?.project ?? 0"
-        :personal="scores[name]?.own ?? 0"
+        :project="isBand(name) ? (scores[name]?.project ?? 0) : whole.project"
+        :personal="isBand(name) ? (scores[name]?.own ?? 0) : whole.own"
       />
     </button>
 
