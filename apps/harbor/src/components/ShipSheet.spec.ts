@@ -205,3 +205,38 @@ describe('the register, from the sheet', () => {
     expect(sheet.emitted('enlist')).toStrictEqual([[false]])
   })
 })
+
+describe('the plan in the sheet', () => {
+  /**
+   * The same ship again, and every box on her is a target. The harbour answers "which of ninety",
+   * this answers "which part of this one" — and at this size the boxes are big enough to hit.
+   */
+  it('draws the ship and hands a clicked box up', async () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship({ quests: [quest('lint', 'violated')] }) },
+    })
+    const box = sheet
+      .findAll('rect')
+      .find((one) => one.find('title').exists() && one.find('title').text().startsWith('lint'))
+
+    expect(sheet.find('svg').exists()).toBe(true)
+
+    await box?.trigger('click')
+
+    expect(sheet.emitted('pick')).toStrictEqual([['lint']])
+  })
+
+  /** Opening a quest row is the same choice, so it travels the same way. */
+  it('hands a row that was opened up as a choice too', async () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship({ quests: [quest('lint', 'violated')] }) },
+    })
+
+    await sheet
+      .findAll('button')
+      .find((one) => one.text().includes('lint'))
+      ?.trigger('click')
+
+    expect(sheet.emitted('pick')).toStrictEqual([['lint']])
+  })
+})

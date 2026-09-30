@@ -133,3 +133,19 @@ describe('what a quest is worth', () => {
     expect(row.find('code').exists()).toBe(true)
   })
 })
+
+describe('one choice, two places', () => {
+  /**
+   * Opening a row is choosing that demand, so its box lights up in the harbour. One choice and not
+   * two: a panel and a drawing that each remembered their own "current quest" would disagree the
+   * first time somebody used both.
+   */
+  it('chooses the demand when opened and lets go when closed', async () => {
+    const row = mount(QuestRow, { props: { quest: quest('lint', 'violated') } })
+
+    await row.find('button').trigger('click')
+    await row.find('button').trigger('click')
+
+    expect(row.emitted('choose')).toStrictEqual([['lint'], [null]])
+  })
+})

@@ -220,3 +220,62 @@ describe('acting on a ship', () => {
     })
   })
 })
+
+describe('the register, from the window', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const read = {
+    path: '/cache/hafen/snapshot.json',
+    json: JSON.stringify(snapshot),
+    error: null,
+  }
+
+  /**
+   * Adopting a directory is the only action here that names a path nobody clicked on — there is
+   * nothing to click, because the whole point is a directory the survey does not find.
+   */
+  it('takes a typed directory into the register', async () => {
+    const invoke = bridge({
+      snapshot: read,
+      register: null,
+      measure: { json: JSON.stringify(snapshot), error: null },
+      store: null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'aufnehmen')
+      ?.trigger('click')
+    await page.find('input').setValue('/anderswo/ding')
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'ok')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(invoke).toHaveBeenCalledWith('register', {
+      action: 'aufnehmen',
+      path: '/anderswo/ding',
+    })
+  })
+
+  /** One choice, wherever it was made: the sheet's plan and the harbour mark the same box. */
+  it('carries a demand chosen in the sheet back to the drawing', async () => {
+    bridge({ snapshot: read })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    scene.$emit('update:quest', 'lint')
+    await flushPromises()
+
+    expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toBe('lint')
+  })
+})

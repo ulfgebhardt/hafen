@@ -186,6 +186,7 @@
             @measure="measure($event)"
             @archive="archive(sheet.path, $event)"
             @enlist="enlist(sheet.path, $event)"
+            @pick="demand = $event"
           />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.
