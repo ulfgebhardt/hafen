@@ -105,3 +105,97 @@ export async function loadSnapshot(): Promise<Loaded> {
   const invoke = invoker()
   return invoke === null ? await fromWeb() : await fromTauri(invoke)
 }
+
+/**
+ * Tauri's `invoke` with arguments, for the three commands that take some.
+ *
+ * Kept apart from `invoker` rather than widening it: the read path takes none, and a signature
+ * that allows arguments where there are none is one somebody eventually passes something to.
+ */
+function caller(): ((command: string, args?: Record<string, unknown>) => Promise<unknown>) | null {
+  const host = globalThis as { __TAURI_INTERNALS__?: { invoke?: unknown } }
+  const invoke = host.__TAURI_INTERNALS__?.invoke
+  return typeof invoke === 'function'
+    ? (invoke as (command: string, args?: Record<string, unknown>) => Promise<unknown>)
+    : null
+}
+
+/**
+ * One repository's new measurement, folded into the snapshot that is on screen.
+ *
+ * By path, and it may be absent from either side: a repository measured for the first time is
+ * added, one that no longer measures as a ship is left where it was rather than vanishing under a
+ * person who was reading it. A ship's path is what identifies it everywhere else here too — the
+ * scene's `highlight` compares the same field.
+ */
+export function spliceShip(snapshot: Snapshot, fresh: Snapshot): Snapshot {
+  const byPath = new Map(fresh.ships.map((ship) => [ship.path, ship]))
+  const kept = snapshot.ships.map((ship) => byPath.get(ship.path) ?? ship)
+  const added = fresh.ships.filter((ship) => !snapshot.ships.some((old) => old.path === ship.path))
+  return { ...snapshot, at: fresh.at, ships: [...kept, ...added] }
+}
+
+/**
+ * Measures again — the whole fleet, or one repository of it.
+ *
+ * The result is written to the cache before it is returned, so the next start shows what was just
+ * measured. Writing is a second command on purpose: the merge needs to know what a snapshot is,
+ * and the shell deliberately does not.
+ *
+ * Only in Tauri. In a browser there is nothing to run, and a button that failed in the click would
+ * be worse than no button — which is why `canMeasure` exists and the bar asks it first.
+ */
+export async function remeasure(current: Snapshot, only?: string): Promise<Snapshot> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich nicht messen — es laeuft ohne Hafen-Huelle.')
+  }
+
+  const measured = (await invoke('measure', { only: only ?? null })) as {
+    json: string | null
+    error: string | null
+  }
+  if (measured.json === null) {
+    throw new Error(measured.error ?? 'Messung ohne Antwort')
+  }
+
+  const fresh = JSON.parse(measured.json) as Snapshot
+  const next = only === undefined ? fresh : spliceShip(current, fresh)
+
+  const failure = (await invoke('store', { json: JSON.stringify(next) })) as string | null
+  if (failure !== null) {
+    // Said and not swallowed: the picture is right, the next start would not be, and only one of
+    // those two is visible from here.
+    throw new SnapshotError(failure, '(Cache)', 'hafen schnappschuss')
+  }
+  return next
+}
+
+/** The four things the register can be told. The CLI's own words — one vocabulary, not a mapping. */
+export const REGISTER_ACTIONS = ['archivieren', 'reaktivieren', 'aufnehmen', 'entfernen'] as const
+
+export type RegisterAction = (typeof REGISTER_ACTIONS)[number]
+
+/**
+ * Puts a repository away, fetches it back, takes a directory on, or drops it.
+ *
+ * Followed by a measurement of that one repository, because `archived` travels on the ship and the
+ * register is what decides it: flipping the field here as well would be a second opinion about a
+ * file that was just written. One round trip more, and nothing to keep in step.
+ */
+export async function setRegister(
+  current: Snapshot,
+  action: RegisterAction,
+  path: string,
+): Promise<Snapshot> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich das Register nicht aendern.')
+  }
+
+  const failure = (await invoke('register', { action, path })) as string | null
+  if (failure !== null) {
+    throw new Error(failure)
+  }
+  return await remeasure(current, path)
+}

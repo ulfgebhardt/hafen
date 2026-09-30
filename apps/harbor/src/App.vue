@@ -6,7 +6,7 @@
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import ShipSheet from './components/ShipSheet.vue'
-  import { loadSnapshot, SnapshotError } from './snapshot'
+  import { inTauri, loadSnapshot, remeasure, setRegister, SnapshotError } from './snapshot'
 
   import type { Band } from './components/band'
   import type { Snapshot } from './snapshot'
@@ -39,6 +39,64 @@
     snapshot.value === null ? [] : byBand(snapshot.value.ships)[band.value],
   )
 
+  /**
+   * Whether this window can measure and write at all.
+   *
+   * False in a browser, where there is no shell — and then the buttons are absent rather than
+   * disabled: a button that explains in the click why it cannot work is worse than no button.
+   */
+  const canAct = inTauri()
+  const busy = ref(false)
+  /** What the last action said when it failed. Shown in the bar, never swallowed. */
+  const trouble = ref<string | null>(null)
+
+  /**
+   * Measure again — the whole fleet, or the one repository named.
+   *
+   * The picture is replaced whole when it comes back rather than patched as it goes: a harbour
+   * half of which is from a minute ago is a harbour whose timestamp is a lie about half of it.
+   */
+  const measure = async (only?: string): Promise<void> => {
+    if (snapshot.value === null || busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      snapshot.value = await remeasure(snapshot.value, only)
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /**
+   * Put a repository away, or fetch it back.
+   *
+   * `archived` is not flipped here: the register decides it and the ship carries it, so the answer
+   * comes back from a fresh measurement of that one repository. Two opinions about a file that was
+   * just written is exactly the kept status field the whole tool is built to avoid.
+   */
+  const archive = async (path: string, away: boolean): Promise<void> => {
+    if (snapshot.value === null || busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      snapshot.value = await setRegister(
+        snapshot.value,
+        away ? 'archivieren' : 'reaktivieren',
+        path,
+      )
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
+
   onMounted(async () => {
     try {
       const loaded = await loadSnapshot()
@@ -62,8 +120,34 @@
 <template>
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
     <template v-if="snapshot !== null">
-      <FleetBar :ships="snapshot.ships" :at="snapshot.at" :source="source" />
+      <FleetBar
+        :ships="snapshot.ships"
+        :at="snapshot.at"
+        :source="source"
+        :can-measure="canAct"
+        :busy="busy"
+        @measure="measure()"
+      />
       <BandTabs v-model:band="band" :ships="snapshot.ships" />
+
+      <!--
+        Said and not swallowed: an action that quietly did nothing is the worst of the three. It
+        can be put away, though — a message that only the next successful action clears is one that
+        sits over the picture for as long as somebody is reading about why it failed.
+      -->
+      <div
+        v-if="trouble !== null"
+        class="flex items-start gap-3 border-b border-red-900 px-4 py-1 font-mono text-xs text-red-400"
+      >
+        <p class="min-w-0 flex-1 whitespace-pre-line">{{ trouble }}</p>
+        <button
+          class="shrink-0 text-red-600 hover:text-red-300"
+          title="Meldung wegklicken"
+          @click="trouble = null"
+        >
+          ×
+        </button>
+      </div>
 
       <div class="flex min-h-0 flex-1">
         <main class="min-w-0 flex-1">
@@ -77,7 +161,15 @@
         </main>
 
         <aside class="w-96 shrink-0 border-l border-slate-800">
-          <ShipSheet v-if="sheet !== null" :ship="sheet" :pinned="picked !== null" />
+          <ShipSheet
+            v-if="sheet !== null"
+            :ship="sheet"
+            :pinned="picked !== null"
+            :can-act="canAct"
+            :busy="busy"
+            @measure="measure($event)"
+            @archive="archive(sheet.path, $event)"
+          />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.
           </p>

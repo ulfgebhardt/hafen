@@ -8,12 +8,23 @@
 
   import type { Ship } from '@hafen/core'
 
-  const { ships, at, source } = defineProps<{
+  const {
+    ships,
+    at,
+    source,
+    canMeasure = false,
+    busy = false,
+  } = defineProps<{
     ships: readonly Ship[]
     at: string
     /** Where this picture came from — a cache path in the app, a URL in a browser. */
     source: string
+    /** Whether this window has a shell to measure with. False in a browser. */
+    canMeasure?: boolean
+    busy?: boolean
   }>()
+
+  const emit = defineEmits<{ measure: [] }>()
 
   const counts = computed(() => countVerdicts(ships))
 
@@ -68,5 +79,21 @@
       <PointValue :project="fleet" :personal="mine.total" />
     </p>
     <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">gemessen {{ taken }}</p>
+
+    <!--
+      The one button that starts a measurement, and it is beside the timestamp on purpose: the
+      figure it makes stale is right there, so "wie alt ist das" and "nochmal messen" are one
+      glance apart. Hidden where there is nothing to run — a button that fails in the click is
+      worse than no button.
+    -->
+    <button
+      v-if="canMeasure"
+      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+      :disabled="busy"
+      :title="`Alle ${ships.length} Repositories neu messen`"
+      @click="emit('measure')"
+    >
+      {{ busy ? 'misst …' : 'neu messen' }}
+    </button>
   </header>
 </template>

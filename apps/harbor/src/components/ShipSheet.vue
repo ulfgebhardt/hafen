@@ -17,11 +17,28 @@
 
   import type { Ship } from '@hafen/core'
 
-  const { ship, pinned = false } = defineProps<{
+  const {
+    ship,
+    pinned = false,
+    canAct = false,
+    busy = false,
+  } = defineProps<{
     ship: Ship
     /** Whether this sheet is held by a click rather than following the pointer. */
     pinned?: boolean
+    /** Whether this window has a shell. False in a browser, where the buttons would only fail. */
+    canAct?: boolean
+    busy?: boolean
   }>()
+
+  /**
+   * The two things a person decides about a repository, and the only two.
+   *
+   * Everything else on this sheet is measured; these are not, which is why they are the only
+   * buttons on it. Archiving is what the register holds, and the register holds nothing else about
+   * a ship — so there is no third one to add later without something changing shape first.
+   */
+  const emit = defineEmits<{ measure: [string]; archive: [boolean] }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
   const notApplicable = computed(() =>
@@ -51,6 +68,35 @@
         {{ ship.org }}/{{ ship.name }}
       </h2>
       <p class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
+
+      <!--
+        Two buttons, and both act on this one repository rather than on the fleet: measuring all
+        ninety to learn what one of them just did is the reason refreshing felt like something to
+        avoid. Neither touches the repository — one reads it, the other writes a line in the
+        register.
+      -->
+      <p v-if="canAct" class="mt-2 flex gap-3 font-mono text-[10px]">
+        <button
+          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          :disabled="busy"
+          title="Nur dieses Repository neu messen"
+          @click="emit('measure', ship.path)"
+        >
+          {{ busy ? 'misst …' : 'neu messen' }}
+        </button>
+        <button
+          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          :disabled="busy"
+          :title="
+            ship.archived
+              ? 'Aus dem Register nehmen — erscheint wieder unter Aktiv oder Ruhend'
+              : 'Ins Register legen — verschwindet aus Aktiv und Ruhend'
+          "
+          @click="emit('archive', !ship.archived)"
+        >
+          {{ ship.archived ? 'reaktivieren' : 'archivieren' }}
+        </button>
+      </p>
     </header>
 
     <section class="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-3">

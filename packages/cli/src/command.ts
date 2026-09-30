@@ -1,6 +1,15 @@
 import { homedir } from 'node:os'
 
-import { EMPTY_REGISTER, parseRegister, readQuestCatalog, surveyHarbor } from '@hafen/core'
+import {
+  EMPTY_REGISTER,
+  inspectShip,
+  parseRegister,
+  readQuestCatalog,
+  renderRegister,
+  setArchived,
+  setEnlisted,
+  surveyHarbor,
+} from '@hafen/core'
 
 import { renderHarbor, renderPoints } from './render'
 
@@ -60,15 +69,35 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   hafen           alle Schiffe mit Zustand, Vertrags-Luecken und Quests
   punkte          was die Projekte geleistet haben, und was davon deins ist
   schnappschuss   alles als JSON
+  register <was> <pfad>   archivieren | reaktivieren | aufnehmen | entfernen
 
   wurzel      Default: ${DEFAULT_ROOTS.join(', ')}
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
+  --nur=PFAD  nur dieses eine Repository messen
   HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
   --store     Katalog und Register; Default: ${DEFAULT_STORE}
 
-Der Hafen misst und zeichnet. Er veraendert kein Repository.
+Der Hafen misst und zeichnet. Er veraendert kein Repository - "register"
+schreibt ausschliesslich ins eigene Register, und dort stehen Entscheidungen
+eines Menschen, nie etwas Gemessenes.
 `
+
+/**
+ * What `register` can be told to do.
+ *
+ * Four words and not two flags, because the four are what a person says: a repository is put away
+ * or fetched back, a directory is taken on or dropped. A `--archiviert=true` would be the same
+ * thing written as a machine would write it.
+ */
+export const REGISTER_ACTIONS = {
+  archivieren: { field: 'archived', on: true },
+  reaktivieren: { field: 'archived', on: false },
+  aufnehmen: { field: 'enlisted', on: true },
+  entfernen: { field: 'enlisted', on: false },
+} as const
+
+export type RegisterAction = keyof typeof REGISTER_ACTIONS
 
 function write(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
@@ -176,13 +205,64 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       return 0
     }
     case 'schnappschuss': {
-      const ships = await surveyHarbor(ports, roots, {
-        register: await registry(),
-        catalog: await demands(),
-        ownEmails: await identities(),
-      })
+      /*
+       * `--nur=…` measures one repository and nothing else.
+       *
+       * For the window's per-project refresh: a full survey is ninety repositories and some
+       * seconds, and asking for all of them to learn what one of them just did is the reason
+       * refreshing felt like something to avoid. The shape of the answer is the same either way —
+       * a snapshot with a `ships` list — so the caller splices by path and needs no second format.
+       */
+      const one = flags.find((flag) => flag.startsWith('--nur='))?.slice('--nur='.length)
+      const ships =
+        one === undefined || one === ''
+          ? await surveyHarbor(ports, roots, {
+              register: await registry(),
+              catalog: await demands(),
+              ownEmails: await identities(),
+            })
+          : [
+              await inspectShip(ports, one, {
+                catalog: await demands(),
+                ownEmails: await identities(),
+                archived: (await registry()).archived.includes(one),
+              }),
+            ]
       const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }
       write(snapshot)
+      return 0
+    }
+    /**
+     * The register, and the only thing this tool writes.
+     *
+     * Here and not in the window's shell, so the register's format has one implementation: the
+     * window asks for an action by name, this reads, applies and renders. A Rust half that knew
+     * the file would be a second opinion about a file both of them edit.
+     */
+    case 'register': {
+      const [action, path] = argv.filter((arg) => !arg.startsWith('--')).slice(1)
+      if (action === undefined || !(action in REGISTER_ACTIONS) || path === undefined) {
+        process.stderr.write(
+          `hafen: register <${Object.keys(REGISTER_ACTIONS).join('|')}> <pfad>\n`,
+        )
+        return 2
+      }
+
+      const { field, on } = REGISTER_ACTIONS[action as RegisterAction]
+      const before = await registry()
+      const after =
+        field === 'archived' ? setArchived(before, path, on) : setEnlisted(before, path, on)
+
+      const failure = await ports.fs.writeFile(`${store}/register.md`, renderRegister(after))
+      if (failure !== null) {
+        process.stderr.write(`hafen: Register nicht geschrieben: ${failure}\n`)
+        return 1
+      }
+      if (asJson) {
+        write(after)
+      } else {
+        process.stdout.write(`${action}: ${path}\n`)
+      }
       return 0
     }
     case undefined: {
