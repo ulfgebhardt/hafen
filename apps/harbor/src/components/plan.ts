@@ -1,27 +1,22 @@
 /**
- * The harbour seen from above, as a plan.
+ * The berth arithmetic: how deep a row of ships is, and which way round one lies.
  *
- * This replaces the isometric grid, and the reason is a measurement anybody can repeat by looking:
- * seen at 2:1 from a corner, a hull is a box with a box on it, and a basin of ninety of them reads
- * as a housing estate. From above it does not — a ship from above is a long shape with a point at
- * one end, which is the one silhouette nobody mistakes for a building, and deck cargo becomes a
- * grid of coloured rectangles, which is exactly what a container terminal looks like in an aerial
- * photograph.
+ * What is left of a bigger file. It used to lay the *whole* harbour out as a ruled grid — piers
+ * running the full width, a fairway between them, land at the top and a breakwater at the bottom —
+ * and `moorings.ts` replaced every bit of that with one dock per organisation and a walkway tree.
+ * The grid functions went with it rather than staying as dead exports with tests beside them,
+ * which is the shape of code that looks maintained and is not.
  *
- * The projection is therefore no projection at all: world units times `UNIT`. That is not a
- * simplification for its own sake. An isometric scene spends most of its arithmetic on placement
- * and drawing order, and both of those disappear here — there is no depth, so there is no
- * painter's algorithm, and nothing can be drawn through anything else.
+ * What survives is what a *berth* is, because that has not changed and `vessel.ts` is built on it.
  *
- * What the plan is a plan *of* is a real harbour and not a ruled sheet: land along the top, piers
- * running out from it with a row of berths on either side, a fairway between them, and a
- * breakwater closing the basin. Berths on both sides of a pier is the whole reason for the shape —
- * it is what every marina from the air looks like, it halves the water spent per ship, and it
- * gives a row of hulls something to be a row *of*.
+ * The top-down view itself is why this is so small: world units times `UNIT`, no projection. An
+ * isometric scene spends most of its arithmetic on placement and drawing order, and both of those
+ * disappear without a third axis — there is no depth, so there is no painter's algorithm, and
+ * nothing can be drawn through anything else.
  *
- * `x` runs along the piers, `y` across them. Every ship lies bow-to-starboard — the same way
- * round, always, because length stands for the project score and two lengths are only comparable
- * if the eye does not have to rotate one of them first.
+ * `x` runs along a jetty, `y` across it. Every ship lies bow-to-starboard — the same way round,
+ * always, because length stands for the project score and two lengths are only comparable if the
+ * eye does not have to rotate one of them first.
  */
 
 /** A place on the plan. No `z`: from above there is none, and an unused axis is one that lies. */
@@ -53,18 +48,23 @@ export const UNIT = 5
  * uncommitted work both — so it is the band the eye crosses on the way to the ship.
  */
 export const BERTH = {
-  /** Along the pier, one berth's stern to the next one's. Must clear the longest hull. */
-  pitch: 38,
   /**
-   * Depth of the pier itself: planking, bollards, and whatever is waiting to go aboard.
+   * Along the jetty, one berth's stern to the next one's.
    *
-   * One pier serves two rows, so **each side gets half of it** and the two never share a square
-   * metre. They did: both ships at a column drew their boxes from the same corner of the same
-   * planking, and a berth with open demands on one side and a stash on the other came out as one
-   * illegible pile. Half each is the only arrangement that needs no arbitration between two ships
-   * that do not know about each other.
+   * Widened from 38 once the cargo moved off the planking: what a ship still owes now stands on
+   * the apron *ahead of her bow*, so a berth has to hold a hull and a stack, not a hull alone.
+   * The scene zooms, so the cost of a wider berth is a smaller default scale and nothing else.
    */
-  pier: 14,
+  pitch: 52,
+  /**
+   * The planking itself — and it is now the *same* plank everywhere in the harbour.
+   *
+   * It was 14 units deep because it carried the cargo: every demand a ship still owed stood on it,
+   * so the drawing had two kinds of walkway, a broad loaded one and a thin connecting one. One
+   * kind was asked for, so the load moved to the apron ahead of each bow and the planking shrank
+   * to what a plank is: something to walk on.
+   */
+  pier: 3.2,
   /** The water a hull lies in, measured across. Holds a snug hull and one standing right off. */
   lane: 12,
   /**
@@ -93,15 +93,6 @@ export const BERTH = {
 export const BLOCK =
   BERTH.pier + BERTH.lane + BERTH.caption + BERTH.fairway + BERTH.caption + BERTH.lane
 
-/** The promenade along the top of the basin, where the piers start. */
-export const LAND = 8
-
-/** The breakwater closing the basin at the bottom. */
-export const MOLE = 7
-
-/** Water around the whole plan, so nothing sits flush against an edge. */
-export const MARGIN = { x: 4, y: 3 } as const
-
 /**
  * The shape the plan is laid out towards when nobody says otherwise.
  *
@@ -125,9 +116,6 @@ export function unproject(flat: Flat): Spot {
   return { x: flat.x / UNIT, y: flat.y / UNIT }
 }
 
-/** Where the first pier's planking begins. */
-export const CONTENT_TOP = MARGIN.y + LAND
-
 /** How many rows of berths `count` ships need at `columns` wide. */
 export function rowsAt(count: number, columns: number): number {
   return Math.max(1, Math.ceil(Math.max(count, 1) / columns))
@@ -149,51 +137,6 @@ export function contentHeight(rows: number): number {
     : pairs * BLOCK + BERTH.pier + BERTH.lane + BERTH.caption
 }
 
-/** How many piers `rows` of berths need. One serves two rows, and the first row needs one above. */
-export function pierCount(rows: number): number {
-  return Math.floor(rows / 2) + 1
-}
-
-/** The plan's size in world units for a given column count, land and breakwater included. */
-export function shapeAt(count: number, columns: number): { width: number; height: number } {
-  return {
-    width: MARGIN.x * 2 + columns * BERTH.pitch,
-    height: CONTENT_TOP + contentHeight(rowsAt(count, columns)) + MOLE + MARGIN.y,
-  }
-}
-
-/**
- * How many berths stand side by side.
- *
- * Searched rather than estimated. The closed form is easy to write and was wrong: the land, the
- * breakwater and the margins are a fixed height that a ratio of pitches cannot see, so the formula
- * drifted square as the fleet grew — exactly the failure it was supposed to prevent. Trying every
- * column count and keeping the one whose actual plan lands nearest 16:9 is a handful of
- * multiplications per draw and cannot be wrong about its own arithmetic.
- */
-export function columnsFor(count: number, aspect: number = ASPECT): number {
-  if (count <= 0) {
-    return 1
-  }
-
-  const target = Number.isFinite(aspect) && aspect > 0 ? aspect : ASPECT
-  let best = 1
-  let closest = Number.POSITIVE_INFINITY
-  for (let columns = 1; columns <= count; columns += 1) {
-    const shape = shapeAt(count, columns)
-    const off = Math.abs(shape.width / shape.height - target)
-    if (off < closest) {
-      closest = off
-      best = columns
-    }
-  }
-  return best
-}
-
-export function rowsFor(count: number, aspect: number = ASPECT): number {
-  return rowsAt(count, columnsFor(count, aspect))
-}
-
 /**
  * Which side of her pier a ship lies on.
  *
@@ -203,75 +146,3 @@ export function rowsFor(count: number, aspect: number = ASPECT): number {
  * symmetric about the centreline, so the mirror costs no second drawing.
  */
 export type Side = 1 | -1
-
-export interface Berth {
-  /** The hull's stern, on her centreline, with the ship lying snug against her pier. */
-  spot: Spot
-  /** Where the planking is, relative to her: `1` north of her, `-1` south. */
-  side: Side
-  column: number
-  row: number
-}
-
-/**
- * A berth per ship, filling row by row.
- *
- * Filled in the order given, so the caller's sorting decides who lies in the front row — and the
- * front row is the top one, where a reader starts. The layout does not sort; it places.
- */
-export function berthsFor(count: number, aspect: number = ASPECT): readonly Berth[] {
-  const columns = columnsFor(count, aspect)
-  return Array.from({ length: Math.max(0, count) }, (_, index) => {
-    const column = index % columns
-    const row = Math.floor(index / columns)
-    const top = CONTENT_TOP + Math.floor(row / 2) * BLOCK
-    const side: Side = row % 2 === 0 ? 1 : -1
-
-    return {
-      column,
-      row,
-      side,
-      spot: {
-        x: MARGIN.x + column * BERTH.pitch,
-        y: side === 1 ? top + BERTH.pier + BERTH.laneCentre : top + BLOCK - BERTH.laneCentre,
-      },
-    }
-  })
-}
-
-export interface Pier {
-  index: number
-  /** The landward corner: the planking runs `length` along and `depth` down from here. */
-  from: Spot
-  length: number
-  depth: number
-}
-
-/**
- * The piers: one per pair of rows, and one more for the first row to lie against.
- *
- * Exactly as many as are used. A pier with no ship on either side is a pier drawn from the
- * arithmetic rather than from the harbour, and at seventeen ships that was a third of the basin.
- * Full width even where the last row is half empty, though — a pier that stopped where the ships
- * stop would move every time a repository was added.
- */
-export function piersFor(count: number, aspect: number = ASPECT): readonly Pier[] {
-  const columns = columnsFor(count, aspect)
-  const length = MARGIN.x * 2 + columns * BERTH.pitch
-
-  return Array.from({ length: pierCount(rowsAt(count, columns)) }, (_, index) => ({
-    index,
-    length,
-    depth: BERTH.pier,
-    from: { x: 0, y: CONTENT_TOP + index * BLOCK },
-  }))
-}
-
-/** The whole plan in pixels, so the viewport can fit and clamp it. */
-export function planExtent(
-  count: number,
-  aspect: number = ASPECT,
-): { width: number; height: number } {
-  const shape = shapeAt(count, columnsFor(count, aspect))
-  return { width: shape.width * UNIT, height: shape.height * UNIT }
-}

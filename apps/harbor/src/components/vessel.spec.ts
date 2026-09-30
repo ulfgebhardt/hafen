@@ -221,7 +221,7 @@ describe(landedOf, () => {
       ],
     })
 
-    const owed = landedOf(subject)
+    const owed = landedOf(subject, hullOf(subject, 0))
       .map((box) => box.quest.id)
       .sort((a, b) => a.localeCompare(b))
 
@@ -229,24 +229,34 @@ describe(landedOf, () => {
   })
 
   it('leaves the pier clear when everything is met', () => {
-    expect(landedOf(ship({ quests: [quest('a', 'met')] }))).toStrictEqual([])
+    const clean = ship({ quests: [quest('a', 'met')] })
+
+    expect(landedOf(clean, hullOf(clean, 0))).toStrictEqual([])
   })
 
   it('puts the worst nearest the stern, where reading starts', () => {
     const subject = ship({ quests: [quest('offen', 'waiting'), quest('kaputt', 'violated')] })
 
-    expect(landedOf(subject)[0]?.quest.id).toBe('kaputt')
+    expect(landedOf(subject, hullOf(subject, 0))[0]?.quest.id).toBe('kaputt')
   })
 
-  /** On the planking and never in the water: the pier is between the hull and the land. */
-  it('stands every box on the pier', () => {
+  /**
+   * On the apron ahead of her bow, and inside her own berth.
+   *
+   * It used to stand on the planking, which is what made the planking fourteen units deep and gave
+   * the harbour two kinds of walkway. The berth is what bounds it now: clear of the stem at one
+   * end and of the next ship's stern at the other, so no two stacks can run together.
+   */
+  it('stacks every box on her own apron, ahead of her stem', () => {
     const many = Array.from({ length: 11 }, (_, index) => quest(`q${String(index)}`, 'violated'))
+    const subject = ship({ quests: many })
+    const hull = hullOf(subject, 0)
 
-    for (const box of landedOf(ship({ quests: many }))) {
-      expect(box.spot.y + box.across / 2).toBeLessThan(-BERTH.laneCentre)
-      expect(box.spot.y - box.across / 2).toBeGreaterThan(-(BERTH.laneCentre + BERTH.pier))
-      expect(box.spot.x - box.along / 2).toBeGreaterThan(0)
+    for (const box of landedOf(subject, hull)) {
+      expect(box.spot.x - box.along / 2).toBeGreaterThanOrEqual(hull.length)
       expect(box.spot.x + box.along / 2).toBeLessThan(BERTH.pitch)
+      // Narrower than the ship it waits for: a wider stack reads as two ships' cargo run together.
+      expect(Math.abs(box.spot.y) + box.across / 2).toBeLessThan(SIZE.maxBeam)
     }
   })
 
@@ -254,7 +264,8 @@ describe(landedOf, () => {
     const many = Array.from({ length: LANDED_PER_ROW + 1 }, (_, index) =>
       quest(`q${String(index)}`, 'violated'),
     )
-    const boxes = landedOf(ship({ quests: many }))
+    const subject = ship({ quests: many })
+    const boxes = landedOf(subject, hullOf(subject, 0))
 
     expect(boxes.at(-1)?.spot.y).toBe(pierRowY(1))
     expect(boxes.at(-1)?.spot.x).toBe(boxes[0]?.spot.x)
@@ -356,7 +367,7 @@ describe('what waits and what she is', () => {
    * on the hull, so a repository with *more* left to do came out the more interesting drawing.
    */
   it('puts everything there is to do on the planking', () => {
-    const waiting = pierMarks(busy).map((box) => box.kind)
+    const waiting = pierMarks(busy, hullOf(busy, 0)).map((box) => box.kind)
 
     expect(waiting).toContain('pennant')
     expect(waiting).toContain('drag')
@@ -372,7 +383,7 @@ describe('what waits and what she is', () => {
 
   /** Every mark lands in exactly one of the two, or a click would answer twice. */
   it('draws nothing in both places', () => {
-    const onPier = new Set(pierMarks(busy).map((box) => box.kind))
+    const onPier = new Set(pierMarks(busy, hullOf(busy, 0)).map((box) => box.kind))
 
     for (const box of hullMarks(busy, hull)) {
       expect(onPier.has(box.kind)).toBe(false)
