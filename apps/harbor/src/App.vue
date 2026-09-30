@@ -19,6 +19,7 @@
   } from './snapshot'
 
   import type { Band } from './components/band'
+  import type { Chosen } from './components/chosen'
   import type { ToolName } from './components/tools'
   import type { RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
@@ -35,8 +36,13 @@
    */
   const picked = ref<Ship | null>(null)
   const hovered = ref<Ship | null>(null)
-  /** The demand whose box was clicked, so the sheet can open that row rather than the whole list. */
-  const demand = ref<string | null>(null)
+  /**
+   * What was pointed at on the chosen ship — a demand, or a kind of mark.
+   *
+   * One choice for both directions: the drawing marks it and the sheet scrolls to it, whichever of
+   * the two it was set from. Two states would disagree the first time somebody used both.
+   */
+  const demand = ref<Chosen | null>(null)
   const sheet = computed(() => picked.value ?? hovered.value)
 
   /**

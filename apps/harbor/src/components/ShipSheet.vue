@@ -11,14 +11,17 @@
   } from '@hafen/core'
   import { computed, ref } from 'vue'
 
+  import { isQuest } from './chosen'
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
   import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
+  import ShipMarks from './ShipMarks.vue'
   import ShipPlan from './ShipPlan.vue'
   import ShipTools from './ShipTools.vue'
   import TaskList from './TaskList.vue'
   import { RUST_LABEL, STAGE_LABEL, STAGE_MEANING } from './theme'
 
+  import type { Chosen } from './chosen'
   import type { ToolName } from './tools'
   import type { Ship } from '@hafen/core'
 
@@ -36,8 +39,8 @@
     /** Whether this window has a shell. False in a browser, where the buttons would only fail. */
     canAct?: boolean
     busy?: boolean
-    /** The quest whose box was clicked in the harbour, if it was a box that was clicked. */
-    quest?: string | null
+    /** What was pointed at on this ship — a demand, or a kind of mark. */
+    quest?: Chosen | null
     /** What this machine can actually run. Anything absent is not drawn rather than disabled. */
     tools?: readonly ToolName[]
   }>()
@@ -54,7 +57,7 @@
     archive: [boolean]
     enlist: [boolean]
     /** Which demand the reader pointed at, here or in the harbour — the same choice either way. */
-    pick: [string | null]
+    pick: [Chosen | null]
     tool: [ToolName]
     prune: [string]
   }>()
@@ -118,6 +121,19 @@
       </h2>
       <!-- The path is the first thing to go: it is long, and it does not change while reading. -->
       <p v-if="!scrolled" class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
+
+      <!--
+        Once the plan above has scrolled away, a small one comes with the name.
+        What is marked stays visible while the reader is down among the rows that explain it —
+        otherwise choosing a thing scrolls the only picture of it off the top of the panel.
+      -->
+      <ShipPlan
+        v-if="scrolled"
+        class="mt-1 max-h-12"
+        :ship="ship"
+        :chosen="chosenQuest"
+        @pick="emit('pick', $event)"
+      />
 
       <!--
         Two buttons, and both act on this one repository rather than on the fleet: measuring all
@@ -262,6 +278,8 @@
       </p>
     </section>
 
+    <ShipMarks :ship="ship" :chosen="chosenQuest" @pick="emit('pick', $event)" />
+
     <ShipTools
       :ship="ship"
       :available="tools"
@@ -287,8 +305,8 @@
           :quest="demand"
           :own="ship.ownQuests.includes(demand.id)"
           :task="taskForQuest(ship, demand.id)"
-          :chosen="demand.id === chosenQuest"
-          @choose="emit('pick', $event)"
+          :chosen="isQuest(chosenQuest, demand.id)"
+          @choose="emit('pick', $event === null ? null : { kind: 'quest', id: $event })"
         />
       </div>
 

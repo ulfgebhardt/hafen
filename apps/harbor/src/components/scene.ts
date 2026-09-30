@@ -31,7 +31,6 @@ import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pi
 
 import { conditionOf } from './condition'
 import { ageLabel, berths as orderBerths, drift, fit } from './fleet'
-import { drawn, isCapped, marksOf } from './marks'
 import {
   ASPECT,
   BERTH,
@@ -48,16 +47,16 @@ import {
 } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import {
+  boxAt,
   bridgeOf,
   cargoOf,
   hasPlume,
   hullOf,
+  hullMarks,
   landedOf,
-  LANDED,
-  MARK_ROW,
   mooringOf,
   offsetOf,
-  pierRowY,
+  pierMarks,
   questAt,
   yawOf,
 } from './vessel'
@@ -71,8 +70,9 @@ import {
   ZOOM_STEP,
 } from './viewport'
 
+import type { Chosen } from './chosen'
 import type { Side, Spot } from './plan'
-import type { Container as Container_, Hull } from './vessel'
+import type { Container as Container_, Hull, MarkBox } from './vessel'
 import type { Extent, Pan } from './viewport'
 import type { Ship } from '@hafen/core'
 import type { FederatedPointerEvent } from 'pixi.js'
@@ -101,9 +101,6 @@ const LABEL_SCORE = new TextStyle({
 
 /** Grouped the way the rest of the window groups figures. */
 const FIGURE = new Intl.NumberFormat('de-DE')
-
-/** A box for the repository's own untidiness. Smaller than a demand, because it is a smaller thing. */
-const MARK = { along: 1.5, gap: 0.4 } as const
 
 /**
  * How many characters of a caption fit along a berth.
@@ -294,7 +291,7 @@ export interface Scene {
    * question about *that* demand, and answering it with "this ship" throws away the only part of
    * the click that was specific.
    */
-  onSelect: (handler: (ship: Ship | null, quest: string | null) => void) => void
+  onSelect: (handler: (ship: Ship | null, chosen: Chosen | null) => void) => void
   /**
    * Which ship to draw as chosen, and which of her boxes.
    *
@@ -302,7 +299,7 @@ export interface Scene {
    * "this demand". A reader who clicked a container and got only the hull lit up has been answered
    * about something they did not ask.
    */
-  highlight: (ship: Ship | null, quest?: string | null) => void
+  highlight: (ship: Ship | null, chosen?: Chosen | null) => void
   destroy: () => void
 }
 
@@ -357,44 +354,38 @@ function pierLoad(ship: Ship): Graphics {
   /*
    * The repository's own untidiness, all of it in the one reserved row.
    *
-   * One row and not one per kind: half a pier holds three rows, and a row per kind wanted five.
-   * They overlapped, which is what the second screenshot showed. The kinds are told apart by
-   * colour and by fill — a stash is not a row further out than a staged file, it is a different
-   * colour — so the row was never carrying that distinction anyway. Smaller boxes than a demand,
-   * because a demand is a thing the fleet requires and this is a thing lying about.
+   * Placed by `pierMarks` and only stroked here: where a crate sits now has a second reader — the
+   * hit test — and two placements of one crate would be two answers to "what did I just click on".
    */
-  const step = MARK.along + MARK.gap
-  const y = pierRowY(MARK_ROW)
-  let at = LANDED.first
-  for (const mark of marksOf(ship)) {
-    if (mark.kind !== 'staged' && mark.kind !== 'unstaged' && mark.kind !== 'untracked') {
-      if (mark.kind !== 'stash') {
-        continue
-      }
+  for (const box of pierMarks(ship)) {
+    const color = hex(MARK_COLOR[box.kind])
+    const crate = slab(load, box.spot, box.along, box.across)
+    if (box.kind === 'untracked') {
+      crate.stroke({ width: 1, color, alpha: 0.8 })
+    } else {
+      crate.fill({ color, alpha: 0.8 })
     }
+  }
 
-    const color = hex(MARK_COLOR[mark.kind])
-    for (let index = 0; index < drawn(mark) && at + MARK.along < BERTH.pitch - 2; index += 1) {
-      const box = slab(load, { x: at + MARK.along / 2, y }, MARK.along, LANDED.across * 0.8)
-      if (mark.kind === 'untracked') {
-        box.stroke({ width: 1, color, alpha: 0.8 })
-      } else {
-        box.fill({ color, alpha: 0.8 })
-      }
-      at += step
+  // The `+` that says a count was cut, once per kind, after its last drawn crate.
+  for (const kind of new Set(
+    pierMarks(ship)
+      .filter((box) => box.capped)
+      .map((box) => box.kind),
+  )) {
+    const last = pierMarks(ship)
+      .filter((box) => box.kind === kind)
+      .at(-1)
+    if (last === undefined) {
+      continue
     }
-    if (isCapped(mark)) {
-      const tick = project({ x: at + 0.3, y })
-      load
-        .moveTo(tick.x - 0.4 * UNIT, tick.y)
-        .lineTo(tick.x + 0.4 * UNIT, tick.y)
-        .moveTo(tick.x, tick.y - 0.4 * UNIT)
-        .lineTo(tick.x, tick.y + 0.4 * UNIT)
-        .stroke({ width: 1, color, alpha: 0.85 })
-      at += 1.2
-    }
-    // A gap between two kinds, so the row reads as groups rather than one long stack.
-    at += 0.6
+    const tick = project({ x: last.spot.x + last.along / 2 + 0.6, y: last.spot.y })
+    load
+      .moveTo(tick.x - 0.4 * UNIT, tick.y)
+      .lineTo(tick.x + 0.4 * UNIT, tick.y)
+      .moveTo(tick.x, tick.y - 0.4 * UNIT)
+      .lineTo(tick.x, tick.y + 0.4 * UNIT)
+      .stroke({ width: 1, color: hex(MARK_COLOR[kind]), alpha: 0.85 })
   }
 
   return load
@@ -408,14 +399,19 @@ function pierLoad(ship: Ship): Graphics {
  */
 function shipState(ship: Ship, hull: Hull): Graphics {
   const state = new Graphics()
-  const half = hull.beam / 2
 
-  for (const mark of marksOf(ship)) {
-    const count = drawn(mark)
-    const color = hex(MARK_COLOR[mark.kind])
+  /*
+   * Placed by `hullMarks` and only stroked here — the same split the planking follows.
+   *
+   * Every one of them is a rectangle to `hullMarks`, including the ones drawn as a cross or a
+   * triangle: the *shape* is this file's business, the area a click may land in is not. A hit area
+   * traced from a drawing would be a second opinion about where the drawing is.
+   */
+  for (const box of hullMarks(ship, hull)) {
+    const color = hex(MARK_COLOR[box.kind])
+    const at = project(box.spot)
 
-    if (mark.kind === 'damage') {
-      const at = project({ x: hull.length * 0.45, y: 0 })
+    if (box.kind === 'damage') {
       const arm = 1.1 * UNIT
       state
         .moveTo(at.x - arm, at.y - arm)
@@ -426,69 +422,48 @@ function shipState(ship: Ship, hull: Hull): Graphics {
       continue
     }
 
-    if (mark.kind === 'pennant') {
+    if (box.kind === 'pennant') {
       // Off the jackstaff at the stem — from above a flag is a triangle flying to leeward.
-      const at = project({ x: hull.length + 0.6, y: 0 })
       state
-        .moveTo(at.x, at.y)
-        .lineTo(at.x + 2.4 * UNIT, at.y - 0.9 * UNIT)
-        .lineTo(at.x + 2.4 * UNIT, at.y + 0.9 * UNIT)
+        .moveTo(at.x - 1.2 * UNIT, at.y)
+        .lineTo(at.x + 1.2 * UNIT, at.y - 0.9 * UNIT)
+        .lineTo(at.x + 1.2 * UNIT, at.y + 0.9 * UNIT)
         .closePath()
         .fill({ color, alpha: 0.85 })
       continue
     }
 
-    if (mark.kind === 'drag') {
+    if (box.kind === 'drag') {
       // Astern of the transom: what is upstream and not here yet.
-      for (let index = 0; index < count; index += 1) {
-        const at = project({ x: -1 - index * 0.7, y: 0 })
-        state.moveTo(at.x, at.y - 1.1 * UNIT).lineTo(at.x, at.y + 1.1 * UNIT)
+      for (const offset of [-0.7, 0, 0.7]) {
+        state
+          .moveTo(at.x + offset * UNIT, at.y - 1.1 * UNIT)
+          .lineTo(at.x + offset * UNIT, at.y + 1.1 * UNIT)
       }
       state.stroke({ width: 1.4, color, alpha: 0.6 })
       continue
     }
 
-    if (mark.kind === 'boat') {
+    if (box.kind === 'boat') {
       // Worktrees lie alongside, on the seaward side: other trees of the same repository.
-      for (let index = 0; index < count; index += 1) {
-        slab(state, { x: hull.length * 0.2 + index * 3.2, y: half + 1.3 }, 2.4, 1).fill({
-          color,
-          alpha: 0.6,
-        })
-      }
+      slab(state, box.spot, box.along, box.across).fill({ color, alpha: 0.6 })
       continue
     }
 
-    if (mark.kind === 'tender') {
-      /*
-       * Beiboote: repositories this one carries.
-       *
-       * Forward of the worktrees and drawn as an outline rather than filled, because they are a
-       * different thing and not more of the same — a worktree is this repository twice, a
-       * submodule is somebody else's brought along. Small and pointed, so the row reads as boats
-       * and not as more cargo.
-       */
-      for (let index = 0; index < count; index += 1) {
-        const at = { x: hull.length * 0.58 + index * 2.4, y: half + 1.3 }
-        poly(state, [
-          { x: at.x - 0.9, y: at.y - 0.45 },
-          { x: at.x + 0.6, y: at.y - 0.45 },
-          { x: at.x + 1, y: at.y },
-          { x: at.x + 0.6, y: at.y + 0.45 },
-          { x: at.x - 0.9, y: at.y + 0.45 },
-        ]).stroke({ width: 1, color, alpha: 0.85 })
-      }
-      if (isCapped(mark)) {
-        const tick = project({ x: hull.length * 0.58 + count * 2.4, y: half + 1.3 })
-        state
-          .moveTo(tick.x - 0.4 * UNIT, tick.y)
-          .lineTo(tick.x + 0.4 * UNIT, tick.y)
-          .moveTo(tick.x, tick.y - 0.4 * UNIT)
-          .lineTo(tick.x, tick.y + 0.4 * UNIT)
-          .stroke({ width: 1, color, alpha: 0.85 })
-      }
-      continue
-    }
+    /*
+     * Beiboote: repositories this one carries.
+     *
+     * Forward of the worktrees and an outline rather than filled, because they are a different
+     * thing and not more of the same — a worktree is this repository twice, a submodule is
+     * somebody else's brought along.
+     */
+    poly(state, [
+      { x: box.spot.x - box.along / 2, y: box.spot.y - box.across / 2 },
+      { x: box.spot.x + box.along / 2 - 0.4, y: box.spot.y - box.across / 2 },
+      { x: box.spot.x + box.along / 2, y: box.spot.y },
+      { x: box.spot.x + box.along / 2 - 0.4, y: box.spot.y + box.across / 2 },
+      { x: box.spot.x - box.along / 2, y: box.spot.y + box.across / 2 },
+    ]).stroke({ width: 1, color, alpha: 0.85 })
   }
   return state
 }
@@ -681,7 +656,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   app.stage.addChild(world)
 
   let hovered: (ship: Ship | null) => void = () => undefined
-  let selected: (ship: Ship | null, quest: string | null) => void = () => undefined
+  let selected: (ship: Ship | null, chosen: Chosen | null) => void = () => undefined
   let placed: Placed[] = []
   let traffic: { node: Container; from: number; span: number; speed: number; offset: number }[] = []
   let extent: Extent = { width: 0, height: 0 }
@@ -744,11 +719,24 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       (event: FederatedPointerEvent): void => {
         const aboard = event.getLocalPosition(body)
         const ashore = event.getLocalPosition(quayside)
-        selected(
-          ship,
-          questAt(cargoOf(ship, hull), { x: aboard.x / UNIT, y: aboard.y / UNIT }) ??
-            questAt(landedOf(ship), { x: ashore.x / UNIT, y: ashore.y / UNIT }),
-        )
+        const onDeck = { x: aboard.x / UNIT, y: aboard.y / UNIT }
+        const onPier = { x: ashore.x / UNIT, y: ashore.y / UNIT }
+
+        /*
+         * Every drawn thing, in the order it is drawn.
+         *
+         * Demands first because they are what the deck is *for*; the marks lie in bands of their
+         * own and cannot overlap them anyway. Hit-tested against the same lists the renderer
+         * strokes, so nothing can be drawn in one place and answered for in another.
+         */
+        const quest = questAt(cargoOf(ship, hull), onDeck) ?? questAt(landedOf(ship), onPier)
+        if (quest !== null) {
+          selected(ship, { kind: 'quest', id: quest })
+          return
+        }
+
+        const mark = boxAt(hullMarks(ship, hull), onDeck) ?? boxAt(pierMarks(ship), onPier)
+        selected(ship, mark === null ? null : { kind: 'mark', mark: mark.kind })
       }
 
     const fleet = new Container()
@@ -973,7 +961,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * ground because an outline around a body seen from a corner is a shape nobody reads at a
      * glance — that reason went with the view.
      */
-    highlight: (ship, quest = null) => {
+    highlight: (ship, chosen = null) => {
       const accent = hex(SCENE.accent)
       for (const entry of placed) {
         entry.chosen.clear()
@@ -986,19 +974,33 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         poly(entry.chosen, entry.hull.outline).fill({ color: accent, alpha: 0.16 })
         poly(entry.chosen, entry.hull.outline).stroke({ width: 6, color: accent, alpha: 0.9 })
 
-        if (quest === null) {
+        if (chosen === null) {
           continue
         }
 
         /*
-         * The one box, ringed where it stands.
+         * Whatever it was, ringed where it stands.
          *
-         * Drawn rather than looked up: `cargoOf` and `landedOf` are the same two calls the drawing
-         * made, so the ring lands on the box by construction. A remembered rectangle would be a
-         * second opinion about where a box is.
+         * Drawn from the same four lists the renderer used, so the ring lands on the thing by
+         * construction. A remembered rectangle would be a second opinion about where it is.
          */
+        if (chosen.kind === 'mark') {
+          const ring = (into: Graphics, boxes: readonly MarkBox[]): void => {
+            for (const box of boxes.filter((one) => one.kind === chosen.mark)) {
+              slab(into, box.spot, box.along + 0.4, box.across + 0.4).stroke({
+                width: 2,
+                color: accent,
+                alpha: 0.95,
+              })
+            }
+          }
+          ring(entry.aboard, hullMarks(entry.ship, entry.hull))
+          ring(entry.ashore, pierMarks(entry.ship))
+          continue
+        }
+
         const mark = (into: Graphics, boxes: readonly Container_[]): void => {
-          const box = boxes.find((one) => one.quest.id === quest)
+          const box = boxes.find((one) => one.quest.id === chosen.id)
           if (box === undefined) {
             return
           }

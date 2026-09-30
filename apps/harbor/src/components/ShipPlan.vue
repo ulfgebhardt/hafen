@@ -15,23 +15,35 @@
   import { shipPoints } from '@hafen/core'
   import { computed } from 'vue'
 
-  import { VERDICT_COLOR, VERDICT_LABEL, SCENE, SEGMENT } from './theme'
-  import { bridgeOf, cargoOf, hullOf, landedOf } from './vessel'
+  import { isMark, isQuest } from './chosen'
+  import { MARK_LABEL, MARK_MEANING } from './marks'
+  import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR, VERDICT_LABEL } from './theme'
+  import { bridgeOf, cargoOf, hullMarks, hullOf, landedOf, pierMarks } from './vessel'
 
+  import type { Chosen } from './chosen'
   import type { Ship } from '@hafen/core'
 
   const { ship, chosen = null } = defineProps<{
     ship: Ship
-    /** The demand whose box is lit, wherever it stands. */
-    chosen?: string | null
+    /** What is lit on her, wherever it stands. */
+    chosen?: Chosen | null
   }>()
 
-  const emit = defineEmits<{ pick: [string | null] }>()
+  const emit = defineEmits<{ pick: [Chosen | null] }>()
 
   const hull = computed(() => hullOf(ship, shipPoints(ship).project))
   const cargo = computed(() => cargoOf(ship, hull.value))
   const landed = computed(() => landedOf(ship))
   const bridge = computed(() => bridgeOf(ship, hull.value))
+
+  /**
+   * Everything else drawn on her: crates on the planking, a flag, damage, boats alongside.
+   *
+   * Here too, and from the same two functions the harbour uses. "Every visual element has a
+   * counterpart in the detail view" is only true if the detail view draws the same elements —
+   * a plan that showed the cargo and left out the stash would answer half the clicks.
+   */
+  const marks = computed(() => [...pierMarks(ship), ...hullMarks(ship, hull.value)])
 
   /**
    * The drawing's own box, in the ship's coordinates.
@@ -43,14 +55,11 @@
    */
   const frame = computed(() => {
     const half = hull.value.beam / 2
-    const tops = landed.value.map((box) => box.spot.y - box.across / 2)
-    const top = Math.min(-half, ...tops) - 1
-    return {
-      x: -2,
-      y: top,
-      width: hull.value.length + 4,
-      height: half + 1 - top,
-    }
+    const drawn = [...landed.value, ...marks.value]
+    const top = Math.min(-half, ...drawn.map((box) => box.spot.y - box.across / 2)) - 1
+    const bottom = Math.max(half, ...drawn.map((box) => box.spot.y + box.across / 2)) + 1
+    const right = Math.max(hull.value.length, ...drawn.map((box) => box.spot.x + box.along / 2))
+    return { x: -3.5, y: top, width: right + 5, height: bottom - top }
   })
 
   const outline = computed(() =>
@@ -107,9 +116,9 @@
         :height="box.across"
         :fill="VERDICT_COLOR[box.quest.verdict]"
         :fill-opacity="fillFor(box.quest.verdict)"
-        :stroke="box.quest.id === chosen ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
-        :stroke-width="box.quest.id === chosen ? 0.45 : 0.15"
-        @click.stop="emit('pick', box.quest.id)"
+        :stroke="isQuest(chosen, box.quest.id) ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
+        :stroke-width="isQuest(chosen, box.quest.id) ? 0.45 : 0.15"
+        @click.stop="emit('pick', { kind: 'quest', id: box.quest.id })"
       >
         <title>{{ box.quest.id }} — {{ VERDICT_LABEL[box.quest.verdict] }}</title>
       </rect>
@@ -125,11 +134,29 @@
         :height="box.across"
         :fill="VERDICT_COLOR[box.quest.verdict]"
         :fill-opacity="fillFor(box.quest.verdict)"
-        :stroke="box.quest.id === chosen ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
-        :stroke-width="box.quest.id === chosen ? 0.45 : 0.15"
-        @click.stop="emit('pick', box.quest.id)"
+        :stroke="isQuest(chosen, box.quest.id) ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
+        :stroke-width="isQuest(chosen, box.quest.id) ? 0.45 : 0.15"
+        @click.stop="emit('pick', { kind: 'quest', id: box.quest.id })"
       >
         <title>{{ box.quest.id }} — {{ VERDICT_LABEL[box.quest.verdict] }}</title>
+      </rect>
+    </g>
+
+    <!-- The repository's own state: crates, a flag, damage, boats. Targets, like everything else. -->
+    <g v-for="(box, index) in marks" :key="`mk-${String(index)}`">
+      <rect
+        class="cursor-pointer"
+        :x="box.spot.x - box.along / 2"
+        :y="box.spot.y - box.across / 2"
+        :width="box.along"
+        :height="box.across"
+        :fill="MARK_COLOR[box.kind]"
+        :fill-opacity="box.kind === 'untracked' || box.kind === 'tender' ? 0.12 : 0.7"
+        :stroke="isMark(chosen, box.kind) ? SCENE.accent : MARK_COLOR[box.kind]"
+        :stroke-width="isMark(chosen, box.kind) ? 0.45 : 0.15"
+        @click.stop="emit('pick', { kind: 'mark', mark: box.kind })"
+      >
+        <title>{{ MARK_LABEL[box.kind] }} — {{ MARK_MEANING[box.kind] }}</title>
       </rect>
     </g>
   </svg>
