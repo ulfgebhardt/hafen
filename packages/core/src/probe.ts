@@ -238,6 +238,43 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       return say(`${path} liegt im Schiff`, path, seen.found, seen.ok)
     }
 
+    /**
+     * Any one of several paths — the question a single path cannot answer.
+     *
+     * A licence is spelled `LICENSE`, `LICENSE.md`, `LICENCE` or `COPYING`, and a readme is
+     * `README.md` or `README`. Measured over 44 node repositories here: 16 carry `LICENSE` and 10
+     * carry `LICENSE.md`, so a quest naming one path would report a gap in ten repositories that
+     * do exactly what is asked. That is the same argument `ci-nennt` was created for, one
+     * directory over.
+     *
+     * Comma-separated in `dateien:`, the shape `gilt_fuer` already uses for "several of these".
+     */
+    case 'datei-eine-von': {
+      const candidates = (check.args['dateien'] ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== '')
+      if (candidates.length === 0) {
+        return say('eine dieser Dateien liegt im Schiff', 'nirgends', 'keine Datei genannt', null)
+      }
+
+      const seen = candidates.map((path) => ({ path, ...shipFile(facts, path) }))
+      const hit = seen.find((one) => one.ok === true)
+      // Unreadable everywhere is unmeasured, not missing: a catalog that named only paths this
+      // survey refuses has said nothing about the ship, and `null` is what that is.
+      const readable = seen.some((one) => one.ok !== null)
+      return say(
+        `eine von ${candidates.join(', ')} liegt im Schiff`,
+        candidates.join(', '),
+        hit === undefined
+          ? readable
+            ? 'keine davon vorhanden'
+            : 'kein Pfad liegt im Schiff'
+          : `${hit.path} vorhanden`,
+        readable ? hit !== undefined : null,
+      )
+    }
+
     case 'datei-enthaelt': {
       const path = check.args['datei'] ?? ''
       const text = check.args['text'] ?? ''
@@ -315,14 +352,18 @@ function wantedFiles(catalog: readonly Quest[]): readonly string[] {
   const paths = new Set<string>()
   for (const quest of catalog) {
     for (const check of quest.checks) {
-      const path = check.args['datei']
-      if (
-        path !== undefined &&
-        path !== '' &&
-        !path.startsWith('/') &&
-        !path.split('/').includes('..')
-      ) {
-        paths.add(path)
+      // `datei` names one, `dateien` names several — both end up in the same read.
+      const named = [check.args['datei'], ...(check.args['dateien'] ?? '').split(',')]
+      for (const entry of named) {
+        const path = entry?.trim()
+        if (
+          path !== undefined &&
+          path !== '' &&
+          !path.startsWith('/') &&
+          !path.split('/').includes('..')
+        ) {
+          paths.add(path)
+        }
       }
     }
   }

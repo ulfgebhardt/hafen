@@ -35,7 +35,16 @@
   const emit = defineEmits<{ tool: [ToolName]; prune: [string] }>()
 
   const offered = computed(() => TOOLS.filter((name) => available.includes(name)))
-  const stale = computed(() => staleBranches(ship.branches))
+  /**
+   * `?? []` because a snapshot on disk may be older than this window.
+   *
+   * It was, and it cost the whole panel: a cache measured before `branches` existed made
+   * `staleBranches(undefined)` throw, the sheet failed to render, and what a reader saw was an
+   * empty column with no reason given. Every field added to `Ship` can do this to every snapshot
+   * already written — so the ones that are read raw defend themselves, and `App.vue` catches what
+   * gets past that rather than drawing nothing.
+   */
+  const stale = computed(() => staleBranches(ship.branches ?? []))
 </script>
 
 <template>
