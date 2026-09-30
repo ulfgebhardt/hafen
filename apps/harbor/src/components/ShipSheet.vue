@@ -9,7 +9,7 @@
     shipPoints,
     taskForQuest,
   } from '@hafen/core'
-  import { computed, ref } from 'vue'
+  import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 
   import { isQuest } from './chosen'
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
@@ -88,6 +88,36 @@
    * 384 px panel, and that quarter is spent on a path that does not change while reading.
    */
   const scrolled = ref(false)
+
+  /**
+   * How much room the sticky header takes, as a CSS variable the rows scroll clear of.
+   *
+   * Measured from the element and not written down: the header changes height when it shrinks,
+   * again when the action buttons are absent, and again for a two-line repository name. A row that
+   * scrolled to the top landed *underneath* it — chosen, and invisible. `scroll-margin-top` is
+   * what `scrollIntoView` respects, and it is the only mechanism that works whichever of the three
+   * components did the scrolling.
+   *
+   * A `ResizeObserver` rather than a measurement on scroll: the height changes because the header
+   * changed, not because the panel moved, and reading a layout property in a scroll handler is how
+   * a panel starts stuttering.
+   */
+  const head = useTemplateRef<HTMLElement>('head')
+  const headroom = ref(0)
+
+  onMounted(() => {
+    if (head.value === null) {
+      return
+    }
+    const watcher = new ResizeObserver(([entry]) => {
+      headroom.value = entry?.target.getBoundingClientRect().height ?? 0
+    })
+    watcher.observe(head.value)
+    onBeforeUnmount(() => {
+      watcher.disconnect()
+    })
+  })
+
   const onScroll = (event: Event): void => {
     scrolled.value = (event.target as HTMLElement).scrollTop > 12
   }
@@ -95,12 +125,17 @@
 
 <template>
   <!-- A datasheet, not a dashboard: every row is a measurement with its source. -->
-  <article class="flex h-full flex-col overflow-y-auto bg-slate-900/60 text-sm" @scroll="onScroll">
+  <article
+    class="flex h-full flex-col overflow-y-auto scroll-smooth bg-slate-900/60 text-sm [&_[data-row]]:scroll-mt-[var(--headroom)]"
+    :style="{ '--headroom': `${String(Math.round(headroom))}px` }"
+    @scroll="onScroll"
+  >
     <!--
       Sticky: the name is what tells a reader which repository the rest of the sheet is about,
       and it scrolled away exactly when the list below got long enough to need it.
     -->
     <header
+      ref="head"
       class="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 px-4 transition-[padding] duration-150"
       :class="scrolled ? 'py-1.5' : 'py-3'"
     >
@@ -123,13 +158,15 @@
       <p v-if="!scrolled" class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
 
       <!--
-        Once the plan above has scrolled away, a small one comes with the name.
-        What is marked stays visible while the reader is down among the rows that explain it —
-        otherwise choosing a thing scrolls the only picture of it off the top of the panel.
+        One plan, and it lives here.
+        It was two — a big one in a section below and a small one that appeared in the header once
+        that had scrolled away — and for a moment both were on screen, which looked like a bug
+        because it was one. What is marked has to stay visible while the reader is down among the
+        rows that explain it, so the plan belongs where the name is: in the part that stays put.
       -->
       <ShipPlan
-        v-if="scrolled"
-        class="mt-1 max-h-12"
+        class="transition-[max-height] duration-150"
+        :class="scrolled ? 'mt-1 max-h-12' : 'mt-2 max-h-36'"
         :ship="ship"
         :chosen="chosenQuest"
         @pick="emit('pick', $event)"
@@ -182,15 +219,6 @@
         </button>
       </p>
     </header>
-
-    <!--
-      The same ship again, and every box on her is a target.
-      Beside the reading and not instead of it: the harbour answers "which of ninety", this
-      answers "which part of this one" — and at this size the boxes are big enough to hit.
-    -->
-    <section class="border-b border-slate-800 px-4 py-3">
-      <ShipPlan :ship="ship" :chosen="chosenQuest" @pick="emit('pick', $event)" />
-    </section>
 
     <section class="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-3">
       <div>

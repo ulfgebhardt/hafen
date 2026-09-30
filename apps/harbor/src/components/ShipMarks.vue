@@ -42,7 +42,7 @@
       if (pick?.kind !== 'mark') {
         return
       }
-      rows.value[pick.mark]?.scrollIntoView({ block: 'nearest' })
+      rows.value[pick.mark]?.scrollIntoView({ block: 'start' })
     },
     { immediate: true },
   )
@@ -62,7 +62,7 @@
     </p>
 
     <ul class="mt-1 space-y-1">
-      <li v-for="mark in marks" :key="mark.kind" :ref="hold(mark.kind)">
+      <li v-for="mark in marks" :key="mark.kind" :ref="hold(mark.kind)" data-row>
         <button
           class="flex w-full items-start gap-2 px-1 py-0.5 text-left hover:bg-slate-800/30"
           :class="isMark(chosen, mark.kind) ? 'bg-orange-500/10 ring-1 ring-orange-500/40' : ''"

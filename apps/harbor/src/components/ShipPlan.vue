@@ -69,6 +69,33 @@
   /** A filled box reads as done, a hatched one as failing — the same forms the harbour uses. */
   const fillFor = (verdict: keyof typeof VERDICT_COLOR): number =>
     Math.max(SEGMENT[verdict].opacity, 0.22)
+
+  /**
+   * The one box that is lit, as a rectangle to ring.
+   *
+   * A ring of its own rather than a thicker border on the box itself, which is what it was: a
+   * stroke is centred on the edge, so thickening it ate a third of a box 1.2 units tall and the
+   * corners came out as blunt wedges. Outset by a fixed amount and drawn last, so it sits *around*
+   * the thing and the thing keeps its own shape.
+   */
+  const lit = computed(() => {
+    const all = [
+      ...cargo.value.map((box) => ({ box, on: isQuest(chosen, box.quest.id) })),
+      ...landed.value.map((box) => ({ box, on: isQuest(chosen, box.quest.id) })),
+      ...marks.value.map((box) => ({ box, on: isMark(chosen, box.kind) })),
+    ]
+    return all
+      .filter((one) => one.on)
+      .map(({ box }) => ({
+        x: box.spot.x - box.along / 2 - RING,
+        y: box.spot.y - box.across / 2 - RING,
+        width: box.along + RING * 2,
+        height: box.across + RING * 2,
+      }))
+  })
+
+  /** How far the ring stands off what it marks, in the ship's own units. */
+  const RING = 0.35
 </script>
 
 <template>
@@ -78,7 +105,7 @@
     the sheet the drawing sits in.
   -->
   <svg
-    class="block w-full"
+    class="block w-full [&_*]:[vector-effect:non-scaling-stroke]"
     :viewBox="`${frame.x} ${frame.y} ${frame.width} ${frame.height}`"
     role="img"
     :aria-label="`Plan von ${ship.name}`"
@@ -90,7 +117,7 @@
       fill-opacity="0.16"
       :stroke="SCENE.crane"
       stroke-opacity="0.8"
-      stroke-width="0.25"
+      stroke-width="1"
     />
 
     <!-- The accommodation block aft, so the drawing reads bow-forward without a label. -->
@@ -103,7 +130,7 @@
       fill-opacity="0.34"
       :stroke="SCENE.crane"
       stroke-opacity="0.7"
-      stroke-width="0.15"
+      stroke-width="0.8"
     />
 
     <!-- What is met, aboard. -->
@@ -116,8 +143,8 @@
         :height="box.across"
         :fill="VERDICT_COLOR[box.quest.verdict]"
         :fill-opacity="fillFor(box.quest.verdict)"
-        :stroke="isQuest(chosen, box.quest.id) ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
-        :stroke-width="isQuest(chosen, box.quest.id) ? 0.45 : 0.15"
+        :stroke="VERDICT_COLOR[box.quest.verdict]"
+        stroke-width="0.8"
         @click.stop="emit('pick', { kind: 'quest', id: box.quest.id })"
       >
         <title>{{ box.quest.id }} — {{ VERDICT_LABEL[box.quest.verdict] }}</title>
@@ -134,8 +161,8 @@
         :height="box.across"
         :fill="VERDICT_COLOR[box.quest.verdict]"
         :fill-opacity="fillFor(box.quest.verdict)"
-        :stroke="isQuest(chosen, box.quest.id) ? SCENE.accent : VERDICT_COLOR[box.quest.verdict]"
-        :stroke-width="isQuest(chosen, box.quest.id) ? 0.45 : 0.15"
+        :stroke="VERDICT_COLOR[box.quest.verdict]"
+        stroke-width="0.8"
         @click.stop="emit('pick', { kind: 'quest', id: box.quest.id })"
       >
         <title>{{ box.quest.id }} — {{ VERDICT_LABEL[box.quest.verdict] }}</title>
@@ -152,12 +179,30 @@
         :height="box.across"
         :fill="MARK_COLOR[box.kind]"
         :fill-opacity="box.kind === 'untracked' || box.kind === 'tender' ? 0.12 : 0.7"
-        :stroke="isMark(chosen, box.kind) ? SCENE.accent : MARK_COLOR[box.kind]"
-        :stroke-width="isMark(chosen, box.kind) ? 0.45 : 0.15"
+        :stroke="MARK_COLOR[box.kind]"
+        stroke-width="0.8"
         @click.stop="emit('pick', { kind: 'mark', mark: box.kind })"
       >
         <title>{{ MARK_LABEL[box.kind] }} — {{ MARK_MEANING[box.kind] }}</title>
       </rect>
     </g>
+
+    <!--
+      The marking, drawn last so nothing overlaps it, and never a target itself: a click has to
+      reach the box underneath, or letting go of a choice would be impossible where it was made.
+    -->
+    <rect
+      v-for="(ring, index) in lit"
+      :key="`ring-${String(index)}`"
+      class="pointer-events-none"
+      :x="ring.x"
+      :y="ring.y"
+      :width="ring.width"
+      :height="ring.height"
+      fill="none"
+      :stroke="SCENE.accent"
+      stroke-width="1.5"
+      rx="0.25"
+    />
   </svg>
 </template>

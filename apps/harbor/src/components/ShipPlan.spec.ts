@@ -43,14 +43,38 @@ describe('shipPlan', () => {
     expect(plan.emitted('pick')).toStrictEqual([[null]])
   })
 
-  it('marks the chosen box and no other', () => {
+  /**
+   * A ring of its own and not a thicker border: a stroke is centred on the edge, so thickening it
+   * ate a third of a box and the corners came out as blunt wedges.
+   */
+  it('rings the chosen box, once, and lets the click through to it', () => {
     const plan = mount(ShipPlan, {
       props: { ship: subject, chosen: { kind: 'quest' as const, id: 'offen' } },
     })
-    const marked = plan.findAll('rect').filter((one) => one.attributes('stroke-width') === '0.45')
+    const rings = plan.findAll('rect').filter((one) => one.attributes('fill') === 'none')
 
-    expect(marked).toHaveLength(1)
-    expect(marked[0]?.find('title').text()).toContain('offen')
+    expect(rings).toHaveLength(1)
+    expect(rings[0]?.classes()).toContain('pointer-events-none')
+  })
+
+  it('rings nothing when nothing is chosen', () => {
+    const plan = mount(ShipPlan, { props: { ship: subject } })
+
+    expect(plan.findAll('rect').filter((one) => one.attributes('fill') === 'none')).toHaveLength(0)
+  })
+
+  /** The ring stands *around* the box, so the box keeps its own shape and size. */
+  it('draws the ring outside the box it marks', () => {
+    const plan = mount(ShipPlan, {
+      props: { ship: subject, chosen: { kind: 'quest' as const, id: 'offen' } },
+    })
+    const box = plan
+      .findAll('rect')
+      .find((one) => one.find('title').exists() && one.find('title').text().startsWith('offen'))
+    const ring = plan.findAll('rect').find((one) => one.attributes('fill') === 'none')
+
+    expect(Number(ring?.attributes('width'))).toBeGreaterThan(Number(box?.attributes('width')))
+    expect(Number(ring?.attributes('x'))).toBeLessThan(Number(box?.attributes('x')))
   })
 
   /** A ship nothing is demanded of still has a hull, and the frame still holds it. */
