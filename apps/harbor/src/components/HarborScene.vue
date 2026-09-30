@@ -5,9 +5,20 @@
 
   import type { Chosen } from './chosen'
   import type { Scene } from './scene'
-  import type { Ship } from '@hafen/core'
+  import type { ForgeStats, Ship } from '@hafen/core'
 
-  const { ships } = defineProps<{ ships: readonly Ship[] }>()
+  const { ships, forge = new Map() } = defineProps<{
+    ships: readonly Ship[]
+    /**
+     * What the forges said, by ship path.
+     *
+     * Handed in beside the snapshot and never merged into it: the two readings have different
+     * ages, and folding one into the other would give the older figure the younger timestamp.
+     * The drawing uses it for the size and for the lit windows — a ship whose stars were never
+     * asked for is dark, which is exactly what that means.
+     */
+    forge?: ReadonlyMap<string, ForgeStats>
+  }>()
 
   /**
    * Two models, because hovering and clicking are different acts.
@@ -42,16 +53,16 @@
       picked.value = ship
       demand.value = chosen
     })
-    scene.draw(ships)
+    scene.draw(ships, forge)
     scene.highlight(picked.value, demand.value)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
   // rebuilds in a frame. Diffing would be a second model of what is already on screen.
   watch(
-    () => ships,
-    (next) => {
-      scene?.draw(next)
+    () => [ships, forge] as const,
+    ([next, stats]) => {
+      scene?.draw(next, stats)
       scene?.highlight(picked.value, demand.value)
     },
   )

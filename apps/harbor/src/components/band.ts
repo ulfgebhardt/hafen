@@ -80,3 +80,29 @@ export function firstBand(ships: readonly Ship[]): Band {
   const grouped = byBand(ships)
   return BANDS.find((band) => grouped[band].length > 0) ?? 'active'
 }
+
+/**
+ * The page that is not a band: the catalog, read across the fleet instead of per ship.
+ *
+ * Not a fourth `Band`, and the distinction is load-bearing. `bandOf` maps a ship to a page, and
+ * every ship has exactly one — the catalog page has no ships at all, it has demands. Folding it
+ * into `BANDS` would make `byBand` owe a list for a page that does not ask for one, and the first
+ * thing to break would be the counts beside the tabs.
+ */
+export const CONTRACTS = 'contracts'
+
+export type Page = Band | typeof CONTRACTS
+
+export const PAGES: readonly Page[] = [...BANDS, CONTRACTS]
+
+export const PAGE_LABEL: Record<Page, string> = { ...BAND_LABEL, [CONTRACTS]: 'Verträge' }
+
+export const PAGE_MEANING: Record<Page, string> = {
+  ...BAND_MEANING,
+  [CONTRACTS]: 'was die Flotte fordert — je Forderung statt je Schiff',
+}
+
+/** Whether this page lists ships, which is what decides between the basin and the catalog. */
+export function isBand(page: Page): page is Band {
+  return page !== CONTRACTS
+}

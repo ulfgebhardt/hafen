@@ -125,6 +125,16 @@ export const SCENE = {
   quayEdge: '#3b4b5e',
   /** Mooring lines and bollards: thin, warm, and never mistaken for a verdict. */
   mooring: '#6d7f92',
+  /**
+   * Lit windows. Warm, and the only warm light in the plan besides the accent.
+   *
+   * Brightness stands for stars, so the colour has to be one that reads at every intensity from
+   * barely-there to full — a hue with a dark end would have made "few stars" and "not asked" the
+   * same picture, and those are the two readings that must never merge.
+   */
+  lamp: '#f2c877',
+  /** The walkways: the one structure every ship is joined to the shore by. */
+  walk: '#4a5b6e',
 } as const
 
 /**

@@ -1,14 +1,23 @@
 <script setup lang="ts">
   import { computed } from 'vue'
 
-  import { BAND_LABEL, BAND_MEANING, bandPoints, BANDS, byBand } from './band'
+  import { BANDS, bandPoints, byBand, isBand, PAGE_LABEL, PAGE_MEANING, PAGES } from './band'
+  import { tallyContracts } from './contracts'
   import PointValue from './PointValue.vue'
+  import { VERDICT_LABEL } from './theme'
 
-  import type { Band } from './band'
+  import type { ContractFilter } from './contracts'
   import type { Ship } from '@hafen/core'
 
-  const { ships } = defineProps<{ ships: readonly Ship[] }>()
-  const band = defineModel<Band>('band', { required: true })
+  const { ships, contract = null } = defineProps<{
+    ships: readonly Ship[]
+    /** What was picked on the catalog page, so the basin can say what it is showing. */
+    contract?: ContractFilter | null
+  }>()
+
+  const emit = defineEmits<{ clear: [] }>()
+
+  const page = defineModel<(typeof PAGES)[number]>('page', { required: true })
 
   /**
    * What is typed into the filter.
@@ -23,45 +32,83 @@
   const scores = computed(() =>
     Object.fromEntries(BANDS.map((name) => [name, bandPoints(grouped.value[name])])),
   )
+
+  /**
+   * The catalog tab counts demands, not ships — it is the one page whose unit is not a hull.
+   *
+   * Off the same tally the page draws, so the number on the tab and the rows behind it cannot
+   * disagree. It moves with the search for the same reason every other count does.
+   */
+  const demands = computed(() => tallyContracts(ships).flatMap((chain) => chain.contracts).length)
 </script>
 
 <template>
   <!--
     Every band is offered, including the empty ones: a tab that disappears when it has nothing in
     it is a tab nobody finds again, and "no archived repositories" is an answer worth being able
-    to read.
+    to read. The catalog sits last because it is the only page that is not a set of ships.
   -->
   <nav class="flex gap-px border-b border-slate-800 bg-slate-950 px-2">
     <button
-      v-for="name in BANDS"
+      v-for="name in PAGES"
       :key="name"
       class="group px-3 py-1.5 text-left"
       :class="
-        band === name
+        page === name
           ? 'border-b-2 border-slate-300 text-slate-100'
           : 'border-b-2 border-transparent text-slate-500 hover:text-slate-300'
       "
-      :aria-current="band === name ? 'page' : undefined"
-      :title="BAND_MEANING[name]"
-      @click="band = name"
+      :aria-current="page === name ? 'page' : undefined"
+      :title="PAGE_MEANING[name]"
+      @click="page = name"
     >
-      <span class="font-mono text-xs tracking-wide">{{ BAND_LABEL[name] }}</span>
-      <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{ grouped[name].length }}</span>
+      <span class="font-mono text-xs tracking-wide">{{ PAGE_LABEL[name] }}</span>
+      <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{
+        isBand(name) ? grouped[name].length : demands
+      }}</span>
 
       <!--
         What the page is worth, under its own name. The header's figure is the whole machine and
         answers a different question — a fleet whose points are nearly all archived is not the same
         fleet as one whose points are all active, and from the tabs alone the two looked identical.
+
+        Not on the catalog tab, and that is the rule rather than an omission: a demand is a state a
+        ship should be in, never a performance to book. Giving the contracts a score would let a
+        repository buy its way out of a broken one with commit volume.
       -->
       <PointValue
+        v-if="isBand(name)"
         class="ml-1.5 scale-90 opacity-70"
         :project="scores[name]?.project ?? 0"
         :personal="scores[name]?.own ?? 0"
       />
     </button>
 
+    <!--
+      What the basin is currently narrowed to, beside the tabs whose counts it changed.
+      A filter set on another page and invisible on this one is a window that quietly disagrees
+      with itself — the same failure the search filter had before its counts moved with it.
+    -->
+    <span
+      v-if="contract !== null"
+      class="ml-3 flex items-baseline gap-1.5 self-center font-mono text-[10px]"
+    >
+      <span class="text-slate-600">Vertrag</span>
+      <span class="text-orange-300">{{ contract.id }}</span>
+      <span class="text-slate-500">{{
+        contract.verdict === null ? 'offen' : VERDICT_LABEL[contract.verdict]
+      }}</span>
+      <button
+        class="text-slate-600 hover:text-slate-300"
+        title="Vertragsfilter aufheben"
+        @click="emit('clear')"
+      >
+        ×
+      </button>
+    </span>
+
     <p class="ml-auto self-center pr-3 font-mono text-[10px] text-slate-600">
-      {{ BAND_MEANING[band] }}
+      {{ PAGE_MEANING[page] }}
     </p>
 
     <!--
