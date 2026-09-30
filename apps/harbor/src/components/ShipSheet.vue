@@ -15,9 +15,11 @@
   import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
   import ShipPlan from './ShipPlan.vue'
+  import ShipTools from './ShipTools.vue'
   import TaskList from './TaskList.vue'
   import { RUST_LABEL, STAGE_LABEL, STAGE_MEANING } from './theme'
 
+  import type { ToolName } from './tools'
   import type { Ship } from '@hafen/core'
 
   const {
@@ -26,6 +28,7 @@
     canAct = false,
     busy = false,
     quest: chosenQuest = null,
+    tools = [],
   } = defineProps<{
     ship: Ship
     /** Whether this sheet is held by a click rather than following the pointer. */
@@ -35,6 +38,8 @@
     busy?: boolean
     /** The quest whose box was clicked in the harbour, if it was a box that was clicked. */
     quest?: string | null
+    /** What this machine can actually run. Anything absent is not drawn rather than disabled. */
+    tools?: readonly ToolName[]
   }>()
 
   /**
@@ -50,6 +55,8 @@
     enlist: [boolean]
     /** Which demand the reader pointed at, here or in the harbour — the same choice either way. */
     pick: [string | null]
+    tool: [ToolName]
+    prune: [string]
   }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
@@ -254,6 +261,14 @@
         in CI: {{ ship.contract.inCi.join(', ') }}
       </p>
     </section>
+
+    <ShipTools
+      :ship="ship"
+      :available="tools"
+      :busy="busy"
+      @tool="emit('tool', $event)"
+      @prune="emit('prune', $event)"
+    />
 
     <TaskList :tasks="doing" />
 

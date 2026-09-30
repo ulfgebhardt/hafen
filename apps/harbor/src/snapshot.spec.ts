@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  availableTools,
+  deleteBranch,
   inTauri,
   loadSnapshot,
   remeasure,
   setRegister,
   SnapshotError,
   spliceShip,
+  startTool,
 } from './snapshot'
 
 import type { Snapshot } from './snapshot'
@@ -258,5 +261,57 @@ describe('acting on the harbour', () => {
         'Register nicht aendern',
       )
     })
+  })
+})
+
+describe('the tools', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('offers only what the shell said it has, and only names it knows', async () => {
+    asAppWith({ tools: ['lazygit', 'prune', 'rm'] })
+
+    await expect(availableTools()).resolves.toStrictEqual(['lazygit', 'prune'])
+  })
+
+  /**
+   * An answer this cannot read is no tools rather than a thrown error: whatever went wrong with
+   * the tool list, it must not be the reason the harbour fails to draw.
+   */
+  it('answers with nothing rather than throwing on an answer it cannot read', async () => {
+    asAppWith({ tools: { nope: true } })
+
+    await expect(availableTools()).resolves.toStrictEqual([])
+  })
+
+  it('has nothing to offer in a window without a shell', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
+
+    await expect(availableTools()).resolves.toStrictEqual([])
+    await expect(startTool('lazygit', '/a')).rejects.toThrow('kein Werkzeug')
+    await expect(deleteBranch('/a', 'feat')).rejects.toThrow('kein Branch')
+  })
+
+  it('starts a tool where the ship lies, and says when it could not', async () => {
+    const invoke = asAppWith({ run_tool: null })
+
+    await startTool('lazygit', '/repos/org/ship')
+
+    expect(invoke).toHaveBeenCalledWith('run_tool', {
+      name: 'lazygit',
+      path: '/repos/org/ship',
+    })
+
+    asAppWith({ run_tool: 'kein Terminal gefunden' })
+
+    await expect(startTool('shell', '/a')).rejects.toThrow('kein Terminal')
+  })
+
+  /** git's refusal is the safety, so its sentence is the whole answer. */
+  it('passes the refusal from git through when a branch will not go', async () => {
+    asAppWith({ branch_delete: "error: the branch 'feat' is not fully merged" })
+
+    await expect(deleteBranch('/a', 'feat')).rejects.toThrow('not fully merged')
   })
 })
