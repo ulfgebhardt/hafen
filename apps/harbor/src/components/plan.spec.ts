@@ -241,6 +241,7 @@ describe('the shape the window has', () => {
     const piers = piersFor(40, aspect)
 
     expect(piers).toHaveLength(Math.floor(rowsFor(40, aspect) / 2) + 1)
+
     for (const berth of berths) {
       expect(piers[Math.floor(berth.row / 2) + (berth.side === 1 ? 0 : 1)]).toBeDefined()
       expect(berth.spot.y * UNIT).toBeLessThan(planExtent(40, aspect).height)

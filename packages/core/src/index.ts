@@ -118,7 +118,15 @@ export {
 } from './points'
 
 export type { FleetTask, Task, TaskKind } from './tasks'
-export { commitValue, tasksAcross, tasksFor, tasksValue } from './tasks'
+export {
+  commitValue,
+  localTasks,
+  questTasks,
+  taskForQuest,
+  tasksAcross,
+  tasksFor,
+  tasksValue,
+} from './tasks'
 
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'

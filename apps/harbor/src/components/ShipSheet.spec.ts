@@ -145,3 +145,63 @@ describe('shipSheet', () => {
     expect(sheet.text()).toContain('kaputt.md')
   })
 })
+
+describe('one list, not two', () => {
+  /**
+   * The sheet listed every violated quest as a task and then listed the same quests again
+   * underneath with their checks, sources and findings — the same sentence twice, the second time
+   * with more behind it. "Zu tun" is now what the repository itself asks for, and a demand is
+   * offered at its own row.
+   */
+  it('names a violated quest once, at the row that carries its evidence', () => {
+    const owed = quest('lint', 'violated', { reason: 'kein Linter gefunden' })
+    const sheet = mount(ShipSheet, { props: { ship: ship({ quests: [owed], stash: 1 }) } })
+    const text = sheet.text()
+
+    // Once, and at the row: `split` counts occurrences, so two parts means one occurrence.
+    expect(text.split('kein Linter gefunden')).toHaveLength(2)
+    // What closing it is worth is on that row too, rather than on a copy of it above.
+    expect(text).toContain('+8')
+    // The local half is still a list, and still above the quests.
+    expect(text).toContain('Stash')
+  })
+
+  it('says what a clean tree means rather than claiming every demand is met', () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship({ quests: [quest('lint', 'violated')] }) },
+    })
+
+    expect(sheet.text()).toContain('Nichts offen')
+    expect(sheet.text()).toContain('nichts wartet auf einen Push')
+  })
+})
+
+describe('the register, from the sheet', () => {
+  /**
+   * Only where the register actually holds this directory. On a repository the survey found by
+   * itself there is nothing to take out, and a button that did nothing on most ships would be a
+   * button that lies — which is why `enlisted` travels on the ship at all.
+   */
+  it('offers to stop holding a directory only where one is held', () => {
+    const found = mount(ShipSheet, { props: { ship: ship(), canAct: true } })
+
+    expect(found.text()).not.toContain('nicht mehr führen')
+
+    const adopted = mount(ShipSheet, {
+      props: { ship: ship({ enlisted: true }), canAct: true },
+    })
+
+    expect(adopted.text()).toContain('nicht mehr führen')
+  })
+
+  it('hands the decision up rather than acting on it', async () => {
+    const sheet = mount(ShipSheet, { props: { ship: ship({ enlisted: true }), canAct: true } })
+
+    await sheet
+      .findAll('button')
+      .find((one) => one.text() === 'nicht mehr führen')
+      ?.trigger('click')
+
+    expect(sheet.emitted('enlist')).toStrictEqual([[false]])
+  })
+})

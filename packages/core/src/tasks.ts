@@ -54,12 +54,20 @@ const KIND_ORDER: Record<TaskKind, number> = {
 }
 
 /**
- * Everything this repository is currently asking for.
+ * What the repository itself is asking for: a conflict, a stash, uncommitted work, an unpushed
+ * commit.
  *
- * Read fresh every time from the ship's own measurements. A repository in good order produces an
- * empty list, and that is the intended end state rather than an error.
+ * Apart from `questTasks` because the two belong in different places on screen, and that is the
+ * fix for a real duplication: the sheet listed every violated quest as a task and then listed the
+ * same quests again underneath with their evidence. The same sentence twice, and the second time
+ * with more behind it.
+ *
+ * A thing belongs where its evidence is. These have none beyond the measurement in their own
+ * title, so they get a list; a quest has checks, sources and findings, so it belongs at its own
+ * row — which now carries what it is worth and what to type, rather than having a thinner copy of
+ * itself printed above.
  */
-export function tasksFor(ship: Ship): readonly Task[] {
+export function localTasks(ship: Ship): readonly Task[] {
   const tasks: Task[] = []
   /*
    * What tidying this repository is worth, and it is `SHIPSHAPE_POINTS` because that is exactly
@@ -117,24 +125,50 @@ export function tasksFor(ship: Ship): readonly Task[] {
     })
   }
 
-  for (const quest of bindingQuests(ship.quests)) {
-    if (quest.verdict !== 'violated') {
-      continue
-    }
-    tasks.push({
-      kind: 'contract',
+  return [...tasks].sort(
+    (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.personal - a.personal,
+  )
+}
+
+/**
+ * One task per violated demand of the fleet.
+ *
+ * Only `violated`. A quest that is waiting has a prerequisite somebody else owes, and one nothing
+ * could measure is not a gap — offering either as work to do would invent it.
+ */
+export function questTasks(ship: Ship): readonly Task[] {
+  return bindingQuests(ship.quests)
+    .filter((quest) => quest.verdict === 'violated')
+    .map((quest) => ({
+      kind: 'contract' as const,
       title: quest.title,
       why: quest.why === '' ? quest.reason : quest.why,
       command: `hafen hafen --evidenz  # ${quest.id}`,
       project: 0,
       personal: QUEST_POINTS,
       quest: quest.id,
-    })
-  }
+    }))
+}
 
-  return [...tasks].sort(
+/**
+ * Everything this repository is currently asking for, in one list.
+ *
+ * Read fresh every time from the ship's own measurements. A repository in good order produces an
+ * empty list, and that is the intended end state rather than an error.
+ *
+ * Both halves, because the fleet-wide reading needs them together — "what should I do next"
+ * spans both kinds. The *sheet* is the place that splits them, and only because the quests are
+ * already on it with their evidence.
+ */
+export function tasksFor(ship: Ship): readonly Task[] {
+  return [...localTasks(ship), ...questTasks(ship)].sort(
     (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.personal - a.personal,
   )
+}
+
+/** What one quest's task is worth, for the row that offers it. */
+export function taskForQuest(ship: Ship, id: string): Task | null {
+  return questTasks(ship).find((task) => task.quest === id) ?? null
 }
 
 /**

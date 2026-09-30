@@ -18,6 +18,7 @@ import {
   outlineOf,
   pierRows,
   pierRowY,
+  questAt,
   SIZE,
   yawOf,
 } from './vessel'
@@ -299,5 +300,39 @@ describe(hasPlume, () => {
 
   it('is not earned by a ship nothing is demanded of', () => {
     expect(hasPlume(ship())).toBe(false)
+  })
+})
+
+describe(questAt, () => {
+  const subject = ship({ quests: [quest('a', 'met'), quest('b', 'met'), quest('c', 'met')] })
+  const hull = hullOf(subject, 400)
+  const boxes = cargoOf(subject, hull)
+
+  it('answers with the demand whose box was hit', () => {
+    for (const box of boxes) {
+      expect(questAt(boxes, box.spot)).toBe(box.quest.id)
+    }
+  })
+
+  /**
+   * The whole of the rectangle and not only its middle: a click lands where a finger lands, and a
+   * box that only answers at its centre is a box nobody can hit.
+   */
+  it('counts a corner of a box as the box', () => {
+    const box = boxes[0]
+
+    expect(box).toBeDefined()
+    expect(
+      questAt(boxes, {
+        x: (box?.spot.x ?? 0) + (box?.along ?? 0) / 2 - 0.01,
+        y: (box?.spot.y ?? 0) + (box?.across ?? 0) / 2 - 0.01,
+      }),
+    ).toBe(box?.quest.id)
+  })
+
+  /** A click on bare deck is an answer too: it means "this ship", not "this demand". */
+  it('says nothing for a point between the boxes', () => {
+    expect(questAt(boxes, { x: 0, y: 0 })).toBeNull()
+    expect(questAt([], { x: 1, y: 1 })).toBeNull()
   })
 })

@@ -17,6 +17,14 @@
    */
   const hovered = defineModel<Ship | null>('hovered', { required: true })
   const picked = defineModel<Ship | null>('picked', { required: true })
+  /**
+   * The demand whose box was clicked, where a box was.
+   *
+   * Beside `picked` and not inside it: a click on a container is a question about that demand, and
+   * one on bare deck is a question about the ship. Folding the two would make "this ship" and
+   * "this ship, this demand" the same answer.
+   */
+  const demand = defineModel<string | null>('quest', { required: false, default: null })
 
   const canvas = ref<HTMLCanvasElement | null>(null)
   let scene: Scene | null = null
@@ -29,8 +37,9 @@
     scene.onHover((ship) => {
       hovered.value = ship
     })
-    scene.onSelect((ship) => {
+    scene.onSelect((ship, quest) => {
       picked.value = ship
+      demand.value = quest
     })
     scene.draw(ships)
     scene.highlight(picked.value)

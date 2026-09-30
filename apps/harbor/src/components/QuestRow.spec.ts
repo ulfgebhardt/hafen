@@ -87,3 +87,49 @@ describe('questRow', () => {
     expect(fleet.text()).not.toContain('eigene Forderung')
   })
 })
+
+describe('what a quest is worth', () => {
+  const owed = quest('lint', 'violated')
+  const task = {
+    kind: 'contract' as const,
+    title: 'lint',
+    why: 'weil es die Flotte fordert',
+    command: 'hafen hafen --evidenz  # lint',
+    project: 0,
+    personal: 8,
+    quest: 'lint',
+  }
+
+  /**
+   * The value and the command came down to the row from a list above it, which printed a thinner
+   * copy of every violated quest. A thing belongs where its evidence is.
+   */
+  it('writes the value on the row and the command under the proof', async () => {
+    const row = mount(QuestRow, { props: { quest: owed, task } })
+
+    expect(row.text()).toContain('+8')
+    expect(row.find('code').exists()).toBe(false)
+
+    await row.find('button').trigger('click')
+
+    expect(row.find('code').text()).toContain('hafen hafen --evidenz')
+  })
+
+  /** Nothing to close, nothing to offer: a met quest is a record and not a call to action. */
+  it('offers nothing where there is nothing to do', () => {
+    const row = mount(QuestRow, { props: { quest: quest('lint', 'met') } })
+
+    expect(row.text()).not.toMatch(/\+\d/u)
+  })
+
+  /**
+   * Clicking a container in the harbour asks about *that* demand. Opened and not only marked: a
+   * highlighted row somebody then has to click again is a step that answers nothing.
+   */
+  it('opens itself when its box was clicked in the harbour', () => {
+    const row = mount(QuestRow, { props: { quest: owed, task, chosen: true } })
+
+    expect(row.find('[aria-expanded="true"]').exists()).toBe(true)
+    expect(row.find('code').exists()).toBe(true)
+  })
+})

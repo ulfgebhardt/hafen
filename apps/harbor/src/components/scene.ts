@@ -58,6 +58,7 @@ import {
   mooringOf,
   offsetOf,
   pierRowY,
+  questAt,
   yawOf,
 } from './vessel'
 import {
@@ -74,6 +75,7 @@ import type { Side, Spot } from './plan'
 import type { Hull } from './vessel'
 import type { Extent, Pan } from './viewport'
 import type { Ship } from '@hafen/core'
+import type { FederatedPointerEvent } from 'pixi.js'
 
 const LABEL = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -285,8 +287,14 @@ export interface Scene {
   draw: (ships: readonly Ship[]) => void
   /** The ship under the pointer, or `null` on the way out. */
   onHover: (handler: (ship: Ship | null) => void) => void
-  /** The ship somebody clicked, or `null` for a click on open water. */
-  onSelect: (handler: (ship: Ship | null) => void) => void
+  /**
+   * The ship somebody clicked, or `null` for a click on open water.
+   *
+   * With the demand whose box was under the pointer, where one was. A click on a container is a
+   * question about *that* demand, and answering it with "this ship" throws away the only part of
+   * the click that was specific.
+   */
+  onSelect: (handler: (ship: Ship | null, quest: string | null) => void) => void
   /** Which ship to draw as chosen. */
   highlight: (ship: Ship | null) => void
   destroy: () => void
@@ -630,7 +638,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   app.stage.addChild(world)
 
   let hovered: (ship: Ship | null) => void = () => undefined
-  let selected: (ship: Ship | null) => void = () => undefined
+  let selected: (ship: Ship | null, quest: string | null) => void = () => undefined
   let placed: Placed[] = []
   let traffic: { node: Container; from: number; span: number; speed: number; offset: number }[] = []
   let extent: Extent = { width: 0, height: 0 }
@@ -681,9 +689,24 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     const onEnter = (ship: Ship) => (): void => {
       hovered(ship)
     }
-    const onTap = (ship: Ship) => (): void => {
-      selected(ship)
-    }
+    /**
+     * Which box was hit, asked of the two containers that hold boxes.
+     *
+     * Two, because the cargo moves with the ship and the planking does not — `getLocalPosition`
+     * has to be asked of each in its own frame, and this is the only place that knows the two are
+     * different frames at all.
+     */
+    const onTap =
+      (ship: Ship, hull: Hull, body: Container, quayside: Container) =>
+      (event: FederatedPointerEvent): void => {
+        const aboard = event.getLocalPosition(body)
+        const ashore = event.getLocalPosition(quayside)
+        selected(
+          ship,
+          questAt(cargoOf(ship, hull), { x: aboard.x / UNIT, y: aboard.y / UNIT }) ??
+            questAt(landedOf(ship), { x: ashore.x / UNIT, y: ashore.y / UNIT }),
+        )
+      }
 
     const fleet = new Container()
     world.addChild(fleet)
@@ -728,7 +751,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         (BERTH.pier + BERTH.lane + BERTH.caption) * UNIT,
       )
       slot.on('pointerover', onEnter(berth.ship))
-      slot.on('pointertap', onTap(berth.ship))
+      slot.on('pointertap', onTap(berth.ship, hull, body, quayside))
 
       fleet.addChild(slot)
       placed.push({
@@ -849,7 +872,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     settle()
     // A click that reached the canvas hit no hull, so it landed on open water.
     if (!dragged && event.target === canvas) {
-      selected(null)
+      selected(null, null)
     }
   }
   canvas.addEventListener('pointerdown', onDown)

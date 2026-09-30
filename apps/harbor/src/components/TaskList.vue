@@ -1,14 +1,20 @@
 <script setup lang="ts">
-  import { tasksFor } from '@hafen/core'
-  import { computed } from 'vue'
-
   import PointValue from './PointValue.vue'
 
-  import type { Ship, TaskKind } from '@hafen/core'
+  import type { Task, TaskKind } from '@hafen/core'
 
-  const { ship } = defineProps<{ ship: Ship }>()
-
-  const tasks = computed(() => tasksFor(ship))
+  /**
+   * The tasks, handed in rather than derived here.
+   *
+   * It used to take the ship and call `tasksFor` itself, and that is what made the sheet say
+   * everything twice: this list printed a thin copy of every violated quest, and the quest section
+   * underneath printed the same quests with their checks, sources and findings. Who splits them is
+   * a decision about the page, so the page makes it.
+   */
+  const { tasks, title = 'Zu tun' } = defineProps<{
+    tasks: readonly Task[]
+    title?: string
+  }>()
 
   /**
    * A mark per kind, so the eye can sort before it reads.
@@ -34,13 +40,13 @@
 <template>
   <section class="border-b border-slate-800 px-4 py-3">
     <p class="text-[10px] tracking-wide text-slate-600 uppercase">
-      Zu tun
+      {{ title }}
       <span v-if="tasks.length > 0" class="text-slate-700">— {{ tasks.length }}</span>
     </p>
 
     <!-- The intended end state, not an empty list: a repository in good order asks for nothing. -->
     <p v-if="tasks.length === 0" class="mt-1 text-xs text-slate-500">
-      Nichts offen. Der Baum ist sauber und jede geltende Forderung erfüllt.
+      Nichts offen. Der Baum ist sauber, nichts liegt im Stash, nichts wartet auf einen Push.
     </p>
 
     <ul v-else class="mt-1 space-y-2.5">
