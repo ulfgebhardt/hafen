@@ -36,6 +36,15 @@ export type MarkKind =
   | 'stash'
   /** Other worktrees. Boats alongside. */
   | 'boat'
+  /**
+   * Submodules: repositories this one carries.
+   *
+   * A **Beiboot** and not a `boat`, and the distinction is the reason for a second kind: a
+   * worktree is the same repository checked out twice and lies *beside* her, a submodule is a
+   * different repository she takes *with* her. Drawn forward on the seaward side, where a tender
+   * sits in its davits.
+   */
+  | 'tender'
 
 export interface Mark {
   kind: MarkKind
@@ -69,6 +78,7 @@ export function marksOf(ship: Ship): readonly Mark[] {
     { kind: 'drag', count: ship.behind ?? 0 },
     { kind: 'stash', count: ship.stash },
     { kind: 'boat', count: ship.docks.length },
+    { kind: 'tender', count: ship.submodules.length },
   ]
   return all.filter((mark) => mark.count > 0)
 }
@@ -91,7 +101,8 @@ export function isCapped(mark: Mark): boolean {
  * would hide the one thing a glance is for.
  */
 export function isShipshape(ship: Ship): boolean {
-  return marksOf(ship).filter((mark) => mark.kind !== 'boat').length === 0
+  // Neither a worktree nor a carried repository is untidiness: both are how this fleet works.
+  return marksOf(ship).filter((mark) => mark.kind !== 'boat' && mark.kind !== 'tender').length === 0
 }
 
 export const MARK_LABEL: Record<MarkKind, string> = {
@@ -103,6 +114,7 @@ export const MARK_LABEL: Record<MarkKind, string> = {
   drag: 'zurück',
   stash: 'Stash',
   boat: 'Worktree',
+  tender: 'Beiboot',
 }
 
 /** What each mark means, for the sheet — a symbol nobody can name is decoration. */
@@ -115,4 +127,5 @@ export const MARK_MEANING: Record<MarkKind, string> = {
   drag: 'Commits, die der Remote hat und dieser Baum nicht',
   stash: 'Arbeit in keinem Commit und in keinem Baum — nur hier',
   boat: 'weiterer Arbeitsbaum dieses Repos',
+  tender: 'ein Repository, das dieses hier mitführt — ein Submodul',
 }

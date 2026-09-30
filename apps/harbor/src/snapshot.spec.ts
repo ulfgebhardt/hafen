@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  adopt,
   availableTools,
   deleteBranch,
   inTauri,
@@ -242,7 +243,8 @@ describe('acting on the harbour', () => {
 
       expect(invoke).toHaveBeenCalledWith('register', { action: 'archivieren', path: '/a' })
       expect(invoke).toHaveBeenCalledWith('measure', { only: '/a' })
-      expect(after.ships[0]).toStrictEqual(ship('/a', 'neu'))
+      // `adopt` fills what an older snapshot never recorded, so the ship comes back filled out.
+      expect(after.ships[0]).toMatchObject(ship('/a', 'neu') as object)
     })
 
     it('does not measure when the register refused', async () => {
@@ -313,5 +315,35 @@ describe('the tools', () => {
     asAppWith({ branch_delete: "error: the branch 'feat' is not fully merged" })
 
     await expect(deleteBranch('/a', 'feat')).rejects.toThrow('not fully merged')
+  })
+})
+
+describe(adopt, () => {
+  /**
+   * Every field added to `Ship` blanked the datasheet once: the type says a ship has `branches`,
+   * the cache written last week says nothing of the kind, and the reader throws. Guarding at each
+   * reader is the wrong shape — the type is *right* about a freshly measured ship, so every guard
+   * reads as unnecessary and the linter says so, and the next field has the same accident waiting.
+   */
+  it('fills what an older snapshot never recorded', () => {
+    const old = { ...SNAPSHOT, ships: [{ path: '/a', name: 'a' }] } as unknown as Snapshot
+
+    expect(adopt(old).ships[0]).toMatchObject({
+      branches: [],
+      submodules: [],
+      enlisted: false,
+    })
+  })
+
+  /** Empty and never invented: what an old measurement did not record, this cannot know. */
+  it('leaves what a snapshot did record alone', () => {
+    const measured = {
+      ...SNAPSHOT,
+      ships: [{ path: '/a', enlisted: true, branches: [{ name: 'main' }], submodules: [] }],
+    } as unknown as Snapshot
+    const [one] = adopt(measured).ships
+
+    expect(one?.enlisted).toBe(true)
+    expect(one?.branches).toHaveLength(1)
   })
 })

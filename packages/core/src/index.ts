@@ -135,6 +135,9 @@ export {
 export type { Working } from './working'
 export { countStash, hasOpenWork, NOTHING_OPEN, readWorking } from './working'
 
+export type { Tender, TenderState } from './submodules'
+export { parseSubmodules, strayTenders } from './submodules'
+
 export type { Branch } from './branches'
 export { BRANCH_FORMAT, parseBranches, staleBranches } from './branches'
 

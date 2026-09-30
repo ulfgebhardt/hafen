@@ -10,6 +10,15 @@
   const { ships } = defineProps<{ ships: readonly Ship[] }>()
   const band = defineModel<Band>('band', { required: true })
 
+  /**
+   * What is typed into the filter.
+   *
+   * On the band bar and not in the header: it filters *this page*, and the counts beside each tab
+   * go on counting the whole fleet — a tab that said "Aktiv 2" because somebody typed a letter
+   * would be answering a different question from the one the tab asks.
+   */
+  const query = defineModel<string>('query', { default: '' })
+
   const grouped = computed(() => byBand(ships))
   const scores = computed(() =>
     Object.fromEntries(BANDS.map((name) => [name, bandPoints(grouped.value[name])])),
@@ -51,8 +60,31 @@
       />
     </button>
 
-    <p class="ml-auto self-center pr-1 font-mono text-[10px] text-slate-600">
+    <p class="ml-auto self-center pr-3 font-mono text-[10px] text-slate-600">
       {{ BAND_MEANING[band] }}
     </p>
+
+    <!--
+      A field and never a dropdown: ninety repositories have no shared axis to pick from, and the
+      one thing somebody has in mind is a word out of the name or the path.
+    -->
+    <span class="flex items-center gap-1 self-center pr-1">
+      <input
+        v-model="query"
+        type="search"
+        class="w-48 border-b border-slate-700 bg-transparent py-0.5 font-mono text-[11px] text-slate-300 outline-none focus:border-slate-500 placeholder:text-slate-700"
+        placeholder="suchen …"
+        aria-label="Schiffe filtern"
+        @keyup.escape="query = ''"
+      />
+      <button
+        v-if="query !== ''"
+        class="font-mono text-[10px] text-slate-600 hover:text-slate-300"
+        title="Filter aufheben"
+        @click="query = ''"
+      >
+        ×
+      </button>
+    </span>
   </nav>
 </template>

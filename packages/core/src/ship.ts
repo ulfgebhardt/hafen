@@ -6,6 +6,7 @@ import { detectContract } from './contract'
 import { forgeOf } from './forge'
 import { measureQuests } from './probe'
 import { EMPTY_REGISTER } from './register'
+import { parseSubmodules } from './submodules'
 import { daysSince } from './time'
 import { LOG_FORMAT, NO_LEDGER, readLedger } from './work'
 import { countStash, hasOpenWork, readWorking } from './working'
@@ -17,6 +18,7 @@ import type { Forge } from './forge'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
 import type { Register } from './register'
+import type { Tender } from './submodules'
 import type { Ledger } from './work'
 import type { Working } from './working'
 
@@ -100,6 +102,14 @@ export interface Ship {
    * repository is carrying forty. `staleBranches` reads which of them git would let go.
    */
   branches: readonly Branch[]
+  /**
+   * The repositories this one carries — submodules.
+   *
+   * A Beiboot and not a `dock`: a worktree is the same repository checked out twice and lies
+   * beside her, a submodule is a different repository she takes with her. Measured because the
+   * search cannot find them — it stops at a `.git` directory, and a submodule's `.git` is a file.
+   */
+  submodules: readonly Tender[]
   /**
    * Other directories that are this same project, folded into this one.
    *
@@ -349,6 +359,7 @@ export async function inspectShip(
     log,
     refs,
     contained,
+    modules,
   ] = await Promise.all([
     ports.fs.isDirectory(`${path}/.git`),
     git(ports, path, ['remote', '-v']),
@@ -377,6 +388,14 @@ export async function inspectShip(
      */
     git(ports, path, ['for-each-ref', `--format=${BRANCH_FORMAT}`, 'refs/heads']),
     git(ports, path, ['branch', '--merged', 'HEAD', '--format=%(refname:short)']),
+    /*
+     * The repositories this one carries.
+     *
+     * Needed because the search cannot find them: it stops at a `.git` **directory**, and a
+     * submodule's `.git` is a file pointing into `../.git/modules/…`. Until this was measured the
+     * survey walked straight through one and read whatever lay inside as the parent's.
+     */
+    git(ports, path, ['submodule', 'status']),
   ])
 
   // The ship's own tree is in that list and is no dock of anybody's.
@@ -384,6 +403,7 @@ export async function inspectShip(
     .map((tree) => tree.path)
     .filter((tree) => tree !== path)
   const localBranches = parseBranches(refs, contained)
+  const tenders = parseSubmodules(modules)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
   // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
@@ -437,6 +457,7 @@ export async function inspectShip(
     unreadableQuests: merged.unreadable,
     stage: stageOf({ docks, rustDays, ahead, dirty }),
     branches: localBranches,
+    submodules: tenders,
     archived,
     enlisted,
     hasGit,

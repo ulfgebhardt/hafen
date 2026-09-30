@@ -144,4 +144,6 @@ export const MARK_COLOR: Record<MarkKind, string> = {
   drag: '#6f7d8c',
   stash: '#9a7fc9',
   boat: '#7f9a8d',
+  // Its own tone, because it is its own thing: a carried repository, not a second tree.
+  tender: '#8a86b8',
 }

@@ -451,11 +451,43 @@ function shipState(ship: Ship, hull: Hull): Graphics {
     if (mark.kind === 'boat') {
       // Worktrees lie alongside, on the seaward side: other trees of the same repository.
       for (let index = 0; index < count; index += 1) {
-        slab(state, { x: hull.length * 0.34 + index * 3.2, y: half + 1.3 }, 2.4, 1).fill({
+        slab(state, { x: hull.length * 0.2 + index * 3.2, y: half + 1.3 }, 2.4, 1).fill({
           color,
           alpha: 0.6,
         })
       }
+      continue
+    }
+
+    if (mark.kind === 'tender') {
+      /*
+       * Beiboote: repositories this one carries.
+       *
+       * Forward of the worktrees and drawn as an outline rather than filled, because they are a
+       * different thing and not more of the same — a worktree is this repository twice, a
+       * submodule is somebody else's brought along. Small and pointed, so the row reads as boats
+       * and not as more cargo.
+       */
+      for (let index = 0; index < count; index += 1) {
+        const at = { x: hull.length * 0.58 + index * 2.4, y: half + 1.3 }
+        poly(state, [
+          { x: at.x - 0.9, y: at.y - 0.45 },
+          { x: at.x + 0.6, y: at.y - 0.45 },
+          { x: at.x + 1, y: at.y },
+          { x: at.x + 0.6, y: at.y + 0.45 },
+          { x: at.x - 0.9, y: at.y + 0.45 },
+        ]).stroke({ width: 1, color, alpha: 0.85 })
+      }
+      if (isCapped(mark)) {
+        const tick = project({ x: hull.length * 0.58 + count * 2.4, y: half + 1.3 })
+        state
+          .moveTo(tick.x - 0.4 * UNIT, tick.y)
+          .lineTo(tick.x + 0.4 * UNIT, tick.y)
+          .moveTo(tick.x, tick.y - 0.4 * UNIT)
+          .lineTo(tick.x, tick.y + 0.4 * UNIT)
+          .stroke({ width: 1, color, alpha: 0.85 })
+      }
+      continue
     }
   }
   return state

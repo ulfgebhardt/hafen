@@ -55,6 +55,7 @@ export function ship(overrides: Partial<Ship> = {}): Ship {
     stage: 'sailing',
     archived: false,
     branches: [],
+    submodules: [],
     enlisted: false,
     hasGit: true,
     ...overrides,
