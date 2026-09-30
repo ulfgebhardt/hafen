@@ -64,7 +64,10 @@
         return
       }
       open.value = true
-      row.value?.scrollIntoView({ block: 'nearest' })
+      // `start` and not `nearest`: a row that was already partly visible stayed where it was, so
+      // choosing a box in the harbour looked like it had done nothing. The panel's
+      // `scroll-margin-top` is what keeps the row clear of the sticky header.
+      row.value?.scrollIntoView({ block: 'start' })
     },
     { immediate: true },
   )
@@ -80,6 +83,7 @@
 <template>
   <div
     ref="row"
+    data-row
     class="border-t border-slate-800/70 py-2 first:border-t-0"
     :class="chosen ? 'bg-orange-500/10 ring-1 ring-orange-500/40' : ''"
   >
