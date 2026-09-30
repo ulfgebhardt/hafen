@@ -12,16 +12,20 @@
     deleteBranch,
     inTauri,
     loadSnapshot,
+    loadForge,
+    openForge,
+    refetchForge,
     remeasure,
     setRegister,
     SnapshotError,
     startTool,
+    statsFor,
   } from './snapshot'
 
   import type { Band } from './components/band'
   import type { Chosen } from './components/chosen'
   import type { ToolName } from './components/tools'
-  import type { RegisterAction, Snapshot } from './snapshot'
+  import type { Forge, RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
   const snapshot = ref<Snapshot | null>(null)
@@ -80,6 +84,13 @@
   const busy = ref(false)
   /** What this machine can run, asked once — a button that fails in the click is worse than none. */
   const tools = ref<readonly ToolName[]>([])
+  /**
+   * What the forges said, in its own state with its own age.
+   *
+   * Never merged into the snapshot: the survey is six seconds of disk and this is seventeen of
+   * network, so folding one into the other would give the older figure the younger timestamp.
+   */
+  const forge = ref<Forge>({ at: '', stats: [], unread: [] })
   /** What the last action said when it failed. Shown in the bar, never swallowed. */
   const trouble = ref<string | null>(null)
 
@@ -166,6 +177,43 @@
     }
   }
 
+  /**
+   * Ask the forges again.
+   *
+   * Its own button beside its own timestamp, for the same reason it is its own command: it goes to
+   * the network, it takes about seventeen seconds over this fleet, and nothing about the harbour
+   * being drawn should wait on it.
+   */
+  const askForges = async (): Promise<void> => {
+    if (busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      forge.value = await refetchForge()
+      const unread = forge.value.unread.length
+      if (unread > 0) {
+        trouble.value = `${String(unread)} Repositories konnten nicht gefragt werden — zuerst: ${
+          forge.value.unread[0]?.reason ?? ''
+        }`
+      }
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /** Open a forge page. The host is checked on the Rust side against a closed list. */
+  const visit = async (url: string): Promise<void> => {
+    try {
+      await openForge(url)
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    }
+  }
+
   /** Delete one branch, then read that repository again so the list it came from is current. */
   const prune = async (path: string, branch: string): Promise<void> => {
     if (snapshot.value === null || busy.value) {
@@ -221,6 +269,8 @@
     // After the picture and never before it: which tools exist is a detail of one panel, and a
     // harbour that would not draw because a tool list was slow would have the priorities backwards.
     tools.value = await availableTools()
+    // After the picture too: a reading that was never taken is an empty panel, not an error.
+    forge.value = await loadForge()
   })
 </script>
 
@@ -233,8 +283,10 @@
         :source="source"
         :can-measure="canAct"
         :busy="busy"
+        :forge-at="forge.at"
         @measure="measure()"
         @enlist="enlist($event, true)"
+        @forge="askForges"
       />
       <BandTabs v-model:band="band" v-model:query="query" :ships="fleet" />
 
@@ -298,12 +350,15 @@
             :busy="busy"
             :quest="picked === null ? null : demand"
             :tools="tools"
+            :stats="statsFor(forge, sheet)"
+            :forge-at="forge.at"
             @measure="measure($event)"
             @archive="archive(sheet.path, $event)"
             @enlist="enlist(sheet.path, $event)"
             @pick="demand = $event"
             @tool="useTool($event, sheet.path)"
             @prune="prune(sheet.path, $event)"
+            @open="visit($event)"
           />
           <p v-else class="px-4 py-6 text-sm text-slate-600">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.

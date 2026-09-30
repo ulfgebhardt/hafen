@@ -14,10 +14,12 @@
  * file rather than by this comment.
  */
 
+import { slugOf } from '@hafen/core'
+
 import { TOOLS } from './components/tools'
 
 import type { ToolName } from './components/tools'
-import type { Ship } from '@hafen/core'
+import type { ForgeStats, Ship, Slug } from '@hafen/core'
 
 export interface Snapshot {
   at: string
@@ -279,6 +281,92 @@ export async function deleteBranch(path: string, branch: string): Promise<void> 
     throw new Error('In diesem Fenster laesst sich kein Branch loeschen.')
   }
   const failure = (await invoke('branch_delete', { path, branch })) as string | null
+  if (failure !== null) {
+    throw new Error(failure)
+  }
+}
+
+/**
+ * What the forges said, read from its own file.
+ *
+ * A second reading with a second age, and the window shows both times — the survey is six seconds
+ * of disk and this is seventeen of network, so they are never the same age and pretending
+ * otherwise would be the one lie a timestamp exists to prevent.
+ */
+export interface Forge {
+  at: string
+  stats: readonly ForgeStats[]
+  unread: readonly { slug: Slug; reason: string }[]
+}
+
+const EMPTY_FORGE: Forge = { at: '', stats: [], unread: [] }
+
+/** The reading on disk, or nothing at all — an absent file is not an error, it is "never asked". */
+export async function loadForge(): Promise<Forge> {
+  const invoke = caller()
+  try {
+    if (invoke === null) {
+      const response = await fetch('forge.json')
+      return response.ok ? ((await response.json()) as Forge) : EMPTY_FORGE
+    }
+    const read = (await invoke('snapshot', { which: 'forge' })) as { json: string | null }
+    return read.json === null ? EMPTY_FORGE : (JSON.parse(read.json) as Forge)
+  } catch {
+    return EMPTY_FORGE
+  }
+}
+
+/** Asks the forges again, and keeps the answer. */
+export async function refetchForge(): Promise<Forge> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich keine Forge fragen.')
+  }
+
+  const measured = (await invoke('forge')) as { json: string | null; error: string | null }
+  if (measured.json === null) {
+    throw new Error(measured.error ?? 'Die Forge-Abfrage kam ohne Antwort zurueck.')
+  }
+
+  const reading = JSON.parse(measured.json) as Forge
+  const failure = (await invoke('store', {
+    json: measured.json,
+    which: 'forge',
+  })) as string | null
+  if (failure !== null) {
+    throw new SnapshotError(failure, '(Cache)', 'hafen forge')
+  }
+  return reading
+}
+
+/**
+ * The figures for one ship, by what its `origin` points at.
+ *
+ * Matched on the slug and never merged into the snapshot: the two readings have different ages,
+ * and folding one into the other would give the older number the younger timestamp.
+ */
+export function statsFor(forge: Forge, ship: Ship): ForgeStats | null {
+  const origin = ship.remotes.find((remote) => remote.name === 'origin')
+  const slug = origin === undefined ? null : slugOf(origin.url)
+  if (slug === null) {
+    return null
+  }
+  const wanted = `${slug.host}/${slug.owner}/${slug.repo}`.toLowerCase()
+  return (
+    forge.stats.find(
+      (one) => `${one.slug.host}/${one.slug.owner}/${one.slug.repo}`.toLowerCase() === wanted,
+    ) ?? null
+  )
+}
+
+/** Opens a forge page. Checked on the Rust side against a closed list of hosts. */
+export async function openForge(url: string): Promise<void> {
+  const invoke = caller()
+  if (invoke === null) {
+    globalThis.open(url, '_blank', 'noopener')
+    return
+  }
+  const failure = (await invoke('open_url', { url })) as string | null
   if (failure !== null) {
     throw new Error(failure)
   }

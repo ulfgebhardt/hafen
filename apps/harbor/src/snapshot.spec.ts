@@ -5,15 +5,20 @@ import {
   availableTools,
   deleteBranch,
   inTauri,
+  loadForge,
   loadSnapshot,
+  openForge,
+  refetchForge,
   remeasure,
   setRegister,
   SnapshotError,
   spliceShip,
   startTool,
+  statsFor,
 } from './snapshot'
 
-import type { Snapshot } from './snapshot'
+import type { Forge, Snapshot } from './snapshot'
+import type { Ship } from '@hafen/core'
 
 const SNAPSHOT = { at: '2026-09-30T00:00:00Z', root: '/repos', ships: [] }
 
@@ -345,5 +350,150 @@ describe(adopt, () => {
 
     expect(one?.enlisted).toBe(true)
     expect(one?.branches).toHaveLength(1)
+  })
+})
+
+describe('the forge reading, beside the survey and never inside it', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const READING = {
+    at: '2026-09-30T08:00:00Z',
+    stats: [
+      {
+        slug: { host: 'github.com', owner: 'UlfGebhardt', repo: 'Hafen' },
+        stars: 3,
+        watchers: 2,
+        forks: 1,
+        issues: 7,
+        pulls: 4,
+        language: 'TypeScript',
+      },
+    ],
+    unread: [{ slug: { host: 'git.seefahrt.example', owner: 'org', repo: 'zu' }, reason: 'nicht lesbar' }],
+  }
+
+  /** A file that was never written is "never asked", which is a state and not a failure. */
+  it('reads nothing as never asked, in either window', async () => {
+    asAppWith({ snapshot: { json: null } })
+
+    await expect(loadForge()).resolves.toMatchObject({ at: '', stats: [] })
+
+    asBrowser({ ok: false })
+
+    await expect(loadForge()).resolves.toMatchObject({ at: '', stats: [] })
+  })
+
+  it('reads the reading the app hands it', async () => {
+    const invoke = asAppWith({ snapshot: { json: JSON.stringify(READING) } })
+    const read = await loadForge()
+
+    // Its own file beside the snapshot, asked for by name — one cache reader, two names.
+    expect(invoke).toHaveBeenCalledWith('snapshot', { which: 'forge' })
+    expect(read.stats).toHaveLength(1)
+    expect(read.at).toBe('2026-09-30T08:00:00Z')
+  })
+
+  /** Half a reading is not a reading: anything unparsable reads as never asked. */
+  it('falls back rather than throwing at the caller', async () => {
+    asAppWith({ snapshot: { json: 'kein JSON' } })
+
+    await expect(loadForge()).resolves.toStrictEqual({ at: '', stats: [], unread: [] })
+  })
+
+  it('has no forge to ask in a window without a shell', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
+
+    await expect(refetchForge()).rejects.toThrow('keine Forge')
+  })
+
+  it('asks again and keeps the answer in its own file', async () => {
+    const invoke = asAppWith({
+      forge: { json: JSON.stringify(READING), error: null },
+      store: null,
+    })
+    const read = await refetchForge()
+
+    expect(read.unread).toHaveLength(1)
+    expect(invoke).toHaveBeenCalledWith('store', {
+      json: JSON.stringify(READING),
+      which: 'forge',
+    })
+  })
+
+  /**
+   * A reading that arrived and could not be kept is still said out loud. Silently dropping it
+   * would mean seventeen seconds of somebody else's server asked for again on the next start.
+   */
+  it('names a reading it could not keep, and one it never got', async () => {
+    asAppWith({ forge: { json: JSON.stringify(READING), error: null }, store: 'kein Platz' })
+
+    await expect(refetchForge()).rejects.toThrow(SnapshotError)
+
+    asAppWith({ forge: { json: null, error: 'gh nicht installiert' } })
+
+    await expect(refetchForge()).rejects.toThrow('gh nicht installiert')
+
+    asAppWith({ forge: { json: null, error: null } })
+
+    await expect(refetchForge()).rejects.toThrow('ohne Antwort')
+  })
+
+  describe(statsFor, () => {
+    const withOrigin = (url: string): Ship =>
+      ({ remotes: [{ name: 'origin', url }] }) as unknown as Ship
+
+    /**
+     * Matched on the slug rather than merged into the ship: the two readings have different ages,
+     * and folding one into the other gives the older number the younger timestamp.
+     *
+     * Case-insensitively, because a remote's spelling is not the API's — `UlfGebhardt/Hafen` and
+     * `ulfgebhardt/hafen` are one repository, and the forge answers with its own capitalisation.
+     */
+    it('finds the figures for a ship by what its origin points at', () => {
+      const forge = READING as unknown as Forge
+
+      expect(statsFor(forge, withOrigin('git@github.com:ulfgebhardt/hafen.git'))?.stars).toBe(3)
+    })
+
+    /** No origin, an unreadable one, or one nobody asked about: null, never another ship's row. */
+    it('says nothing rather than the nearest row', () => {
+      const forge = READING as unknown as Forge
+
+      expect(statsFor(forge, withOrigin('git@github.com:someone/else.git'))).toBeNull()
+      expect(statsFor(forge, withOrigin('/srv/git/bare'))).toBeNull()
+      expect(statsFor(forge, { remotes: [] } as unknown as Ship)).toBeNull()
+    })
+  })
+
+  describe(openForge, () => {
+    /** The host is checked in Rust against a closed list — this only asks. */
+    it('hands the url to the side that checks it', async () => {
+      const invoke = asAppWith({ open_url: null })
+
+      await openForge('https://github.com/ulfgebhardt/hafen')
+
+      expect(invoke).toHaveBeenCalledWith('open_url', {
+        url: 'https://github.com/ulfgebhardt/hafen',
+      })
+    })
+
+    it('passes a refused host through as the refusal it is', async () => {
+      asAppWith({ open_url: 'kein bekannter Forge-Host' })
+
+      await expect(openForge('https://example.org/x')).rejects.toThrow('kein bekannter Forge-Host')
+    })
+
+    /** In a browser the browser opens it, and there is nothing to check on this side. */
+    it('opens a tab where there is no shell', async () => {
+      vi.stubGlobal('__TAURI_INTERNALS__', undefined)
+      const open = vi.fn<typeof globalThis.open>()
+      vi.stubGlobal('open', open)
+
+      await openForge('https://github.com/x/y')
+
+      expect(open).toHaveBeenCalledWith('https://github.com/x/y', '_blank', 'noopener')
+    })
   })
 })

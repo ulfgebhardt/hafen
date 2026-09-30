@@ -2,18 +2,23 @@ import { homedir } from 'node:os'
 
 import {
   EMPTY_REGISTER,
+  FORGE_LANES,
+  inLanes,
   inspectShip,
+  isRead,
   parseRegister,
   readQuestCatalog,
+  readStats,
   renderRegister,
   setArchived,
   setEnlisted,
+  slugsOf,
   surveyHarbor,
 } from '@hafen/core'
 
 import { renderHarbor, renderPoints } from './render'
 
-import type { Ports, Quest, Register, Ship } from '@hafen/core'
+import type { ForgeReading, ForgeStats, Ports, Quest, Register, Ship, Unread } from '@hafen/core'
 
 /**
  * Where to look for repositories — the one thing the harbor cannot derive.
@@ -69,12 +74,14 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   hafen           alle Schiffe mit Zustand, Vertrags-Luecken und Quests
   punkte          was die Projekte geleistet haben, und was davon deins ist
   schnappschuss   alles als JSON
+  forge           was GitHub und Gitea zu den Repos sagen (eigene Datei, eigener Zeitpunkt)
   register <was> <pfad>   archivieren | reaktivieren | aufnehmen | entfernen
 
   wurzel      Default: ${DEFAULT_ROOTS.join(', ')}
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
   --nur=PFAD  nur dieses eine Repository messen
+  HAFEN_GITEA_TOKEN  fuer nicht-oeffentliche Gitea-Repos
   HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
   --store     Katalog und Register; Default: ${DEFAULT_STORE}
 
@@ -230,6 +237,46 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
             ]
       const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }
       write(snapshot)
+      return 0
+    }
+    /**
+     * What the forges say — the one command that goes to the network.
+     *
+     * Its own command and never part of `schnappschuss`, which is the whole point: the survey
+     * reads 92 repositories off the disk in about six seconds and asks nobody anything. Folding an
+     * API call into it would make the picture depend on a network, a login and somebody else's
+     * rate limit — and a harbour that cannot draw because GitHub is slow has stopped being a
+     * picture of this machine.
+     *
+     * Read-only throughout. `gh api graphql` and a `curl` GET are questions; nothing here posts,
+     * patches or deletes, and both tools use the login the person already has.
+     */
+    case 'forge': {
+      const ships = await surveyHarbor(ports, roots, { register: await registry() })
+      const wanted = slugsOf(ships)
+      const stats: ForgeStats[] = []
+      const unread: Unread[] = []
+
+      // eslint-disable-next-line n/no-process-env -- a token belongs in the environment, not a flag
+      const token = process.env['HAFEN_GITEA_TOKEN'] ?? null
+      await inLanes(wanted, FORGE_LANES, async (slug) => {
+        const answer = await readStats(ports, slug, token === '' ? null : token)
+        if (isRead(answer)) {
+          stats.push(answer)
+        } else {
+          unread.push(answer)
+        }
+      })
+
+      const reading: ForgeReading = { at: ports.clock.now().toISOString(), stats, unread }
+      // Always JSON: there is no reading of this worth printing as prose, and the window is the
+      // thing that draws it.
+      write(reading)
+      for (const one of unread) {
+        process.stderr.write(
+          `! ${one.slug.host}/${one.slug.owner}/${one.slug.repo}: ${one.reason}\n`,
+        )
+      }
       return 0
     }
     /**

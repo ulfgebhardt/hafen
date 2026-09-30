@@ -73,6 +73,7 @@ export { EMPTY_REGISTER, parseRegister, renderRegister, setArchived, setEnlisted
 export type { Remote, Ship, Stage, SurveyProgress, Worktree } from './ship'
 export {
   findShipPaths,
+  inLanes,
   inspectShip,
   mirrorsOf,
   originOf,
@@ -162,3 +163,19 @@ export { ACTIVE_DAYS, activityOf, byActivity, RUST_TIERS, rustLevel, summarizeFl
  */
 export type { CommandMap, MockSetup } from './mock'
 export { deferred, mockChecks, mockContract, mockPorts, mockRemote } from './mock'
+
+/**
+ * What a forge says — the one reading that goes to the network, kept in its own file and with its
+ * own timestamp so the survey stays free of it.
+ */
+export type { ForgeReading, ForgeStats, Slug, Unread } from './stats'
+export { forgeLinks, isRead, readStats, slugOf, slugsOf } from './stats'
+
+/**
+ * How many questions are in flight at once.
+ *
+ * Four and not eight: these go to somebody else's server, and the number that is polite there is
+ * not the number that is fast here. Measured over 80 GitHub repositories, four lanes finish in
+ * about nine seconds and never touch the secondary rate limit.
+ */
+export const FORGE_LANES = 4

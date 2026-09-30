@@ -111,6 +111,9 @@ pub fn zoom() -> f64 {
     zoom_from(&|name| std::env::var(name).ok(), display_dpi())
 }
 
+/** The two cache files the window may read or write, by name. A page says *which*, never *where*. */
+const CACHES: [&str; 2] = ["snapshot", "forge"];
+
 /// Where the snapshot lies, and what was found there.
 ///
 /// The path travels with the answer in *both* directions, because the only useful thing to say
@@ -151,9 +154,35 @@ fn snapshot_path() -> Option<PathBuf> {
     Some(cache.join("hafen").join("snapshot.json"))
 }
 
+/// Reads one of the two cache files. `which` names it; the path is built here, never passed in.
+/**
+ * Where one of the two cache files lies.
+ *
+ * The snapshot keeps `snapshot_path()` exactly, override and all: `$HAFEN_SNAPSHOT` names a *file*
+ * and a second fleet is pointed at it by name, so rebuilding that name from a cache key would
+ * throw the override's own filename away — which it did, and a test caught it. The forge reading
+ * is the one that is placed *beside* it.
+ */
+fn cache_path(name: &str) -> Option<PathBuf> {
+    let base = snapshot_path()?;
+    if name == "snapshot" {
+        return Some(base);
+    }
+    Some(base.with_file_name(format!("{name}.json")))
+}
+
 #[tauri::command]
-fn snapshot() -> Snapshot {
-    let Some(path) = snapshot_path() else {
+fn snapshot(which: Option<String>) -> Snapshot {
+    let name = which.unwrap_or_else(|| "snapshot".to_owned());
+    if !CACHES.contains(&name.as_str()) {
+        return Snapshot {
+            path: "(unbekannt)".to_owned(),
+            json: None,
+            error: Some(format!("unbekannter Cache: {name}")),
+        };
+    }
+
+    let Some(path) = cache_path(&name) else {
         return Snapshot {
             path: "(unbekannt)".to_owned(),
             json: None,
@@ -262,6 +291,18 @@ impl Measured {
 ///
 /// Nothing is written here. The window merges the answer into what it has and asks for `store`,
 /// because the merge needs to know what a snapshot is and this file deliberately does not.
+/**
+ * Asks the forges what they say about these repositories.
+ *
+ * Its own command and never folded into `measure`, which is the whole design: the survey reads the
+ * disk and asks nobody anything, this one goes to the network. Two readings, two files, two
+ * timestamps — and the window shows both, because they really are two different ages.
+ */
+#[tauri::command]
+fn forge() -> Measured {
+    Measured::of(run_cli(&["forge".to_owned()]))
+}
+
 #[tauri::command]
 fn measure(only: Option<String>) -> Measured {
     let mut args = vec!["schnappschuss".to_owned()];
@@ -271,14 +312,18 @@ fn measure(only: Option<String>) -> Measured {
     Measured::of(run_cli(&args))
 }
 
-/// Writes the snapshot to the one path it can ever be written to.
+/// Writes one of the two cache files.
 ///
-/// The path is not an argument and cannot be: the page says *what*, never *where*. Through a
-/// temporary file and a rename, so a window reading the cache while this runs sees either the old
-/// snapshot or the new one and never half of one.
+/// The path is not an argument and cannot be: the page names one of `CACHES` and this builds the
+/// rest. Through a temporary file and a rename, so a window reading the cache while this runs sees
+/// either the old file or the new one and never half of one.
 #[tauri::command]
-fn store(json: String) -> Option<String> {
-    let path = snapshot_path()?;
+fn store(json: String, which: Option<String>) -> Option<String> {
+    let name = which.unwrap_or_else(|| "snapshot".to_owned());
+    if !CACHES.contains(&name.as_str()) {
+        return Some(format!("unbekannter Cache: {name}"));
+    }
+    let path = cache_path(&name)?;
     if let Some(directory) = path.parent() {
         if let Err(error) = std::fs::create_dir_all(directory) {
             return Some(error.to_string());
@@ -619,7 +664,7 @@ mod tests {
     fn a_missing_snapshot_still_says_where_it_looked() {
         let _env = Env::set(&[("HAFEN_SNAPSHOT", Some("/gibt/es/nicht/snapshot.json"))]);
 
-        let answer = snapshot();
+        let answer = snapshot(None);
 
         assert_eq!(answer.path, "/gibt/es/nicht/snapshot.json");
         assert!(answer.json.is_none());
@@ -766,7 +811,7 @@ mod tests {
         let file = std::env::temp_dir().join("hafen-test-store.json");
         let _env = Env::set(&[("HAFEN_SNAPSHOT", Some(file.to_str().expect("utf-8")))]);
 
-        assert!(store(r#"{"ships":[]}"#.to_owned()).is_none());
+        assert!(store(r#"{"ships":[]}"#.to_owned(), None).is_none());
         assert_eq!(
             std::fs::read_to_string(&file).expect("read"),
             r#"{"ships":[]}"#
@@ -812,6 +857,38 @@ mod tests {
         assert_eq!(terminal().as_deref(), Some("meinterminal"));
     }
 
+    /**
+     * `$HAFEN_SNAPSHOT` names a *file*, and the forge reading is placed beside it.
+     *
+     * Rebuilding the snapshot's name from its cache key threw the override's own filename away —
+     * exactly what a second fleet pointed somewhere by name relies on.
+     */
+    #[test]
+    fn keeps_the_override_and_puts_the_other_beside_it() {
+        let _env = Env::set(&[("HAFEN_SNAPSHOT", Some("/anderswo/flotte-zwei.json"))]);
+
+        assert_eq!(
+            cache_path("snapshot"),
+            Some(PathBuf::from("/anderswo/flotte-zwei.json"))
+        );
+        assert_eq!(
+            cache_path("forge"),
+            Some(PathBuf::from("/anderswo/forge.json"))
+        );
+    }
+
+    /// A name it does not know is a refusal, not a file somewhere unexpected.
+    #[test]
+    fn refuses_a_cache_it_does_not_know() {
+        let answer = snapshot(Some("../../etc/passwd".to_owned()));
+
+        assert!(answer.json.is_none());
+        assert!(answer
+            .error
+            .is_some_and(|said| said.contains("unbekannter Cache")));
+        assert!(store("{}".to_owned(), Some("woanders".to_owned())).is_some());
+    }
+
     #[test]
     fn reads_a_snapshot_that_is_there() {
         let file = std::env::temp_dir().join("hafen-test-snapshot.json");
@@ -822,7 +899,7 @@ mod tests {
         .expect("write");
         let _env = Env::set(&[("HAFEN_SNAPSHOT", Some(file.to_str().expect("utf-8")))]);
 
-        let answer = snapshot();
+        let answer = snapshot(None);
 
         assert!(answer.error.is_none());
         assert!(answer.json.expect("json").contains("\"ships\""));
