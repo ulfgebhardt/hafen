@@ -24,6 +24,15 @@ export interface FsPort {
   /** Directory entry names, or null when the directory does not exist. */
   readDir: (path: string) => Promise<readonly string[] | null>
   isDirectory: (path: string) => Promise<boolean>
+  /**
+   * The path with every symbolic link resolved, or null when it cannot be resolved.
+   *
+   * Needed because a link is invisible to every other call here: `isDirectory` follows one without
+   * saying so, so a repository reachable through six links is six repositories. Measured on this
+   * machine: `mojotrollz/addons/AddOns` was linked into five game directories and drew as six
+   * identical ships, all 948 days old, filling a third of the basin.
+   */
+  realPath: (path: string) => Promise<string | null>
 }
 
 export interface HostPort {

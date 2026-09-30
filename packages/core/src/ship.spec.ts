@@ -502,6 +502,20 @@ function fleet(count: number): { ports: Ports; paths: readonly string[]; inFligh
           open.add(cwd)
           peak = Math.max(peak, open.size)
         }
+        /*
+         * A remote per ship, because the mock's command map is keyed by the command alone and
+         * would otherwise hand eleven repositories the same `origin` — at which point
+         * `foldAliases` is right to call them one project, and this fleet collapses to a single
+         * ship. It did, and that is how the fold got its first real test.
+         */
+        if (cwd !== undefined && [command, ...args].join(' ') === 'git remote -v') {
+          const name = cwd.split('/').at(-1) ?? 'ship'
+          return {
+            code: 0,
+            stderr: '',
+            stdout: `origin\tgit@github.com:org/${name}.git (fetch)`,
+          }
+        }
         const result = await base.proc.run(command, args, cwd)
         if (cwd !== undefined) {
           open.delete(cwd)
@@ -592,5 +606,82 @@ describe('surveyHarbor root handling', () => {
     const ports = mockPorts({ dirs: { '/repos': [] } })
 
     await expect(surveyHarbor(ports, '/repos')).resolves.toStrictEqual([])
+  })
+})
+
+describe('two directories, one project', () => {
+  /**
+   * Measured on this machine: `mojotrollz/addons/AddOns` is linked into five game directories and
+   * drew as six identical ships of 948 days, filling a third of the basin with one repository. A
+   * link is invisible to every other call here — `isDirectory` follows one without saying so.
+   */
+  it('counts a repository reached through a link once, at its real path', async () => {
+    const real = `${ROOT}/sources/addons`
+    const ports = mockPorts({
+      dirs: {
+        [ROOT]: ['sources', 'games'],
+        [`${ROOT}/sources`]: ['addons'],
+        [real]: [],
+        [`${real}/.git`]: [],
+        [`${ROOT}/games`]: ['one', 'two'],
+        [`${ROOT}/games/one`]: [],
+        [`${ROOT}/games/one/.git`]: [],
+        [`${ROOT}/games/two`]: [],
+        [`${ROOT}/games/two/.git`]: [],
+      },
+      links: { [`${ROOT}/games/one`]: real, [`${ROOT}/games/two`]: real },
+    })
+
+    await expect(findAcrossRoots(ports, [ROOT])).resolves.toStrictEqual([real])
+  })
+
+  /**
+   * The other half, and it cannot be answered before measuring: the only thing that says two
+   * separate clones belong together is what each of them reports as `origin`. Measured on this
+   * machine: `gradido` beside `gradido_local`, `utopia-map` beside `utopia-map-old`.
+   */
+  it('folds two checkouts of one remote into one ship and an alias', async () => {
+    const ports = mockPorts({
+      dirs: {
+        [ROOT]: ['org'],
+        [`${ROOT}/org`]: ['ship', 'ship_local'],
+        [`${ROOT}/org/ship`]: [],
+        [`${ROOT}/org/ship/.git`]: [],
+        [`${ROOT}/org/ship_local`]: [],
+        [`${ROOT}/org/ship_local/.git`]: [],
+      },
+      commands: gitCommands(),
+      now: NOW,
+    })
+
+    const ships = await surveyHarbor(ports, ROOT)
+
+    expect(ships).toHaveLength(1)
+    expect(ships[0]?.path).toBe(`${ROOT}/org/ship`)
+    expect(ships[0]?.aliases).toStrictEqual([`${ROOT}/org/ship_local`])
+  })
+
+  /**
+   * Never without a remote. Nothing about two unrelated directories says they are one project, and
+   * guessing from the name would fold two unrelated `notes` together.
+   */
+  it('leaves two remoteless directories alone', async () => {
+    const ports = mockPorts({
+      dirs: {
+        [ROOT]: ['org'],
+        [`${ROOT}/org`]: ['notes', 'notes_alt'],
+        [`${ROOT}/org/notes`]: [],
+        [`${ROOT}/org/notes/.git`]: [],
+        [`${ROOT}/org/notes_alt`]: [],
+        [`${ROOT}/org/notes_alt/.git`]: [],
+      },
+      commands: gitCommands({ 'git remote -v': '' }),
+      now: NOW,
+    })
+
+    const ships = await surveyHarbor(ports, ROOT)
+
+    expect(ships).toHaveLength(2)
+    expect(ships[0]?.aliases).toBeUndefined()
   })
 })
