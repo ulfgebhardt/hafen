@@ -52,9 +52,9 @@ import {
   hullOf,
   landedOf,
   LANDED,
+  MARK_ROW,
   mooringOf,
   offsetOf,
-  pierRows,
   pierRowY,
   yawOf,
 } from './vessel'
@@ -97,6 +97,9 @@ const LABEL_SCORE = new TextStyle({
 
 /** Grouped the way the rest of the window groups figures. */
 const FIGURE = new Intl.NumberFormat('de-DE')
+
+/** A box for the repository's own untidiness. Smaller than a demand, because it is a smaller thing. */
+const MARK = { along: 1.5, gap: 0.4 } as const
 
 /**
  * How many characters of a caption fit along a berth.
@@ -330,37 +333,47 @@ function pierLoad(ship: Ship): Graphics {
     }
   }
 
-  let row = pierRows(owed.length)
+  /*
+   * The repository's own untidiness, all of it in the one reserved row.
+   *
+   * One row and not one per kind: half a pier holds three rows, and a row per kind wanted five.
+   * They overlapped, which is what the second screenshot showed. The kinds are told apart by
+   * colour and by fill — a stash is not a row further out than a staged file, it is a different
+   * colour — so the row was never carrying that distinction anyway. Smaller boxes than a demand,
+   * because a demand is a thing the fleet requires and this is a thing lying about.
+   */
+  const step = MARK.along + MARK.gap
+  const y = pierRowY(MARK_ROW)
+  let at = LANDED.first
   for (const mark of marksOf(ship)) {
-    if (mark.kind === 'damage' || mark.kind === 'pennant' || mark.kind === 'drag') {
-      continue
-    }
-    if (mark.kind === 'boat') {
-      continue
-    }
-
-    const count = drawn(mark)
-    const color = hex(MARK_COLOR[mark.kind])
-    const y = pierRowY(row)
-    for (let index = 0; index < count; index += 1) {
-      const at = { x: 1.2 + index * (LANDED.along + LANDED.gap) + LANDED.along / 2, y }
-      const box = slab(load, at, LANDED.along * 0.8, LANDED.across)
-      if (mark.kind === 'untracked') {
-        box.stroke({ width: 1, color, alpha: 0.75 })
-      } else {
-        box.fill({ color, alpha: 0.75 })
+    if (mark.kind !== 'staged' && mark.kind !== 'unstaged' && mark.kind !== 'untracked') {
+      if (mark.kind !== 'stash') {
+        continue
       }
     }
-    if (isCapped(mark)) {
-      const at = project({ x: 1.2 + count * (LANDED.along + LANDED.gap) + 0.6, y })
-      load
-        .moveTo(at.x - 0.5 * UNIT, at.y)
-        .lineTo(at.x + 0.5 * UNIT, at.y)
-        .moveTo(at.x, at.y - 0.5 * UNIT)
-        .lineTo(at.x, at.y + 0.5 * UNIT)
-        .stroke({ width: 1, color, alpha: 0.8 })
+
+    const color = hex(MARK_COLOR[mark.kind])
+    for (let index = 0; index < drawn(mark) && at + MARK.along < BERTH.pitch - 2; index += 1) {
+      const box = slab(load, { x: at + MARK.along / 2, y }, MARK.along, LANDED.across * 0.8)
+      if (mark.kind === 'untracked') {
+        box.stroke({ width: 1, color, alpha: 0.8 })
+      } else {
+        box.fill({ color, alpha: 0.8 })
+      }
+      at += step
     }
-    row += 1
+    if (isCapped(mark)) {
+      const tick = project({ x: at + 0.3, y })
+      load
+        .moveTo(tick.x - 0.4 * UNIT, tick.y)
+        .lineTo(tick.x + 0.4 * UNIT, tick.y)
+        .moveTo(tick.x, tick.y - 0.4 * UNIT)
+        .lineTo(tick.x, tick.y + 0.4 * UNIT)
+        .stroke({ width: 1, color, alpha: 0.85 })
+      at += 1.2
+    }
+    // A gap between two kinds, so the row reads as groups rather than one long stack.
+    at += 0.6
   }
 
   return load

@@ -10,7 +10,7 @@
  * sort by. `activityOf` already answers it; this is the page layer on top.
  */
 
-import { activityOf } from '@hafen/core'
+import { activityOf, shipPoints } from '@hafen/core'
 
 import type { Activity, Ship } from '@hafen/core'
 
@@ -50,6 +50,24 @@ export function byBand(ships: readonly Ship[]): Record<Band, readonly Ship[]> {
     out[bandOf(ship)].push(ship)
   }
   return out
+}
+
+/**
+ * What a band is worth, both counts.
+ *
+ * Per band and not only in the header, because the header's one figure is the whole machine and
+ * answers a different question: "how much of this is in hand" against "how much is there". A fleet
+ * whose points are nearly all archived is a different fleet from one whose points are all active,
+ * and until now the two looked identical from the tabs.
+ */
+export function bandPoints(ships: readonly Ship[]): { project: number; own: number } {
+  return ships.reduce(
+    (sum, ship) => {
+      const points = shipPoints(ship)
+      return { project: sum.project + points.project, own: sum.own + points.own }
+    },
+    { project: 0, own: 0 },
+  )
 }
 
 /**

@@ -82,17 +82,21 @@ export function zoomAt(pan: Pan, from: number, to: number, at: Pan): Pan {
 }
 
 /**
- * The scale to draw at: shrink to fit, but never past legibility.
+ * The scale to draw at: the whole harbour, in the room there is.
  *
- * Small drawings are still enlarged to fill the window — three ships in a big window centred at
- * 1× would look like a mistake.
+ * It used to floor at `MIN_SCALE` so captions stayed letters, and that was the wrong default — the
+ * first thing a person wants from a harbour is its *shape*, and a view that opens cropped looks
+ * broken rather than detailed. Asked for twice, and it is also the cheaper promise to keep: the
+ * picture is never cut, and reading a caption is one notch of the wheel away.
+ *
+ * Small drawings are still enlarged to fill the window — three ships in a big window centred at 1×
+ * would look like a mistake — and `MAX_SCALE` still stops that where nothing more is legible.
  */
 export function fitScale(world: Extent, view: Extent): number {
   if (world.width <= 0 || world.height <= 0) {
     return MIN_SCALE
   }
-  const fit = Math.min(view.width / world.width, view.height / world.height)
-  return Math.min(Math.max(fit, MIN_SCALE), MAX_SCALE)
+  return Math.min(wholeScale(world, view), MAX_SCALE)
 }
 
 /**

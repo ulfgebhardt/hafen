@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readdir, readFile, realpath, stat, statfs } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, stat, statfs, writeFile } from 'node:fs/promises'
 import { cpus, totalmem } from 'node:os'
 import { promisify } from 'node:util'
 
@@ -63,6 +63,16 @@ export const nodePorts: Ports = {
         .then((entry) => entry.isDirectory())
         .catch(() => false),
     realPath: async (path) => await realpath(path).catch(() => null),
+    writeFile: async (path, contents) => {
+      try {
+        // The directory above it too: a register is written before anybody has made a store.
+        await mkdir(path.slice(0, Math.max(0, path.lastIndexOf('/'))), { recursive: true })
+        await writeFile(path, contents, 'utf8')
+        return null
+      } catch (error) {
+        return String(error)
+      }
+    },
   },
   host: {
     cpuCount: () => cpus().length,

@@ -50,6 +50,11 @@ export function mockPorts(setup: MockSetup = {}): Ports {
       // Nothing is a link unless a test says so: a mock that resolved paths of its own would be
       // answering a question the test never asked.
       realPath: async (path) => setup.links?.[path] ?? path,
+      // Into the same table `readFile` reads from, so a test can write and read back.
+      writeFile: async (path, contents) => {
+        files[path] = contents
+        return null
+      },
     },
     host: {
       cpuCount: () => setup.cpuCount ?? 8,

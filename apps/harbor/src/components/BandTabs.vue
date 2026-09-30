@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import { computed } from 'vue'
 
-  import { BAND_LABEL, BAND_MEANING, BANDS, byBand } from './band'
+  import { BAND_LABEL, BAND_MEANING, bandPoints, BANDS, byBand } from './band'
+  import PointValue from './PointValue.vue'
 
   import type { Band } from './band'
   import type { Ship } from '@hafen/core'
@@ -10,6 +11,9 @@
   const band = defineModel<Band>('band', { required: true })
 
   const grouped = computed(() => byBand(ships))
+  const scores = computed(() =>
+    Object.fromEntries(BANDS.map((name) => [name, bandPoints(grouped.value[name])])),
+  )
 </script>
 
 <template>
@@ -34,6 +38,17 @@
     >
       <span class="font-mono text-xs tracking-wide">{{ BAND_LABEL[name] }}</span>
       <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{ grouped[name].length }}</span>
+
+      <!--
+        What the page is worth, under its own name. The header's figure is the whole machine and
+        answers a different question — a fleet whose points are nearly all archived is not the same
+        fleet as one whose points are all active, and from the tabs alone the two looked identical.
+      -->
+      <PointValue
+        class="ml-1.5 scale-90 opacity-70"
+        :project="scores[name]?.project ?? 0"
+        :personal="scores[name]?.own ?? 0"
+      />
     </button>
 
     <p class="ml-auto self-center pr-1 font-mono text-[10px] text-slate-600">

@@ -55,8 +55,16 @@ export const UNIT = 5
 export const BERTH = {
   /** Along the pier, one berth's stern to the next one's. Must clear the longest hull. */
   pitch: 38,
-  /** Depth of the pier itself: planking, bollards, and whatever is waiting to go aboard. */
-  pier: 10,
+  /**
+   * Depth of the pier itself: planking, bollards, and whatever is waiting to go aboard.
+   *
+   * One pier serves two rows, so **each side gets half of it** and the two never share a square
+   * metre. They did: both ships at a column drew their boxes from the same corner of the same
+   * planking, and a berth with open demands on one side and a stash on the other came out as one
+   * illegible pile. Half each is the only arrangement that needs no arbitration between two ships
+   * that do not know about each other.
+   */
+  pier: 14,
   /** The water a hull lies in, measured across. Holds a snug hull and one standing right off. */
   lane: 12,
   /**
