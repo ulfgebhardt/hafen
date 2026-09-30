@@ -40,6 +40,7 @@ export interface Snapshot {
  */
 const ADDED: Partial<Ship> = {
   branches: [],
+  defaultBranch: null,
   submodules: [],
   enlisted: false,
 }

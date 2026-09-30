@@ -406,6 +406,22 @@ export function gangwayOf(hull: Hull, offset: number): Line {
   }
 }
 
+/**
+ * The gangway as a rectangle, for the hit test.
+ *
+ * A line is a poor target — two pixels wide is a target nobody hits — so it answers over a band
+ * around itself. Its own function rather than a box in `pierMarks`, because it stands for no kind:
+ * it is the sign that the planking is loaded at all.
+ */
+export function gangwayBox(hull: Hull, offset: number): Placed {
+  const plank = gangwayOf(hull, offset)
+  return {
+    spot: { x: plank.from.x, y: (plank.from.y + plank.to.y) / 2 },
+    along: 2.2,
+    across: Math.abs(plank.to.y - plank.from.y),
+  }
+}
+
 /** A crate, a flag, a boat: one drawn mark, with the kind it stands for. */
 export interface MarkBox extends Placed {
   kind: MarkKind

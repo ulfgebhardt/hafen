@@ -45,23 +45,33 @@ describe('shipTools', () => {
     const tools = mount(ShipTools, { props: { ship: ship({ branches }) } })
 
     expect(tools.text()).toContain('der Remote hat diesen Branch nicht mehr')
-    expect(tools.text()).toContain('bereits in diesem Branch enthalten')
-    // Never the one checked out: git will not delete it either.
-    expect(tools.text()).not.toContain('main')
+    expect(tools.text()).toContain('bereits in main enthalten')
+    // Never the one checked out: git will not delete it either, so only the two others are listed.
+    expect(tools.text()).toContain('2 könnten weg')
   })
 
-  /** The command to type stands under the list; the button beside each name is on top of it. */
-  it('writes the command out for the whole set', () => {
+  /**
+   * One line per row and never one for the set: a single `git branch -d a b c` under the list read
+   * as what the buttons beside each name would do, so a button that takes one branch looked like
+   * it would take all of them.
+   */
+  it('writes out the command each button runs, on its own row', () => {
     const tools = mount(ShipTools, { props: { ship: ship({ branches }) } })
 
-    expect(tools.find('code').text()).toBe('git branch -d feat/gone feat/merged')
+    expect(tools.findAll('code').map((one) => one.text())).toStrictEqual([
+      'git branch -d feat/gone',
+      'git branch -d feat/merged',
+    ])
   })
 
   /** One at a time: forty branches deleted by one click is forty decisions nobody made. */
   it('offers one branch per click and names which', async () => {
     const tools = mount(ShipTools, { props: { ship: ship({ branches }) } })
 
-    await tools.findAll('button')[0]?.trigger('click')
+    await tools
+      .findAll('button')
+      .find((one) => one.text() === 'ausführen')
+      ?.trigger('click')
 
     expect(tools.emitted('prune')).toStrictEqual([['feat/gone']])
   })
@@ -72,7 +82,7 @@ describe('shipTools', () => {
     })
 
     expect(tools.text()).not.toContain('könnten weg')
-    expect(tools.find('code').exists()).toBe(false)
+    expect(tools.findAll('code')).toHaveLength(0)
   })
 })
 
@@ -105,5 +115,35 @@ describe('the boats she carries', () => {
     const tools = mount(ShipTools, { props: { ship: ship(), available: ['shell'] } })
 
     expect(tools.text()).not.toContain('mitgeführt')
+  })
+})
+
+describe('what containment was measured against', () => {
+  /**
+   * A verdict without the thing it was compared to is one a reader has to take on faith — and this
+   * one used to compare against `HEAD`, which on a feature branch is the wrong question entirely.
+   */
+  it('names the branch a merged one was compared to', () => {
+    const tools = mount(ShipTools, {
+      props: { ship: ship({ branches, defaultBranch: 'master' }) },
+    })
+
+    expect(tools.text()).toContain('verglichen mit')
+    expect(tools.text()).toContain('bereits in master enthalten')
+  })
+
+  /** Unmeasurable is not deletable: with no leading branch, only what the remote dropped is left. */
+  it('says so where no leading branch could be found', () => {
+    const tools = mount(ShipTools, {
+      props: {
+        ship: ship({
+          defaultBranch: null,
+          branches: branches.map((one) => ({ ...one, merged: false })),
+        }),
+      },
+    })
+
+    expect(tools.text()).toContain('Kein Default-Branch')
+    expect(tools.text()).not.toContain('feat/merged')
   })
 })

@@ -1,5 +1,5 @@
 import { leaderPath, remoteKey } from './alias'
-import { BRANCH_FORMAT, parseBranches } from './branches'
+import { BRANCH_FORMAT, defaultBranchOf, parseBranches } from './branches'
 import { mergeCatalogs, readShipCatalog } from './catalog'
 import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
@@ -102,6 +102,13 @@ export interface Ship {
    * repository is carrying forty. `staleBranches` reads which of them git would let go.
    */
   branches: readonly Branch[]
+  /**
+   * The branch this repository treats as its default, or `null` where nothing said.
+   *
+   * Carried because it is what `Branch.merged` was measured against, and a verdict without the
+   * thing it was compared to is one a reader has to take on faith.
+   */
+  defaultBranch: string | null
   /**
    * The repositories this one carries — submodules.
    *
@@ -358,7 +365,7 @@ export async function inspectShip(
     stashList,
     log,
     refs,
-    contained,
+    remoteHead,
     modules,
   ] = await Promise.all([
     ports.fs.isDirectory(`${path}/.git`),
@@ -387,7 +394,11 @@ export async function inspectShip(
      * of a `git` here is starting the process, not the work.
      */
     git(ports, path, ['for-each-ref', `--format=${BRANCH_FORMAT}`, 'refs/heads']),
-    git(ports, path, ['branch', '--merged', 'HEAD', '--format=%(refname:short)']),
+    /*
+     * Which branch the remote says leads. `git clone` writes this ref, `git remote add` does not,
+     * so 12 of 92 repositories here answer nothing and fall back to a local name.
+     */
+    git(ports, path, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']),
     /*
      * The repositories this one carries.
      *
@@ -402,6 +413,19 @@ export async function inspectShip(
   const docks = parseWorktrees(worktrees)
     .map((tree) => tree.path)
     .filter((tree) => tree !== path)
+  /*
+   * Containment is asked against the branch that *leads*, so it needs the answer above first.
+   *
+   * One more round trip per repository rather than a guess: `--merged HEAD` is what it asked at
+   * first, and standing on a feature branch that reports everything merged into *that* as ready to
+   * delete. A branch that is not in the default branch cannot be deleted, and that is the whole
+   * question.
+   */
+  const defaultBranch = defaultBranchOf(remoteHead, parseBranches(refs, null))
+  const contained =
+    defaultBranch === null
+      ? null
+      : await git(ports, path, ['branch', '--merged', defaultBranch, '--format=%(refname:short)'])
   const localBranches = parseBranches(refs, contained)
   const tenders = parseSubmodules(modules)
   const rustDays = daysSince(lastCommit, ports.clock.now())
@@ -457,6 +481,7 @@ export async function inspectShip(
     unreadableQuests: merged.unreadable,
     stage: stageOf({ docks, rustDays, ahead, dirty }),
     branches: localBranches,
+    defaultBranch,
     submodules: tenders,
     archived,
     enlisted,

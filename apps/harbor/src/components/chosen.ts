@@ -12,7 +12,11 @@
 
 import type { MarkKind } from './marks'
 
-export type Chosen = { kind: 'quest'; id: string } | { kind: 'mark'; mark: MarkKind }
+export type Chosen =
+  { kind: 'quest'; id: string } | { kind: 'mark'; mark: MarkKind } | { kind: 'pier' }
+
+/** The one that stands for "everything waiting here", which is what the gangway draws. */
+export const PIER: Chosen = { kind: 'pier' }
 
 /**
  * The same thing, as one string — for a `v-if` and for a key.
@@ -25,7 +29,10 @@ export function chosenKey(chosen: Chosen | null): string {
   if (chosen === null) {
     return ''
   }
-  return chosen.kind === 'quest' ? `quest:${chosen.id}` : `mark:${chosen.mark}`
+  if (chosen.kind === 'quest') {
+    return `quest:${chosen.id}`
+  }
+  return chosen.kind === 'mark' ? `mark:${chosen.mark}` : 'pier'
 }
 
 /** Whether a choice is this demand. */
@@ -36,4 +43,15 @@ export function isQuest(chosen: Chosen | null, id: string): boolean {
 /** Whether a choice is this kind of mark. */
 export function isMark(chosen: Chosen | null, mark: MarkKind): boolean {
   return chosen?.kind === 'mark' && chosen.mark === mark
+}
+
+/**
+ * Whether a choice is the planking as a whole.
+ *
+ * The gangway's own answer. It is not a *thing* on the pier, it is the sign that there are things
+ * on it — so it points at all of them rather than at whichever happens to be first, which would
+ * make clicking the plank and clicking that one crate the same act.
+ */
+export function isPier(chosen: Chosen | null): boolean {
+  return chosen?.kind === 'pier'
 }
