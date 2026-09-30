@@ -1,11 +1,14 @@
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue'
+  import { computed, onMounted, ref } from 'vue'
 
+  import { byBand, firstBand } from './components/band'
+  import BandTabs from './components/BandTabs.vue'
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import ShipSheet from './components/ShipSheet.vue'
   import { loadSnapshot, SnapshotError } from './snapshot'
 
+  import type { Band } from './components/band'
   import type { Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
@@ -14,11 +17,25 @@
   const failed = ref<SnapshotError | null>(null)
   const picked = ref<Ship | null>(null)
 
+  /**
+   * Which page is open, and what is on it.
+   *
+   * Ninety hulls on one sheet answered "what is the fleet like" and nothing else. The question in
+   * front of a person is about the handful they are working on, so the active ones get the page —
+   * and the opening band is the first one with anything in it, because an empty page that has to
+   * be clicked away is the kind of thing a tool does once.
+   */
+  const band = ref<Band>('active')
+  const shown = computed(() =>
+    snapshot.value === null ? [] : byBand(snapshot.value.ships)[band.value],
+  )
+
   onMounted(async () => {
     try {
       const loaded = await loadSnapshot()
       snapshot.value = loaded.snapshot
       source.value = loaded.source
+      band.value = firstBand(loaded.snapshot.ships)
     } catch (error) {
       /**
        * Named, never blank. An empty harbor and a snapshot that could not be read are different
@@ -37,10 +54,12 @@
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
     <template v-if="snapshot !== null">
       <FleetBar :ships="snapshot.ships" :at="snapshot.at" :source="source" />
+      <BandTabs v-model:band="band" :ships="snapshot.ships" />
 
       <div class="flex min-h-0 flex-1">
         <main class="min-w-0 flex-1">
-          <HarborScene v-model:picked="picked" :ships="snapshot.ships" />
+          <!-- Keyed on the band: a new page is a new drawing, not the old one panned. -->
+          <HarborScene :key="band" v-model:picked="picked" :ships="shown" />
         </main>
 
         <aside class="w-96 shrink-0 border-l border-slate-800">

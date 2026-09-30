@@ -19,10 +19,12 @@
 
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 
+import { cranes, shoreline, waves } from './coast'
+import { conditionOf, isExemplary, keptness } from './condition'
 import { ageLabel, berths, bindingQuests, fit, PER_LANE } from './fleet'
 import { draught, frames, HULL, MAX_DRAUGHT, outline, segments, storeys } from './hull'
 import { drawn, isCapped, isShipshape, marksOf } from './marks'
-import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
+import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { clampPan, fitScale, isPannable } from './viewport'
 
 import type { Berth } from './fleet'
@@ -107,6 +109,67 @@ function sheet(width: number, height: number): Graphics {
   grid.stroke({ width: 0.6, color: hex(SCENE.seaLine), alpha: 0.6 })
 
   return grid
+}
+
+/**
+ * Water, beach and quay — the one part of this drawing that stands for nothing.
+ *
+ * Drawn under everything and in three flat layers, because depth here is a reading aid and not a
+ * picture: the eye needs to know where the sheet ends, and a harbour without a shoreline is a
+ * grid with boats on it.
+ */
+function coast(width: number, height: number): Container {
+  const group = new Container()
+  const steel = hex(SCENE.crane)
+
+  const sand = new Graphics()
+  const shore = shoreline(width, height)
+  sand.moveTo(0, height)
+  for (const point of shore) {
+    sand.lineTo(point.x, point.y)
+  }
+  sand
+    .lineTo(width, height)
+    .closePath()
+    .fill({ color: hex(SCENE.land), alpha: 0.85 })
+  // The waterline itself, drawn over the fill so the sand reads as being behind it.
+  sand.moveTo(shore[0]?.x ?? 0, shore[0]?.y ?? height)
+  for (const point of shore.slice(1)) {
+    sand.lineTo(point.x, point.y)
+  }
+  sand.stroke({ width: 0.9, color: steel, alpha: 0.35 })
+  group.addChild(sand)
+
+  // Crests: short strokes on the water, not a wave shape — at this scale a drawn wave is a
+  // smudge, and a tick mark reads as water because that is how a chart draws it.
+  const swell = new Graphics()
+  for (const lane of [0.42, 0.62, 0.8]) {
+    const y = height * lane
+    for (const wave of waves(width, Math.round(lane * 100))) {
+      const x = wave.at * width
+      swell.moveTo(x, y).lineTo(x + wave.width * 0.4, y - wave.height * 0.5)
+    }
+  }
+  swell.stroke({ width: 0.5, color: steel, alpha: 0.16 })
+  group.addChild(swell)
+
+  const quay = new Graphics()
+  const quayY = height - 14
+  quay.moveTo(0, quayY).lineTo(width, quayY).stroke({ width: 1.1, color: steel, alpha: 0.4 })
+  for (const crane of cranes(width)) {
+    const top = quayY - crane.height
+    quay
+      .moveTo(crane.x, quayY)
+      .lineTo(crane.x, top)
+      .moveTo(crane.x, top)
+      .lineTo(crane.x + crane.reach, top + 4)
+      .moveTo(crane.x + crane.reach, top + 4)
+      .lineTo(crane.x + crane.reach, top + 12)
+  }
+  quay.stroke({ width: 0.7, color: steel, alpha: 0.3 })
+  group.addChild(quay)
+
+  return group
 }
 
 /** The waterline of one lane, with its mark. */
@@ -328,6 +391,27 @@ function localState(ship: Ship, steel: number): Container {
 }
 
 /**
+ * Smoke from the funnel: the mark of a ship that is both kept and met.
+ *
+ * Three puffs of decreasing size, drawn as outlines rather than filled — filled circles at this
+ * scale read as bullet points, which is exactly the wrong association.
+ */
+function plume(steel: number): Graphics {
+  const smoke = new Graphics()
+  const x = HULL.length * 0.28 + 6
+  const base = -6.5 - HULL.house * 0.55
+
+  // The funnel itself.
+  smoke.rect(x, base - 5, 4, 5).stroke({ width: 0.7, color: steel, alpha: 0.7 })
+
+  for (const [index, puff] of [2.2, 1.6, 1.1].entries()) {
+    smoke.circle(x + 2 + index * 3.4, base - 8 - index * 3.6, puff)
+  }
+  smoke.stroke({ width: 0.6, color: steel, alpha: 0.45 })
+  return smoke
+}
+
+/**
  * One ship as a lines plan.
  *
  * Returns the container *and* the hull, because the roll is applied to the hull and its deck
@@ -337,6 +421,17 @@ function localState(ship: Ship, steel: number): Container {
 function drawShip(ship: Ship): { root: Container; body: Container } {
   const root = new Container()
   const body = new Container()
+
+  /*
+   * How well kept this ship is decides how it is *drawn*, not just what is drawn on it.
+   *
+   * Before this, every hull was the same hull and only the deck differed — which meant the
+   * picture said nothing at a glance about a repository somebody had looked after. The weighting
+   * leans on hygiene because that is the half a person can fix in two minutes: commit, push,
+   * pop the stash, and the ship visibly rides better. A contract takes a week.
+   */
+  const kept = keptness(ship)
+  const condition = conditionOf(ship)
   const steel = hex(SCENE.crane)
 
   /**
@@ -357,23 +452,60 @@ function drawShip(ship: Ship): { root: Container; body: Container } {
   for (const point of points.slice(1)) {
     shape.lineTo(point.x, point.y)
   }
-  shape.closePath().stroke({ width: 1.1, color: steel, alpha: 0.85 })
+  // A kept ship is drawn with a confident line; a neglected one thins out and greys.
+  shape.closePath().stroke({ width: 0.7 + kept * 0.8, color: steel, alpha: 0.42 + kept * 0.5 })
 
-  // Frames: scale, and stated as decoration in `hull.ts` — the one thing here that is.
-  for (const x of frames()) {
+  /*
+   * Frames: the detail that makes a hull read as built rather than as a wedge.
+   *
+   * Their *number* follows the contract — a ship held to demands it meets is drawn with more
+   * structure in it. Which is decoration standing in for something measured, and the one place
+   * in this drawing where that is deliberate rather than sloppy.
+   */
+  const ribs = 5 + Math.round((condition.contract ?? 0.4) * 4)
+  for (const x of frames(ribs)) {
     shape.moveTo(x, 2).lineTo(x, HULL.depth - 1.5)
   }
-  shape.stroke({ width: 0.4, color: steel, alpha: 0.22 })
+  shape.stroke({ width: 0.4, color: steel, alpha: 0.12 + kept * 0.2 })
 
   shape
     .moveTo(HULL.tuck * 0.4, 0)
     .lineTo(HULL.length - 1, 0)
-    .stroke({ width: 0.7, color: steel, alpha: 0.5 })
+    .stroke({ width: 0.7, color: steel, alpha: 0.25 + kept * 0.4 })
+
+  /*
+   * Rust: short strokes along the waterline, and only where the repository is actually old.
+   *
+   * Drawn on the hull rather than as a colour wash, because colour is already spoken for by the
+   * verdicts — and a stroke survives greyscale, which a tint does not.
+   */
+  if (condition.freshness < 0.5) {
+    const patches = Math.round((1 - condition.freshness) * 7)
+    for (let index = 0; index < patches; index += 1) {
+      const x = HULL.tuck + 6 + (index * (HULL.length - 24)) / patches
+      const y = HULL.depth * 0.55 + (index % 2) * 3
+      shape.moveTo(x, y).lineTo(x + 3.5, y + 1.5)
+    }
+    shape.stroke({ width: 1.1, color: hex(HULL_COLOR.rust), alpha: 0.5 })
+  }
   body.addChild(shape)
 
   body.addChild(deck(ship, steel))
   body.addChild(superstructure(ship, steel))
   body.addChild(localState(ship, steel))
+
+  /*
+   * The one flourish, and it is earned rather than decorative: a funnel with smoke, for a ship
+   * that meets every demand that binds it *and* has a clean tree.
+   *
+   * Both halves, because either alone is a different sentence — a spotless tree on a repository
+   * with no CI is not an exemplary repository, and a perfect contract with four stashes is not
+   * either. It is the only thing in the scene that moves on its own, so it is the thing the eye
+   * finds first across ninety hulls.
+   */
+  if (isExemplary(ship)) {
+    body.addChild(plume(steel))
+  }
 
   root.addChild(body)
   return { root, body }
@@ -523,6 +655,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
 
     world.addChild(sheet(extent.width, extent.height))
+    world.addChild(coast(extent.width, extent.height))
 
     for (let lane = 0; lane < lanes; lane += 1) {
       const line = laneLine(extent.width - 20, lane)

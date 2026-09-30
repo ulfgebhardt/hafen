@@ -361,7 +361,9 @@ describe('surveyHarbor while it runs', () => {
     const { ports } = fleet(5)
     const seen: string[] = []
 
-    const ships = await surveyHarbor(ports, ROOT, [], { onShip: (ship) => seen.push(ship.name) })
+    const ships = await surveyHarbor(ports, ROOT, {
+      progress: { onShip: (ship) => seen.push(ship.name) },
+    })
 
     expect(seen).toHaveLength(5)
     expect(new Set(seen)).toStrictEqual(new Set(ships.map((ship) => ship.name)))
@@ -372,7 +374,9 @@ describe('surveyHarbor while it runs', () => {
     const last = paths.at(-1) ?? ''
     const seen: string[] = []
 
-    await surveyHarbor(ports, ROOT, [], { first: [last], onShip: (ship) => seen.push(ship.path) })
+    await surveyHarbor(ports, ROOT, {
+      progress: { first: [last], onShip: (ship) => seen.push(ship.path) },
+    })
 
     expect(seen[0]).toBe(last)
   })
@@ -382,7 +386,7 @@ describe('surveyHarbor while it runs', () => {
     // returned list would make the harbor's own listing depend on where the eye happened to be.
     const { ports, paths } = fleet(4)
 
-    const ships = await surveyHarbor(ports, ROOT, [], { first: [...paths].reverse() })
+    const ships = await surveyHarbor(ports, ROOT, { progress: { first: [...paths].reverse() } })
 
     expect(ships.map((ship) => ship.path)).toStrictEqual([...paths])
   })

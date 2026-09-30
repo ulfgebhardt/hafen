@@ -4,7 +4,7 @@ import { EMPTY_REGISTER, parseRegister, readQuestCatalog, surveyHarbor } from '@
 
 import { renderHarbor, renderPoints } from './render'
 
-import type { Ports, Quest, Ship } from '@hafen/core'
+import type { Ports, Quest, Register, Ship } from '@hafen/core'
 
 /**
  * Where to look for repositories — the one thing the harbor cannot derive.
@@ -112,22 +112,24 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
     return own !== '' && !declared.includes(own) ? [...declared, own] : declared
   }
 
-  /** Directories the survey would not find by itself. A decision, so it comes from the register. */
-  const enlisted = async (): Promise<readonly string[]> => {
+  /**
+   * The register: what is put away, and which directories to treat as ships anyway.
+   *
+   * Handed to the survey whole. Both halves are decisions rather than measurements, which is the
+   * only kind of thing the register holds.
+   */
+  const registry = async (): Promise<Register> => {
     const raw = await ports.fs.readFile(`${store}/register.md`)
-    return (raw === null ? EMPTY_REGISTER : parseRegister(raw)).enlisted
+    return raw === null ? EMPTY_REGISTER : parseRegister(raw)
   }
 
   switch (command) {
     case 'hafen': {
-      const ships = await surveyHarbor(
-        ports,
-        root,
-        await enlisted(),
-        {},
-        await demands(),
-        await identities(),
-      )
+      const ships = await surveyHarbor(ports, root, {
+        register: await registry(),
+        catalog: await demands(),
+        ownEmails: await identities(),
+      })
       if (asJson) {
         write(ships)
       } else {
@@ -137,7 +139,11 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
     }
     case 'punkte': {
       const own = await identities()
-      const ships = await surveyHarbor(ports, root, await enlisted(), {}, await demands(), own)
+      const ships = await surveyHarbor(ports, root, {
+        register: await registry(),
+        catalog: await demands(),
+        ownEmails: own,
+      })
       if (asJson) {
         write({
           ships: ships.map((ship) => ({ name: ship.name, org: ship.org, ledger: ship.ledger })),
@@ -148,14 +154,11 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       return 0
     }
     case 'schnappschuss': {
-      const ships = await surveyHarbor(
-        ports,
-        root,
-        await enlisted(),
-        {},
-        await demands(),
-        await identities(),
-      )
+      const ships = await surveyHarbor(ports, root, {
+        register: await registry(),
+        catalog: await demands(),
+        ownEmails: await identities(),
+      })
       const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }
       write(snapshot)
       return 0
