@@ -75,9 +75,12 @@ describe('fleetBar', () => {
       },
     })
 
-    expect(bar.text()).toContain('Flotte')
-    expect(bar.text()).toContain('30')
-    expect(bar.text()).toContain('du')
+    // The marks carry the distinction, and the labels say which is which for everything that
+    // cannot see them.
+    expect(bar.text()).toContain('◆')
+    expect(bar.text()).toContain('●')
+    expect(bar.html()).toContain('Projektpunkte')
+    expect(bar.html()).toContain('deine Punkte')
   })
 
   it('draws an empty harbor without falling over', () => {

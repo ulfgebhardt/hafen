@@ -10,7 +10,9 @@
   import { computed } from 'vue'
 
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
+  import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
+  import TaskList from './TaskList.vue'
   import { RUST_LABEL, STAGE_LABEL, STAGE_MEANING } from './theme'
 
   import type { Ship } from '@hafen/core'
@@ -34,7 +36,11 @@
 <template>
   <!-- A datasheet, not a dashboard: every row is a measurement with its source. -->
   <article class="flex h-full flex-col overflow-y-auto bg-slate-900/60 text-sm">
-    <header class="border-b border-slate-800 px-4 py-3">
+    <!--
+      Sticky: the name is what tells a reader which repository the rest of the sheet is about,
+      and it scrolled away exactly when the list below got long enough to need it.
+    -->
+    <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 px-4 py-3">
       <p class="flex items-baseline gap-2 font-mono text-[10px] tracking-widest uppercase">
         <span class="text-slate-500">Schiffsdatenblatt</span>
         <!-- Said out loud: a panel that silently stops following the pointer looks broken. -->
@@ -78,14 +84,7 @@
     <!-- Counts beside the score, so the weighting can be argued with rather than believed. -->
     <section class="border-b border-slate-800 px-4 py-3">
       <p class="text-[10px] tracking-wide text-slate-600 uppercase">Geleistet</p>
-      <p class="text-slate-300">
-        {{ points.project.toLocaleString('de-DE') }}
-        <span class="text-[11px] text-slate-600">Projektpunkte</span>
-        <span v-if="points.own > 0" class="ml-2 text-slate-400"
-          >{{ points.own.toLocaleString('de-DE') }}
-          <span class="text-[11px] text-slate-600">davon deine</span></span
-        >
-      </p>
+      <p><PointValue :project="points.project" :personal="points.own" /></p>
       <p class="text-[11px] text-slate-600">
         {{ ship.ledger.total.commits }} Commits · {{ ship.ledger.total.pulls }} PRs ·
         {{ ship.ledger.total.authors }} {{ ship.ledger.total.authors === 1 ? 'Autor' : 'Autoren' }}
@@ -139,6 +138,8 @@
         in CI: {{ ship.contract.inCi.join(', ') }}
       </p>
     </section>
+
+    <TaskList :ship="ship" />
 
     <section class="px-4 py-3">
       <p class="text-[10px] tracking-wide text-slate-600 uppercase">

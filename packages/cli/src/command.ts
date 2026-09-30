@@ -13,8 +13,28 @@ import type { Ports, Quest, Register, Ship } from '@hafen/core'
  * person's habit and is stated as such: a tool that only works for whoever wrote it is not a
  * tool, and every path here is overridable for exactly that reason.
  */
-// eslint-disable-next-line n/no-process-env -- the root has to be movable without an argument
-export const DEFAULT_ROOT = process.env['HAFEN_ROOT'] ?? `${homedir()}/.data/sources`
+// eslint-disable-next-line n/no-process-env -- the roots have to be movable without an argument
+const GIVEN_ROOTS = process.env['HAFEN_ROOT']
+
+/**
+ * Where to look, as a list.
+ *
+ * Plural because a machine keeps its projects in more than one place: this one has
+ * `~/.data/sources` and `~/.data/games`, and the second holds a real project among a dozen
+ * package caches. With one root that project simply did not exist.
+ *
+ * Comma-separated in `$HAFEN_ROOT`, the same shape `$HAFEN_EMAILS` uses — one convention for
+ * "several of these" rather than two.
+ */
+export const DEFAULT_ROOTS: readonly string[] =
+  GIVEN_ROOTS === undefined || GIVEN_ROOTS === ''
+    ? [`${homedir()}/.data/sources`, `${homedir()}/.data/games`]
+    : GIVEN_ROOTS.split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry !== '')
+
+/** The first root, for the places that still name one — the usage line, and an error. */
+export const DEFAULT_ROOT = DEFAULT_ROOTS[0] ?? `${homedir()}/.data/sources`
 
 /**
  * Where the fleet catalog lies — the quests, and the register.
@@ -41,7 +61,7 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   punkte          was die Projekte geleistet haben, und was davon deins ist
   schnappschuss   alles als JSON
 
-  wurzel      Default: ${DEFAULT_ROOT}
+  wurzel      Default: ${DEFAULT_ROOTS.join(', ')}
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
   HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
@@ -73,7 +93,9 @@ export interface Snapshot {
 export async function main(argv: readonly string[], ports: Ports): Promise<number> {
   const flags = argv.filter((arg) => arg.startsWith('--'))
   const [command, rootArg] = argv.filter((arg) => !arg.startsWith('--'))
-  const root = rootArg ?? DEFAULT_ROOT
+  // An argument names one root and replaces the list; without it, every default root is read.
+  const roots = rootArg === undefined ? DEFAULT_ROOTS : [rootArg]
+  const root = roots[0] ?? DEFAULT_ROOT
   const store = storeFrom(flags)
   const asJson = flags.includes('--json')
 
@@ -125,7 +147,7 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
 
   switch (command) {
     case 'hafen': {
-      const ships = await surveyHarbor(ports, root, {
+      const ships = await surveyHarbor(ports, roots, {
         register: await registry(),
         catalog: await demands(),
         ownEmails: await identities(),
@@ -139,7 +161,7 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
     }
     case 'punkte': {
       const own = await identities()
-      const ships = await surveyHarbor(ports, root, {
+      const ships = await surveyHarbor(ports, roots, {
         register: await registry(),
         catalog: await demands(),
         ownEmails: own,
@@ -154,7 +176,7 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       return 0
     }
     case 'schnappschuss': {
-      const ships = await surveyHarbor(ports, root, {
+      const ships = await surveyHarbor(ports, roots, {
         register: await registry(),
         catalog: await demands(),
         ownEmails: await identities(),

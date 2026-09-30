@@ -103,6 +103,20 @@ export const BREADTH_POINTS = 5
 /** Points for a repository with nothing open, nothing unpushed, nothing stashed. */
 export const SHIPSHAPE_POINTS = 3
 
+/**
+ * Points for each quest met, across the fleet.
+ *
+ * In the *user* score and deliberately not in the project one. The rule a repository is held to
+ * stays: it cannot buy its way out of a violated contract with commit volume, because
+ * `shipPoints` never sees a quest. But a person who goes and meets a demand did something, and a
+ * board that offers tasks without a number on them is a board that cannot say which task is
+ * worth doing first.
+ *
+ * Worth more than tidying one tree, because it stays met: a stash comes back tomorrow, a CI
+ * workflow does not.
+ */
+export const QUEST_POINTS = 8
+
 export interface FleetPoints {
   /** Own commits and pull requests across every repository. */
   work: number
@@ -122,7 +136,14 @@ export interface FleetPoints {
    * when work is left lying about, which is exactly what a stash is.
    */
   tidy: number
-  /** The three, added. */
+  /**
+   * Quests met across the fleet.
+   *
+   * Counted here and nowhere else — see `QUEST_POINTS` for why the project score does not get
+   * them.
+   */
+  contracts: number
+  /** The four, added. */
   total: number
   /** How many repositories the breadth and tidiness were counted over. */
   fleet: number
@@ -130,6 +151,9 @@ export interface FleetPoints {
   clean: number
   /** And how many are active. */
   active: number
+  /** Quests met, over quests that bind — so `contracts` reads as a ratio. */
+  met: number
+  binding: number
 }
 
 /** Whether a repository is in a state its owner could walk away from. */
@@ -154,17 +178,24 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
   const active = ships.filter(isActive).length
   const clean = ships.filter(isClean).length
 
+  const quests = ships.flatMap((ship) => bindingQuests(ship.quests))
+  const met = quests.filter((quest) => quest.verdict === 'met').length
+
   const breadth = active * BREADTH_POINTS
   const tidy = clean * SHIPSHAPE_POINTS
+  const contracts = met * QUEST_POINTS
 
   return {
     work,
     breadth,
     tidy,
-    total: work + breadth + tidy,
+    contracts,
+    total: work + breadth + tidy + contracts,
     fleet: ships.length,
     clean,
     active,
+    met,
+    binding: quests.length,
   }
 }
 
