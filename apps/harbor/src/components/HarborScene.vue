@@ -3,6 +3,7 @@
 
   import { mountScene } from './scene'
 
+  import type { Chosen } from './chosen'
   import type { Scene } from './scene'
   import type { Ship } from '@hafen/core'
 
@@ -24,7 +25,7 @@
    * one on bare deck is a question about the ship. Folding the two would make "this ship" and
    * "this ship, this demand" the same answer.
    */
-  const demand = defineModel<string | null>('quest', { required: false, default: null })
+  const demand = defineModel<Chosen | null>('quest', { required: false, default: null })
 
   const canvas = ref<HTMLCanvasElement | null>(null)
   let scene: Scene | null = null
@@ -37,9 +38,9 @@
     scene.onHover((ship) => {
       hovered.value = ship
     })
-    scene.onSelect((ship, quest) => {
+    scene.onSelect((ship, chosen) => {
       picked.value = ship
-      demand.value = quest
+      demand.value = chosen
     })
     scene.draw(ships)
     scene.highlight(picked.value, demand.value)

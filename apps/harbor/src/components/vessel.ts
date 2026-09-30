@@ -23,8 +23,10 @@ import { bindingQuests } from '@hafen/core'
 
 import { conditionOf, hygieneOf } from './condition'
 import { drift, orderedQuests } from './fleet'
+import { drawn, isCapped, marksOf } from './marks'
 import { BERTH } from './plan'
 
+import type { MarkKind } from './marks'
 import type { Spot } from './plan'
 import type { QuestResult, Ship } from '@hafen/core'
 
@@ -343,6 +345,33 @@ export function hasPlume(ship: Ship): boolean {
   return condition.contract === 1 && condition.hygiene === 1
 }
 
+/** Anything with a rectangle: a demand's box, a crate on the planking, a boat alongside. */
+export interface Placed {
+  spot: Spot
+  along: number
+  across: number
+}
+
+/**
+ * The box under a point, or `null` for a click that hit nothing.
+ *
+ * Generic, because everything drawn on a ship is a rectangle somewhere and every one of them has
+ * to be clickable: a demand, a staged file, a stash, a worktree, a carried repository. One hit
+ * test over one list, and the list is the same one the renderer strokes — so a box can never be
+ * drawn in one place and answered for in another.
+ */
+export function boxAt<T extends Placed>(boxes: readonly T[], at: Spot): T | null {
+  for (const box of boxes) {
+    if (
+      Math.abs(at.x - box.spot.x) <= box.along / 2 &&
+      Math.abs(at.y - box.spot.y) <= box.across / 2
+    ) {
+      return box
+    }
+  }
+  return null
+}
+
 /**
  * Which demand's box lies under a point, or `null` for a click that hit no box.
  *
@@ -356,16 +385,121 @@ export function hasPlume(ship: Ship): boolean {
  * place that knows about that split.
  */
 export function questAt(
-  boxes: readonly { quest: QuestResult; spot: Spot; along: number; across: number }[],
+  boxes: readonly (Placed & { quest: QuestResult })[],
   at: Spot,
 ): string | null {
-  for (const box of boxes) {
-    if (
-      Math.abs(at.x - box.spot.x) <= box.along / 2 &&
-      Math.abs(at.y - box.spot.y) <= box.across / 2
-    ) {
-      return box.quest.id
+  return boxAt(boxes, at)?.quest.id ?? null
+}
+
+/** A crate, a flag, a boat: one drawn mark, with the kind it stands for. */
+export interface MarkBox extends Placed {
+  kind: MarkKind
+  /** Whether the count had to be cut, so the drawing can say `4+` rather than claim four. */
+  capped: boolean
+}
+
+/** A box for the repository's own untidiness. Smaller than a demand, because it is a smaller thing. */
+export const MARK = { along: 1.5, gap: 0.4, across: LANDED.across * 0.8 } as const
+
+/** The kinds that wait on the planking: work that is not aboard. */
+const ON_THE_PIER = new Set<MarkKind>(['staged', 'unstaged', 'untracked', 'stash'])
+
+/**
+ * The repository's own untidiness, laid out along its reserved row of the planking.
+ *
+ * Here and not in the renderer for the reason `cargoOf` is here: where a box sits is arithmetic,
+ * and it now has a second reader — the hit test. Two placements of one crate would be two answers
+ * to "what did I just click on".
+ *
+ * One row and not one per kind: half a pier holds three rows, and a row per kind wanted five. The
+ * kinds are told apart by colour and by fill, never by which row they are in.
+ */
+export function pierMarks(ship: Ship): readonly MarkBox[] {
+  const out: MarkBox[] = []
+  const y = pierRowY(MARK_ROW)
+  let at = LANDED.first
+
+  for (const mark of marksOf(ship)) {
+    if (!ON_THE_PIER.has(mark.kind)) {
+      continue
+    }
+    for (let index = 0; index < drawn(mark) && at + MARK.along < BERTH.pitch - 2; index += 1) {
+      out.push({
+        kind: mark.kind,
+        capped: isCapped(mark),
+        spot: { x: at + MARK.along / 2, y },
+        along: MARK.along,
+        across: MARK.across,
+      })
+      at += MARK.along + MARK.gap
+    }
+    if (isCapped(mark)) {
+      at += 1.2
+    }
+    // A gap between two kinds, so the row reads as groups rather than one long stack.
+    at += 0.6
+  }
+  return out
+}
+
+/**
+ * What the ship herself carries: damage amidships, a flag at the stem, a drag astern, boats and
+ * carried repositories alongside.
+ *
+ * Every one of them a rectangle, including the ones drawn as a cross or a triangle: the shape is
+ * the renderer's business, the area a click may land in is this one's.
+ */
+export function hullMarks(ship: Ship, hull: Hull): readonly MarkBox[] {
+  const out: MarkBox[] = []
+  const half = hull.beam / 2
+
+  for (const mark of marksOf(ship)) {
+    const count = drawn(mark)
+    const capped = isCapped(mark)
+
+    if (mark.kind === 'damage') {
+      out.push({
+        kind: mark.kind,
+        capped,
+        spot: { x: hull.length * 0.45, y: 0 },
+        along: 2.2,
+        across: 2.2,
+      })
+    }
+    if (mark.kind === 'pennant') {
+      out.push({
+        kind: mark.kind,
+        capped,
+        spot: { x: hull.length + 1.8, y: 0 },
+        along: 2.4,
+        across: 1.8,
+      })
+    }
+    if (mark.kind === 'drag') {
+      out.push({ kind: mark.kind, capped, spot: { x: -2, y: 0 }, along: 3, across: 2.2 })
+    }
+    if (mark.kind === 'boat') {
+      for (let index = 0; index < count; index += 1) {
+        out.push({
+          kind: mark.kind,
+          capped,
+          spot: { x: hull.length * 0.2 + index * 3.2, y: half + 1.3 },
+          along: 2.4,
+          across: 1,
+        })
+      }
+    }
+    if (mark.kind === 'tender') {
+      for (let index = 0; index < count; index += 1) {
+        out.push({
+          kind: mark.kind,
+          capped,
+          spot: { x: hull.length * 0.58 + index * 2.4 + 0.05, y: half + 1.3 },
+          along: 1.9,
+          across: 0.9,
+        })
+      }
     }
   }
-  return null
+  return out
 }

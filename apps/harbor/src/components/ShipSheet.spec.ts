@@ -223,7 +223,7 @@ describe('the plan in the sheet', () => {
 
     await box?.trigger('click')
 
-    expect(sheet.emitted('pick')).toStrictEqual([['lint']])
+    expect(sheet.emitted('pick')).toStrictEqual([[{ kind: 'quest', id: 'lint' }]])
   })
 
   /** Opening a quest row is the same choice, so it travels the same way. */
@@ -237,6 +237,6 @@ describe('the plan in the sheet', () => {
       .find((one) => one.text().includes('lint'))
       ?.trigger('click')
 
-    expect(sheet.emitted('pick')).toStrictEqual([['lint']])
+    expect(sheet.emitted('pick')).toStrictEqual([[{ kind: 'quest', id: 'lint' }]])
   })
 })
