@@ -33,6 +33,15 @@ export interface FsPort {
    * identical ships, all 948 days old, filling a third of the basin.
    */
   realPath: (path: string) => Promise<string | null>
+  /**
+   * Writes a file, creating the directories above it. The reason it failed, or `null` on success.
+   *
+   * The one writing call here, and it is not a hole in "der Hafen verändert kein Repository": what
+   * goes through it is the register, and the register holds decisions a human made — what is
+   * archived, and which directories to treat as ships anyway. Nothing measured is ever written,
+   * and no path inside a project repository is.
+   */
+  writeFile: (path: string, contents: string) => Promise<string | null>
 }
 
 export interface HostPort {

@@ -16,13 +16,14 @@ const FLEET = { width: 1900, height: 1300 }
 
 describe(fitScale, () => {
   /**
-   * The bug this exists for: ninety hulls scaled into a 2.25× window landed around 35 %, and the
-   * captions stopped being letters. A plan is read at a legible size and moved across, not shrunk
-   * until it fits.
+   * The whole harbour, in the room there is. It used to floor at `MIN_SCALE` so captions stayed
+   * letters, and that was the wrong default: the first thing a person wants from a harbour is its
+   * *shape*, and a view that opens cropped looks broken rather than detailed. Reading a caption is
+   * one notch of the wheel away; an edge that was never drawn is not.
    */
-  it('never shrinks past legibility, however small the window', () => {
-    expect(fitScale(FLEET, { width: 680, height: 430 })).toBe(MIN_SCALE)
-    expect(fitScale(FLEET, { width: 50, height: 50 })).toBe(MIN_SCALE)
+  it('shows the whole drawing, however small the window', () => {
+    expect(fitScale(FLEET, { width: 680, height: 430 })).toBe(430 / 1300)
+    expect(fitScale(FLEET, { width: 50, height: 50 })).toBe(50 / 1900)
   })
 
   it('fills a window that has room to spare', () => {

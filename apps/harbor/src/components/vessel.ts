@@ -218,28 +218,62 @@ export function cargoOf(ship: Ship, hull: Hull): readonly Container[] {
  * be split.
  */
 export const LANDED = {
-  along: 2.6,
+  along: 2.4,
   across: 1.2,
   /** Between two boxes along the pier. */
   gap: 0.5,
   /** Between two rows across it. */
   pitch: 1.9,
-  /** Clear of the landward edge, so a box never sits on the quay's own line. */
-  first: 1.6,
+  /** Clear of the outer edge of this ship's half, so a box never sits on the planking's line. */
+  first: 1.1,
 } as const
 
-/** How many boxes stand in one row along the pier before the next row starts. */
-export const LANDED_PER_ROW = 8
+/**
+ * How many boxes stand in one row along the pier before the next row starts.
+ *
+ * As many as the pitch holds, worked out rather than picked: a berth is `BERTH.pitch` wide, a box
+ * and its gap are `along + gap`, and the row starts an inset in. Picked, this was eight, and the
+ * rows it cost were rows there was no room for — half a pier holds three.
+ */
+export const LANDED_PER_ROW = Math.floor(
+  (BERTH.pitch - 2 * LANDED.first) / (LANDED.along + LANDED.gap),
+)
 
-/** Where row `index` sits across the pier, in the hull's own coordinates. */
+/** How much of the pier belongs to the ship on one side of it. */
+export const PIER_SHARE = BERTH.pier / 2
+
+/**
+ * Where row `index` sits across the pier, in the hull's own coordinates.
+ *
+ * Measured from the middle of the planking outwards, because the other half is the other ship's
+ * and the two must not meet. The rows therefore start beside her and run away from her, which is
+ * also the order a person reads them in: what is nearest the ship is what is most nearly aboard.
+ */
 export function pierRowY(index: number): number {
-  return -(BERTH.laneCentre + BERTH.pier) + LANDED.first + index * LANDED.pitch
+  return -(BERTH.laneCentre + PIER_SHARE) + LANDED.first + index * LANDED.pitch
 }
+
+/** How many rows of boxes this ship's half of the planking holds. */
+export const PIER_ROWS =
+  Math.floor((PIER_SHARE - LANDED.first - LANDED.across / 2) / LANDED.pitch) + 1
+
+/**
+ * The row the repository's own untidiness stands in: the last one, always.
+ *
+ * Reserved rather than appended after whatever the demands used, because the two are laid out by
+ * different code and an appended row is a row that lands on top of a full one. The outermost row
+ * is also the right one for it: the nearer the ship, the nearer to being aboard, and a stash is
+ * the furthest thing from that.
+ */
+export const MARK_ROW = PIER_ROWS - 1
 
 /** How many rows `count` boxes fill. */
 export function pierRows(count: number): number {
   return Math.ceil(Math.max(count, 0) / LANDED_PER_ROW)
 }
+
+/** How many demands fit on the planking before the drawing would have to lie about the rest. */
+export const LANDED_CAP = LANDED_PER_ROW * MARK_ROW
 
 export interface Landed {
   quest: QuestResult
@@ -259,9 +293,9 @@ export interface Landed {
  * Worst first, along the pier from the stern — the same reading order as everything else here.
  */
 export function landedOf(ship: Ship): readonly Landed[] {
-  const quests = orderedQuests(bindingQuests(ship.quests)).filter(
-    (quest) => quest.verdict !== 'met',
-  )
+  const quests = orderedQuests(bindingQuests(ship.quests))
+    .filter((quest) => quest.verdict !== 'met')
+    .slice(0, LANDED_CAP)
 
   return quests.map((quest, index) => ({
     quest,
