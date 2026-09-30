@@ -13,6 +13,11 @@ export interface Extent {
   height: number
 }
 
+export interface Pan {
+  x: number
+  y: number
+}
+
 /**
  * Never below this. Under 1 the 9 px captions stop being letters, which is the whole thing the
  * picture is for.
@@ -21,6 +26,38 @@ export const MIN_SCALE = 1
 
 /** Above this the strokes are fat and nothing more is legible. */
 export const MAX_SCALE = 2.5
+
+/**
+ * How far a person may zoom out by hand, below what `fitScale` would choose.
+ *
+ * Further than the automatic floor on purpose: `MIN_SCALE` is where captions stop being letters,
+ * and that is the right *default*, but somebody who deliberately zooms out is asking for the
+ * shape of the fleet and not for its labels. A tool that refuses that is a tool arguing with its
+ * user.
+ */
+export const MIN_ZOOM = 0.35
+
+/** One notch of the wheel, as a factor. Multiplicative, so zooming feels the same at any size. */
+export const ZOOM_STEP = 1.15
+
+/** A zoom factor clamped to what is useful. */
+export function clampZoom(scale: number): number {
+  return Math.min(Math.max(scale, MIN_ZOOM), MAX_SCALE)
+}
+
+/**
+ * Zooming towards a point, so the thing under the pointer stays under it.
+ *
+ * Without this the view lurches: zooming around the origin moves whatever somebody was looking
+ * at off the screen, which is the difference between a map and a slideshow.
+ */
+export function zoomAt(pan: Pan, from: number, to: number, at: Pan): Pan {
+  const ratio = to / from
+  return {
+    x: at.x - (at.x - pan.x) * ratio,
+    y: at.y - (at.y - pan.y) * ratio,
+  }
+}
 
 /**
  * The scale to draw at: shrink to fit, but never past legibility.
@@ -34,11 +71,6 @@ export function fitScale(world: Extent, view: Extent): number {
   }
   const fit = Math.min(view.width / world.width, view.height / world.height)
   return Math.min(Math.max(fit, MIN_SCALE), MAX_SCALE)
-}
-
-export interface Pan {
-  x: number
-  y: number
 }
 
 /**

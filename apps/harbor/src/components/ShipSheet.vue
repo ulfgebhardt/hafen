@@ -15,7 +15,11 @@
 
   import type { Ship } from '@hafen/core'
 
-  const { ship } = defineProps<{ ship: Ship }>()
+  const { ship, pinned = false } = defineProps<{
+    ship: Ship
+    /** Whether this sheet is held by a click rather than following the pointer. */
+    pinned?: boolean
+  }>()
 
   const binding = computed(() => orderedQuests(bindingQuests(ship)))
   const notApplicable = computed(() =>
@@ -31,8 +35,11 @@
   <!-- A datasheet, not a dashboard: every row is a measurement with its source. -->
   <article class="flex h-full flex-col overflow-y-auto bg-slate-900/60 text-sm">
     <header class="border-b border-slate-800 px-4 py-3">
-      <p class="font-mono text-[10px] tracking-widest text-slate-500 uppercase">
-        Schiffsdatenblatt
+      <p class="flex items-baseline gap-2 font-mono text-[10px] tracking-widest uppercase">
+        <span class="text-slate-500">Schiffsdatenblatt</span>
+        <!-- Said out loud: a panel that silently stops following the pointer looks broken. -->
+        <span v-if="pinned" class="text-slate-400 normal-case">festgehalten</span>
+        <span v-else class="text-slate-700 normal-case">anklicken hält fest</span>
       </p>
       <h2 class="mt-1 font-mono text-base break-words text-slate-100">
         {{ ship.org }}/{{ ship.name }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { cranes, shoreline, waves } from './coast'
+import { cranes, SHORE_BAND, shoreline, waves } from './coast'
 
 describe('the coast', () => {
   /**
@@ -45,6 +45,19 @@ describe('the coast', () => {
       expect(wave.at).toBeGreaterThanOrEqual(0)
       expect(wave.at).toBeLessThanOrEqual(1)
       expect(wave.height).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * The first version made the sand a share of the height: at two lanes it took half the drawing
+   * and cut diagonally across the hulls. The shore is a margin, not a landscape.
+   */
+  it('keeps the beach in a band at the bottom, whatever the sheet measures', () => {
+    for (const height of [200, 900]) {
+      for (const point of shoreline(600, height)) {
+        expect(point.y).toBeGreaterThan(height - SHORE_BAND)
+        expect(point.y).toBeLessThanOrEqual(height)
+      }
     }
   })
 

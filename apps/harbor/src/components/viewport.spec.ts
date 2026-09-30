@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { clampPan, fitScale, isPannable, MAX_SCALE, MIN_SCALE } from './viewport'
+import {
+  clampPan,
+  clampZoom,
+  fitScale,
+  isPannable,
+  MAX_SCALE,
+  MIN_SCALE,
+  MIN_ZOOM,
+  zoomAt,
+} from './viewport'
 
 const FLEET = { width: 1900, height: 1300 }
 
@@ -81,5 +90,46 @@ describe(isPannable, () => {
 
     expect(isPannable({ width: 2000, height: 100 }, view, 1)).toBe(true)
     expect(isPannable({ width: 200, height: 2000 }, view, 1)).toBe(true)
+  })
+})
+
+describe(clampZoom, () => {
+  /**
+   * Further out than `fitScale` will go on its own: that floor is where captions stop being
+   * letters, which is the right default — but somebody who deliberately zooms out is asking for
+   * the shape of the fleet, and a tool that refuses is a tool arguing with its user.
+   */
+  it('lets a person go further out than the automatic floor', () => {
+    expect(clampZoom(0.5)).toBe(0.5)
+    expect(MIN_ZOOM).toBeLessThan(MIN_SCALE)
+  })
+
+  it('stops at both ends', () => {
+    expect(clampZoom(0.01)).toBe(MIN_ZOOM)
+    expect(clampZoom(99)).toBe(MAX_SCALE)
+  })
+})
+
+describe(zoomAt, () => {
+  /**
+   * The thing under the pointer stays under it. Without that the view lurches, and whatever
+   * somebody was looking at leaves the screen — the difference between a map and a slideshow.
+   */
+  it('keeps the point under the pointer fixed', () => {
+    const at = { x: 300, y: 200 }
+    const pan = { x: -100, y: -50 }
+
+    const zoomed = zoomAt(pan, 1, 2, at)
+
+    // Where the world point under `at` was before, and where it is after.
+    const before = { x: (at.x - pan.x) / 1, y: (at.y - pan.y) / 1 }
+    const after = { x: (at.x - zoomed.x) / 2, y: (at.y - zoomed.y) / 2 }
+
+    expect(after.x).toBeCloseTo(before.x, 6)
+    expect(after.y).toBeCloseTo(before.y, 6)
+  })
+
+  it('changes nothing when the scale does not', () => {
+    expect(zoomAt({ x: -10, y: -20 }, 1.5, 1.5, { x: 5, y: 5 })).toStrictEqual({ x: -10, y: -20 })
   })
 })

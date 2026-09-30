@@ -51,6 +51,15 @@ export interface Dune {
 }
 
 /**
+ * How tall the beach is, whatever the sheet measures.
+ *
+ * A fixed band and not a share of the height, which is what it was first: at two lanes the sand
+ * took half the drawing and cut diagonally across the hulls. The shore is where the sheet ends,
+ * so it is the same size at every zoom — like a margin, not like a landscape.
+ */
+export const SHORE_BAND = 54
+
+/**
  * The beach: a soft line the sheet ends on, rather than a hard edge.
  *
  * Built from overlapping cosine humps because a single sine reads as a wave and not as sand, and
@@ -74,7 +83,8 @@ export function shoreline(width: number, height: number, seed = 3, steps = 64): 
         rise += hump.size * (Math.cos(distance * Math.PI) + 1) * 0.5
       }
     }
-    return { x: t * width, y: height - Math.min(rise, 1.4) * height * 0.5 }
+    // Anchored to the bottom and bounded by the band: the dunes undulate, they do not climb.
+    return { x: t * width, y: height - SHORE_BAND * (0.45 + Math.min(rise, 1.4) * 0.35) }
   })
 }
 
