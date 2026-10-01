@@ -117,8 +117,16 @@ export const SCENE = {
   seaFar: '#1a3247',
   seaNear: '#14273a',
   seaLine: '#2c4257',
+  /**
+   * Concrete: the shore, the planking and the aprons are **one** colour.
+   *
+   * They were three — the land a shade darker than the quay, the walkways darker still, and the
+   * aprons darker again — so a harbour that is one continuous surface read as three materials
+   * stacked on each other. Whatever a person can stand on is drawn in this, and the only thing
+   * that distinguishes the pieces is the coping line between them.
+   */
   quay: '#222d3a',
-  land: '#1b232d',
+  land: '#222d3a',
   crane: '#8a9db0',
   accent: '#e08a4f',
   /** The coping along the quay edge, and the painted lines on the concrete. */
@@ -133,7 +141,7 @@ export const SCENE = {
    * same picture, and those are the two readings that must never merge.
    */
   lamp: '#f2c877',
-  /** The walkways: the one structure every ship is joined to the shore by. */
+  /** The dashed ways round: a convenience over open water, and the one surface nobody stands on. */
   walk: '#4a5b6e',
   /**
    * What the forge has open, on the apron: a question and a request for code.
@@ -144,6 +152,15 @@ export const SCENE = {
    */
   issue: '#c9a24a',
   pull: '#5f93b8',
+  /**
+   * The two scores, in the drawing — the same pair the window writes everywhere else.
+   *
+   * `PointValue` writes the project score in sky and the personal one in emerald, and the caption
+   * under a hull wrote both in one warm tone: the same two numbers in three colours, which is
+   * exactly how a reader ends up adding the two that must never be added.
+   */
+  project: '#7dd3fc',
+  own: '#6ee7b7',
 } as const
 
 /**

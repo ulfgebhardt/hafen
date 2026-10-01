@@ -35,6 +35,7 @@
     tools = [],
     stats = null,
     forgeAt = '',
+    at = '',
   } = defineProps<{
     ship: Ship
     /** Whether this sheet is held by a click rather than following the pointer. */
@@ -50,6 +51,8 @@
     stats?: ForgeStats | null
     /** When that reading was taken. Its own age, never the survey's. */
     forgeAt?: string
+    /** When the whole fleet was last surveyed — this ship's age unless she has her own. */
+    at?: string
   }>()
 
   /**
@@ -78,6 +81,18 @@
   const mirrors = computed(() => mirrorsOf(ship.remotes))
   const checks = computed(() => contractChecks(ship.contract))
   const points = computed(() => shipPoints(ship))
+
+  /**
+   * When this ship was last read: her own time where she has one, the survey's otherwise.
+   *
+   * `measuredAt` is set where one repository was measured on its own, which makes her younger
+   * than the picture around her. A full survey leaves it unset, and then the snapshot's time is
+   * hers as much as everybody's.
+   */
+  const readAt = computed(() => {
+    const when = ship.measuredAt ?? at
+    return when === '' ? null : new Date(when).toLocaleString('de-DE')
+  })
 
   /** The named parts of the project score, in the order they are worth reading. */
   const PART_LABEL = {
@@ -247,6 +262,13 @@
         >
           {{ busy ? 'misst …' : 'neu messen' }}
         </button>
+        <!--
+          When *this* ship was read, beside the button that reads her again.
+          One time and not two: either she was measured on her own since the last survey, or the
+          survey is her answer. The header carries the fleet's age and this carries hers — the two
+          are different questions and only this one is about the sheet somebody is reading.
+        -->
+        <span v-if="readAt !== null" class="text-slate-700">gemessen {{ readAt }}</span>
         <button
           class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
           :disabled="busy"
@@ -323,7 +345,13 @@
         in one number. Saying what went in is what fixes that — not inflating the smaller terms
         until they look important. A term worth nothing is left out rather than written as zero.
       -->
-      <dl class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[11px]">
+      <!--
+        Said out loud, because these are **points** and the line above them is counts.
+        "Autoren 2.200" under "110 Autoren" read as a second, wrong author count — and 2 200 is
+        what the 110 of them are worth, at 20 points each.
+      -->
+      <p class="mt-1.5 text-[10px] tracking-wide text-slate-600 uppercase">Punkte aus</p>
+      <dl class="mt-0.5 grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[11px]">
         <template v-for="part in breakdown" :key="part.name">
           <dt class="text-slate-600">{{ part.name }}</dt>
           <dd class="text-slate-500">{{ part.value.toLocaleString('de-DE') }}</dd>

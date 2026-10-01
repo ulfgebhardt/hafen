@@ -126,11 +126,24 @@ const LABEL_DIM = new TextStyle({
   letterSpacing: 0.2,
 })
 
-/** The score beside a name. Warm, so it reads as a figure of merit and not as a demand. */
-const LABEL_SCORE = new TextStyle({
+/**
+ * The two scores beside a name, each in its own colour.
+ *
+ * The same pair `PointValue` writes everywhere else in the window: sky for the project, emerald
+ * for the person. One warm tone for both was a third spelling of two numbers that must never be
+ * added, and the drawing was the only place that spelled them alike.
+ */
+const LABEL_PROJECT = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 9,
-  fill: '#c08a5a',
+  fill: SCENE.project,
+  letterSpacing: 0.2,
+})
+
+const LABEL_OWN = new TextStyle({
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 9,
+  fill: SCENE.own,
   letterSpacing: 0.2,
 })
 
@@ -594,29 +607,22 @@ function pierLoad(ship: Ship, hull: Hull, reach: number, forge: ForgeStats | nul
   }
 
   /*
-   * What the forge has open, on its own row beyond the rest.
+   * What the forge has open, heaped on its own row beyond the rest.
    *
-   * An outline for an issue, which is a question; a filled box for a pull request, which carries
-   * code — the same pair of shapes the datasheet uses, one place over. Beyond the other rows
-   * because these are what *other people* have left open here, and because the side that merges
-   * with the walkway has to stay the side a person walks on.
+   * An outline for an issue, which is a question; a filled crate for a pull request, which carries
+   * code — the same pair of shapes and the same two colours the datasheet uses, taken from one
+   * place so they cannot drift apart. How full a heap is comes from `heapLevel`, and the two kinds
+   * are on different scales because ten issues and ten pull requests are not the same amount of
+   * anything.
    */
   for (const box of open) {
     const color = hex(box.kind === 'pull' ? SCENE.pull : SCENE.issue)
     const crate = slab(load, box.spot, box.along, box.across)
     if (box.kind === 'issue') {
-      crate.stroke({ width: 1, color, alpha: 0.8 })
+      crate.stroke({ width: 1, color, alpha: 0.85 })
     } else {
       crate.fill({ color, alpha: 0.7 })
-    }
-    if (box.capped) {
-      const at = project({ x: box.spot.x + box.along / 2 + 0.7, y: box.spot.y })
-      load
-        .moveTo(at.x - 0.3 * UNIT, at.y)
-        .lineTo(at.x + 0.3 * UNIT, at.y)
-        .moveTo(at.x, at.y - 0.3 * UNIT)
-        .lineTo(at.x, at.y + 0.3 * UNIT)
-        .stroke({ width: 1, color, alpha: 0.8 })
+      slab(load, box.spot, box.along, box.across).stroke({ width: 0.8, color, alpha: 0.9 })
     }
   }
 
@@ -889,8 +895,14 @@ function windows(hull: Hull, traits: Traits, decks: number): Graphics {
   }
 
   const rows = Math.max(1, decks)
+  /*
+   * Three to a row and not four.
+   *
+   * Four filled the house wall to its edges, so the deckhouse read as a grid of windows rather
+   * than as a house with windows in it — and on a long hull the row ran into the hatch beyond.
+   */
   for (let deck = 0; deck < rows; deck += 1) {
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       const at = project({
         x: hull.length * (0.06 + index * 0.035),
         y: (deck - (rows - 1) / 2) * hull.beam * 0.2,
@@ -1111,15 +1123,16 @@ function caption(ship: Ship, side: Side): Container {
    * says nothing.
    */
   const points = shipPoints(ship)
-  const score = new Text({
-    text:
-      points.own > 0
-        ? `◆ ${FIGURE.format(points.project)}  ● ${FIGURE.format(points.own)}`
-        : `◆ ${FIGURE.format(points.project)}`,
-    style: LABEL_SCORE,
-  })
-  score.position.set(0, top + 26)
-  group.addChild(score)
+  const theirs = new Text({ text: `◆ ${FIGURE.format(points.project)}`, style: LABEL_PROJECT })
+  theirs.position.set(0, top + 26)
+  group.addChild(theirs)
+
+  if (points.own > 0) {
+    const mine = new Text({ text: `● ${FIGURE.format(points.own)}`, style: LABEL_OWN })
+    // Measured off the first one rather than guessed: a monospace width is a guess about a font.
+    mine.position.set(theirs.width + 8, top + 26)
+    group.addChild(mine)
+  }
 
   return group
 }
@@ -1213,6 +1226,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     foot: { x: number; y: number }
     stack: { x: number; y: number }
     ship: { x: number; y: number }
+    /** Which way this berth is mirrored, so the load can hang down the screen regardless. */
+    side: Side
     /** Seconds for one full lift, and where in that cycle this one starts. */
     period: number
     phase: number
@@ -1428,6 +1443,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
             foot,
             stack: project(onApron[0]?.spot ?? { x: apronX(hull), y: 0 }),
             ship: project({ x: hull.length * 0.86, y: 0 }),
+            side,
             /*
              * Slower for a big stack, and this time it really is: `% 4` looked derived and was
              * not — a stack of four and one of eight came out the same, five and nine likewise.
@@ -1686,11 +1702,6 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      */
     for (const yard of cranes) {
       const cycle = (((now / yard.period + yard.phase) % 1) + 1) % 1
-      // Out loaded, back empty — and every second round the other way, because a crane that only
-      // ever carried towards the ship would be unloading a stack that never shrinks.
-      const outward = Math.floor(now / yard.period + yard.phase) % 2 === 0
-      const from = outward ? yard.stack : yard.ship
-      const to = outward ? yard.ship : yard.stack
       const swing = (
         one: { x: number; y: number },
         other: { x: number; y: number },
@@ -1711,18 +1722,25 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       }
 
       /*
-       * Four parts of a cycle: hook on, carry, let go, return. The boom moves in two of them and
-       * waits in the other two — which is where the lifting and the setting down happen.
+       * One swing out and one back, always between the same two places — and **never a jump**.
+       *
+       * The two ends used to swap every other period, so at the turn of a cycle the boom was at
+       * the stack and the next frame declared the stack to be where the ship is: it teleported.
+       * It now runs stack → ship → stack for ever, and what alternates is only *which leg carries*
+       * — out with a box one round, back with one the next, which is what a quay crane does.
        */
+      const carriesOut = Math.floor(now / yard.period + yard.phase) % 2 === 0
       const tip =
-        cycle < 0.1
-          ? from
-          : cycle < 0.5
-            ? swing(from, to, (cycle - 0.1) / 0.4)
-            : cycle < 0.6
-              ? to
-              : swing(to, from, (cycle - 0.6) / 0.4)
-      const carrying = cycle >= 0.1 && cycle < 0.6
+        cycle < 0.08
+          ? yard.stack
+          : cycle < 0.46
+            ? swing(yard.stack, yard.ship, (cycle - 0.08) / 0.38)
+            : cycle < 0.54
+              ? yard.ship
+              : swing(yard.ship, yard.stack, (cycle - 0.54) / 0.38)
+      const outward = cycle >= 0.08 && cycle < 0.46
+      const homeward = cycle >= 0.54 && cycle < 0.92
+      const carrying = carriesOut ? outward : homeward
 
       yard.arm.clear()
       yard.arm
@@ -1730,7 +1748,14 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         .lineTo(tip.x, tip.y)
         .stroke({ width: 1.3, color: hex(SCENE.crane), alpha: 0.6 })
       if (carrying) {
-        const fall = 1.1 * UNIT
+        /*
+         * The fall hangs **down the screen**, whichever way this berth is mirrored.
+         *
+         * Everything at a berth is drawn in a frame that is flipped for the row on the other side
+         * of a plank, and a load that flipped with it hung upwards on half the fleet. Gravity is
+         * not a property of the berth.
+         */
+        const fall = 1.1 * UNIT * yard.side
         yard.arm
           .moveTo(tip.x, tip.y)
           .lineTo(tip.x, tip.y + fall)
@@ -1738,7 +1763,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         yard.arm
           .rect(
             tip.x - LANDED.along * 0.35 * UNIT,
-            tip.y + fall,
+            tip.y + fall - (yard.side < 0 ? LANDED.across * 0.9 * UNIT : 0),
             LANDED.along * 0.7 * UNIT,
             LANDED.across * 0.9 * UNIT,
           )

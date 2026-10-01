@@ -103,20 +103,34 @@ describe(traitsOf, () => {
     const rusted = traitsOf(reading({ points: 1000, binding: 4, met: 2, rustDays: 400 }))
 
     expect(starred.glow).toBeGreaterThan(plain.glow)
-    expect(starred.masts).toBe(plain.masts)
+    expect(starred.masts).toBeGreaterThanOrEqual(plain.masts)
     expect(rusted.rust).toBeGreaterThan(plain.rust)
     expect(rusted.glow).toBe(plain.glow)
     expect(rusted.masts).toBe(plain.masts)
   })
 
-  /** Imposing is the demands she answered — the user's own word for it, and one reading. */
-  it('gives more rig to a ship that answers more of what is asked', () => {
+  /** Imposing is the demands she answered: gear and decks, on the hull she happens to have. */
+  it('gives more gear to a ship that answers more of what is asked', () => {
     const none = traitsOf(reading({ binding: 4, met: 0 }))
     const all = traitsOf(reading({ binding: 4, met: 4 }))
 
-    expect(all.masts).toBeGreaterThan(none.masts)
     expect(all.cranes).toBeGreaterThan(none.cranes)
     expect(all.tiers).toBeGreaterThan(none.tiers)
+  })
+
+  /**
+   * The masts are her size and not her standing.
+   *
+   * They used to be a third reading of the contract, so a repository 488 people built carried no
+   * masts at all because its demands were unmet — a barque drawn as a dinghy for a reason that has
+   * nothing to do with how big she is.
+   */
+  it('steps her masts by size and leaves the contract out of it', () => {
+    const small = traitsOf(reading({ points: 30 }))
+    const large = traitsOf(reading({ points: 25000 }))
+
+    expect(large.masts).toBeGreaterThan(small.masts)
+    expect(traitsOf(reading({ points: 30, binding: 4, met: 4 })).masts).toBe(small.masts)
   })
 
   /**
@@ -146,7 +160,8 @@ describe(traitsOf, () => {
     const small = traitsOf(reading({ points: 10, binding: 4, met: 4 }))
 
     expect(big.bustle).toBeGreaterThan(small.bustle)
-    expect(big.masts).toBeLessThan(small.masts)
+    // And her gear the other way round: the large one keeps nothing, the small one keeps all.
+    expect(big.cranes).toBeLessThan(small.cranes)
   })
 
   it('keeps every share inside nought and one', () => {

@@ -34,6 +34,14 @@ import type { ForgeStats, Ship } from '@hafen/core'
 export const REACH_CEILING = 40000
 
 /**
+ * Where a ship starts growing at all — the same floor the hull uses (`LENGTH_FLOOR`).
+ *
+ * The smallest repository on this fleet scores 21. Without a floor the bottom of every scale is
+ * spent on scores nothing has, and the whole fleet bunches above it.
+ */
+export const REACH_FLOOR = 20
+
+/**
  * What a star is worth against a commit, and it is a weight rather than a measurement.
  *
  * Twenty, because a repository with a thousand stars is a different *kind* of thing from one with
@@ -105,11 +113,21 @@ function share(value: number, ceiling: number): number {
  * moment the fleet changed shape is readable; and 15 of 86 repositories cannot be read at all, so
  * they stay at their snapshot size permanently — which is the truth about them, not a penalty.
  *
- * The root, like the hull length it feeds: more, but sharply diminishing. Without it the three
- * biggest repositories would be the only ones with any length at all.
+ * **Logarithmic, and a root was not enough.** Measured over this fleet: a repository scores 21
+ * points at the bottom, 23 200 at the median and 26 831 at the top — three orders of magnitude.
+ * Against a ceiling of 40 000 a root put the six busiest repositories at the maximum length and
+ * everything else in the bottom third: the median hull came out at 23.2 units of a 20-to-34 range,
+ * so nine ships in ten were the same size and the picture said nothing about any of them.
+ *
+ * A log spends the visible range where the ships actually are. The same correction the stars and
+ * the crew already carry, and for the same reason — these are heavy-tailed counts, and a linear
+ * or root scale over one is a scale for its tail.
  */
 export function reachOf(readings: Readings): number {
-  return Math.sqrt(share(readings.points + readings.stars * STAR_WEIGHT, REACH_CEILING))
+  const worth = Math.max(0, readings.points + readings.stars * STAR_WEIGHT)
+  const low = Math.log1p(REACH_FLOOR)
+  const high = Math.log1p(REACH_CEILING)
+  return Math.min(1, Math.max(0, (Math.log1p(worth) - low) / (high - low)))
 }
 
 /** How many demands this ship has answered, as a share of what is asked of it. */
@@ -127,7 +145,7 @@ export function standingOf(readings: Readings): number {
 export interface Traits {
   /** 0 … 1 of the hull-length range. Points and stars. */
   reach: number
-  /** 0 … 4. How much of what is demanded of her she has answered. */
+  /** 1 … 4. Her size, and nothing else — the gear below says what she is worth keeping. */
   masts: number
   /** 0 … 3. The same reading at the other end: a ship that meets a lot gets gear to handle it. */
   cranes: number
@@ -206,14 +224,14 @@ export function traitsOf(readings: Readings): Traits {
   return {
     reach,
     /*
-     * Three readings off one number, and deliberately at different thresholds.
+     * The masts are her **size**, and the gear is her standing. Two axes, not one.
      *
-     * A ship that meets half her demands gets a mast and nothing else; one that meets all of them
-     * gets four, cranes and three decks. The steps are staggered so that the *order* in which a
-     * ship gains gear is itself readable — a fleet where everything appeared at once would only
-     * ever show two silhouettes.
+     * They used to be a third reading of `standing`, so a repository 488 people built carried no
+     * masts at all because its contract was unmet — a barque drawn as a dinghy for a reason that
+     * has nothing to do with how big she is. A ship is as big as she is; whether she keeps her
+     * contract is said by the cranes, the decks and the cargo on her hatches.
      */
-    masts: Math.round(standing * 4),
+    masts: 1 + Math.round(reach * 3),
     cranes: Math.floor(standing * 3.99),
     tiers: 1 + Math.floor(standing * 2.99),
     /*

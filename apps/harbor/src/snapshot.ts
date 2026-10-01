@@ -167,9 +167,14 @@ function caller(): ((command: string, args?: Record<string, unknown>) => Promise
  * scene's `highlight` compares the same field.
  */
 export function spliceShip(snapshot: Snapshot, fresh: Snapshot): Snapshot {
-  const byPath = new Map(fresh.ships.map((ship) => [ship.path, ship]))
+  // Stamped with the moment it was read, because it is now younger than the picture around it.
+  const byPath = new Map(
+    fresh.ships.map((ship) => [ship.path, { ...ship, measuredAt: fresh.at }] as const),
+  )
   const kept = snapshot.ships.map((ship) => byPath.get(ship.path) ?? ship)
-  const added = fresh.ships.filter((ship) => !snapshot.ships.some((old) => old.path === ship.path))
+  const added = [...byPath.values()].filter(
+    (ship) => !snapshot.ships.some((old) => old.path === ship.path),
+  )
   /*
    * `at` stays the time of the last **whole** survey, and that is the point of the field.
    *

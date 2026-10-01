@@ -45,8 +45,14 @@ export const SIZE = {
   maxBeam: 7.2,
 } as const
 
-/** Where a project score stops buying length. A busy shared repository, measured. */
-export const LENGTH_CEILING = 6000
+/**
+ * Where a project score stops buying length.
+ *
+ * Read with a logarithm, so this is the score at which a hull is *full length* rather than the
+ * point where a linear ramp is cut off. The busiest repository on this fleet scores 26 831, so a
+ * ceiling there means the longest ship in the harbour is the longest ship there is.
+ */
+export const LENGTH_CEILING = 27000
 
 export interface Hull {
   /** Stem to transom. */
@@ -83,8 +89,36 @@ export function outlineOf(length: number, beam: number): readonly Spot[] {
   ]
 }
 
+/**
+ * Where a hull starts growing at all.
+ *
+ * The smallest repository on this fleet scores 21, so without a floor the bottom third of the
+ * length range is spent on scores nothing has — and the whole fleet bunches above it. With one,
+ * the shortest ship in the harbour is the shortest ship there is, the longest is the longest, and
+ * everything between has somewhere to be.
+ */
+export const LENGTH_FLOOR = 20
+
+/** Her share of the length range, 0 … 1 — logarithmic between the floor and the ceiling. */
+export function lengthShare(points: number): number {
+  const low = Math.log1p(LENGTH_FLOOR)
+  const high = Math.log1p(LENGTH_CEILING)
+  const worth = Math.log1p(Math.max(points, 0))
+  return Math.min(1, Math.max(0, (worth - low) / (high - low)))
+}
+
+/**
+ * Her hull, from what the repository is worth.
+ *
+ * **Logarithmic, and a root against a ceiling was not enough.** Measured over this fleet: 21
+ * points at the bottom, 23 200 at the median, 26 831 at the top. Against a ceiling of 6 000 the
+ * six busiest repositories all came out at the maximum length and the median hull at 23.2 of a
+ * 20-to-34 range — nine ships in ten the same size, and a size that says nothing is worse than
+ * none. The same correction the stars and the crew carry: these are heavy-tailed counts, and a
+ * root over one is a scale for its tail.
+ */
 export function hullOf(ship: Ship, points: number): Hull {
-  const reach = Math.sqrt(Math.min(Math.max(points, 0), LENGTH_CEILING) / LENGTH_CEILING)
+  const reach = lengthShare(points)
   const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * reach
   const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * reach
   return { length, beam, outline: outlineOf(length, beam) }
@@ -720,49 +754,97 @@ export const MARK = { along: 1.5, gap: 0.4, across: LANDED.across * 0.8 } as con
 /** What the forge says is open, as something standing on the apron. */
 export interface ForgeBox extends Box {
   kind: 'issue' | 'pull'
-  /** Whether the count was cut, so the drawing can say `4+` rather than claim four. */
-  capped: boolean
 }
 
-/** How many of each kind stand on the apron before the row would stop being countable. */
-export const FORGE_MOST = 6
+/**
+ * How full a heap is, per kind — and the two scales are **different on purpose**.
+ *
+ * Ten open issues is a quiet repository; ten open pull requests is a queue. Measured over the 71
+ * repositories this fleet could read: issues run 0 at the median, 1 at the third quartile, 51 at
+ * the ninetieth and 3167 at the top; pull requests run 0, 2, 14 and 68. One scale for both would
+ * have put every repository here on the same two rungs and said nothing.
+ *
+ * Five rungs because a heap has five states to be in, and a reader counts crates, not pixels.
+ */
+export const HEAP_STEPS: Record<
+  ForgeBox['kind'],
+  readonly [number, number, number, number, number]
+> = {
+  issue: [1, 5, 20, 60, 200],
+  pull: [1, 3, 7, 15, 30],
+}
+
+/** Which rung `count` of this kind stands on — 0 where nothing is open at all. */
+export function heapLevel(kind: ForgeBox['kind'], count: number): number {
+  return HEAP_STEPS[kind].filter((step) => count >= step).length
+}
 
 /**
- * What is open on the forge, waiting on the apron like everything else that is not done.
+ * The crates of one heap, by how full it is.
  *
- * Issues and pull requests are the two forge figures that are *work in flight* — the others
- * describe attention — so they belong where the rest of the outstanding work stands rather than
- * only in the datasheet. An outline for an issue, which is a question; a filled box for a pull
- * request, which carries code. The same pair of shapes the panel uses, one place over.
+ * A pile and not a row: a row of six says "six", a pile says "this much", and what the forge
+ * answers is an amount nobody counts off a drawing anyway. Three across at the base and two on
+ * top, which is as much as a heap can be at this scale without becoming a block.
+ */
+const HEAP_SHAPE: readonly (readonly (readonly [number, number])[])[] = [
+  [],
+  [[1, 0]],
+  [
+    [0.5, 0],
+    [1.5, 0],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [0.5, 1],
+  ],
+  [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [0.5, 1],
+    [1.5, 1],
+  ],
+]
+
+/**
+ * What is open on the forge, heaped on the apron like everything else that is not done.
  *
- * Their own row, **beyond** the demands and the untidiness: those two are about this repository,
- * this is about what other people have left open in it. And beyond rather than between, so the
- * side that merges with the walkway keeps the rows a person walks between.
+ * Two piles side by side: issues, which are questions, and pull requests, which carry code. Their
+ * own row **beyond** the demands and the untidiness — those two are about this repository, this is
+ * about what other people have left open in it — and beyond rather than between, so the side that
+ * merges with the walkway stays the side a person walks on.
  */
 export function forgeLoad(hull: Hull, issues: number, pulls: number): readonly ForgeBox[] {
-  const y = pierRowY(MARK_ROW) + LANDED.pitch
+  const base = pierRowY(MARK_ROW) + LANDED.pitch
   const out: ForgeBox[] = []
   let at = apronX(hull)
   for (const [kind, count] of [
     ['issue', issues],
     ['pull', pulls],
   ] as const) {
-    const shown = Math.min(Math.max(count, 0), FORGE_MOST)
-    for (let index = 0; index < shown; index += 1) {
+    const shape = HEAP_SHAPE[heapLevel(kind, count)] ?? []
+    for (const [column, row] of shape) {
       out.push({
         kind,
-        capped: count > FORGE_MOST,
-        spot: { x: at + MARK.along / 2, y },
+        spot: {
+          x: at + column * (MARK.along + MARK.gap) + MARK.along / 2,
+          // Stacked away from the ship, so a heap never grows into the rows beside it.
+          y: base + row * (MARK.across + MARK.gap),
+        },
         along: MARK.along,
         across: MARK.across,
       })
-      at += MARK.along + MARK.gap
     }
-    if (count > FORGE_MOST) {
-      at += 1.2
-    }
-    // A gap between the two kinds, so the row reads as two groups and not as one long stack.
-    at += shown > 0 ? 0.9 : 0
+    // Three crates wide plus a gap between the two piles, whether this one is full or not: two
+    // heaps that slid together as the first one shrank would be one heap that changes shape.
+    at += 3 * (MARK.along + MARK.gap) + 1.2
   }
   return out
 }
