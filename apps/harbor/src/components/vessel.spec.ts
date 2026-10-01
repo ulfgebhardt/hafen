@@ -9,6 +9,7 @@ import {
   bridgeOf,
   cargoOf,
   DECK,
+  fieldOf,
   gangwayOf,
   hasPlume,
   hullMarks,
@@ -544,5 +545,98 @@ describe(apronWalk, () => {
 
       expect(straight).toBe(true)
     }
+  })
+})
+
+describe(fieldOf, () => {
+  const hull = hullOf(ship(), 400)
+  const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
+
+  it('has no ground where there is no platform', () => {
+    expect(fieldOf([], null)).toBeNull()
+  })
+
+  /**
+   * The claim the whole arrangement rests on: a figure on the apron is on ground, never on a
+   * package and never on water. Both are true by construction — a blocked cell is not in the
+   * grid, and the grid does not reach past the platform.
+   */
+  it('puts no standing place on a package', () => {
+    const items = stack(9)
+    const field = fieldOf(items, apronOf(items))
+
+    for (const spot of field?.spots ?? []) {
+      for (const item of items) {
+        const over =
+          Math.abs(spot.x - item.spot.x) < item.along / 2 &&
+          Math.abs(spot.y - item.spot.y) < item.across / 2
+
+        expect(over).toBe(false)
+      }
+    }
+  })
+
+  it('keeps every standing place on the platform', () => {
+    const items = stack(5)
+    const apron = apronOf(items)
+    const field = fieldOf(items, apron)
+
+    for (const spot of field?.spots ?? []) {
+      expect(Math.abs(spot.x - (apron?.spot.x ?? 0))).toBeLessThanOrEqual((apron?.along ?? 0) / 2)
+      expect(Math.abs(spot.y - (apron?.spot.y ?? 0))).toBeLessThanOrEqual((apron?.across ?? 0) / 2)
+    }
+  })
+
+  /** Freely: every place is reachable from every other, or somebody is standing on an island. */
+  it('joins all of its ground together', () => {
+    const items = stack(9)
+    const field = fieldOf(items, apronOf(items))
+    const neighbours = new Map<number, number[]>()
+    for (const [one, other] of field?.links ?? []) {
+      neighbours.set(one, [...(neighbours.get(one) ?? []), other])
+      neighbours.set(other, [...(neighbours.get(other) ?? []), one])
+    }
+    const seen = new Set<number>([field?.gate ?? 0])
+    const todo = [field?.gate ?? 0]
+    while (todo.length > 0) {
+      for (const next of neighbours.get(todo.pop() ?? 0) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next)
+          todo.push(next)
+        }
+      }
+    }
+
+    expect(seen.size).toBe(field?.spots.length)
+  })
+
+  /** The gate is the way on: the spot nearest the planking, which lies towards -y. */
+  it('opens towards the planking', () => {
+    const items = stack(4)
+    const field = fieldOf(items, apronOf(items, -8))
+    const gate = field?.spots[field.gate]
+
+    expect(gate?.y).toBe(Math.min(...(field?.spots ?? []).map((spot) => spot.y)))
+  })
+})
+
+describe(apronOf, () => {
+  const hull = hullOf(ship(), 400)
+
+  /** An apron that stops short of the walkway is an island: somebody on it got there by jumping. */
+  it('reaches the planking where it is told where that is', () => {
+    const items = landedOf(ship({ quests: owing(3) }), hull)
+    const alone = apronOf(items)
+    const joined = apronOf(items, -9)
+
+    expect(joined?.across).toBeGreaterThan(alone?.across ?? 0)
+    expect((joined?.spot.y ?? 0) - (joined?.across ?? 0) / 2).toBeCloseTo(-9)
+  })
+
+  /** And never shrinks to meet it: a plank inside the stack would cut the platform in half. */
+  it('ignores a planking that lies inside the stack', () => {
+    const items = landedOf(ship({ quests: owing(3) }), hull)
+
+    expect(apronOf(items, 0)?.across).toBe(apronOf(items)?.across)
   })
 })

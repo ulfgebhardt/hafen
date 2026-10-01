@@ -345,19 +345,120 @@ export interface Box {
  * and a platform derived from one of them left the other standing on open water. `null` where
  * nothing waits: an empty platform would say "something stood here".
  */
-export function apronOf(items: readonly Box[]): Box | null {
+export function apronOf(items: readonly Box[], toPlank: number | null = null): Box | null {
   if (items.length === 0) {
     return null
   }
   const left = Math.min(...items.map((one) => one.spot.x - one.along / 2)) - APRON_EDGE
   const right = Math.max(...items.map((one) => one.spot.x + one.along / 2)) + APRON_EDGE
-  const top = Math.min(...items.map((one) => one.spot.y - one.across / 2)) - APRON_EDGE
+  /*
+   * Up to the planking where it is given, so the two are **one** surface.
+   *
+   * An apron that stops short of the walkway is an island: somebody standing on it got there by
+   * jumping. `toPlank` is where the drawn plank runs in this berth's own coordinates — measured
+   * per berth by `reachOf`, never assumed — and the platform simply reaches it.
+   */
+  const near = Math.min(...items.map((one) => one.spot.y - one.across / 2)) - APRON_EDGE
+  const top = toPlank === null ? near : Math.min(near, toPlank)
   const bottom = Math.max(...items.map((one) => one.spot.y + one.across / 2)) + APRON_EDGE
   return {
     along: right - left,
     across: bottom - top,
     spot: { x: (left + right) / 2, y: (top + bottom) / 2 },
   }
+}
+
+/** How finely a surface is divided into places somebody can stand, in world units. */
+export const STRIDE = 1.1
+
+/**
+ * A piece of walkable ground: where somebody may stand on it, and which steps it allows.
+ *
+ * `links` are pairs of indices into `spots`, and `gate` is the spot that touches the planking.
+ * A ring (a ship's deck) and a field (an apron) are both this, which is the whole point: the walk
+ * network knows one shape of thing and neither has to be special-cased in it.
+ */
+export interface Ground {
+  spots: readonly Spot[]
+  links: readonly (readonly [number, number])[]
+  gate: number
+}
+
+/** A closed ring as ground: one step from each spot to the next, and the first one is the gate. */
+export function ringAs(spots: readonly Spot[]): Ground {
+  return {
+    spots,
+    links: spots.map((_, index): readonly [number, number] => [index, (index + 1) % spots.length]),
+    gate: 0,
+  }
+}
+
+/**
+ * The apron as a field somebody may walk **freely**, which is what it looks like.
+ *
+ * A grid over the platform at `STRIDE`, with every cell that touches a package left out, and each
+ * remaining cell joined to its neighbour east and south. So a figure goes round the stack, down
+ * an aisle, across and back — anywhere the ground actually is — rather than along one fixed loop.
+ * Water is not in the grid and neither are the boxes, so "nicht ins Wasser und nicht über Kästen"
+ * is true by construction rather than by a rule somebody has to keep.
+ *
+ * The gate is the spot nearest the planking, so the way aboard is the short one.
+ */
+export function fieldOf(items: readonly Box[], apron: Box | null): Ground | null {
+  if (apron === null || items.length === 0) {
+    return null
+  }
+  const left = apron.spot.x - apron.along / 2
+  const top = apron.spot.y - apron.across / 2
+  const columns = Math.max(1, Math.floor(apron.along / STRIDE))
+  const rows = Math.max(1, Math.floor(apron.across / STRIDE))
+  const alongStep = apron.along / columns
+  const acrossStep = apron.across / rows
+
+  const spots: Spot[] = []
+  const at = new Map<string, number>()
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const spot = {
+        x: left + (column + 0.5) * alongStep,
+        y: top + (row + 0.5) * acrossStep,
+      }
+      // A cell is ground only where nothing stands on it. Half a stride of room around a box, so
+      // a figure beside one does not overlap it.
+      const blocked = items.some(
+        (item) =>
+          Math.abs(spot.x - item.spot.x) < item.along / 2 + STRIDE / 2 &&
+          Math.abs(spot.y - item.spot.y) < item.across / 2 + STRIDE / 2,
+      )
+      if (blocked) {
+        continue
+      }
+      at.set(`${String(column)}.${String(row)}`, spots.length)
+      spots.push(spot)
+    }
+  }
+  if (spots.length === 0) {
+    return null
+  }
+
+  const links: (readonly [number, number])[] = []
+  for (const [key, index] of at) {
+    const [column, row] = key.split('.').map(Number)
+    const east = at.get(`${String((column ?? 0) + 1)}.${String(row ?? 0)}`)
+    const south = at.get(`${String(column ?? 0)}.${String((row ?? 0) + 1)}`)
+    if (east !== undefined) {
+      links.push([index, east])
+    }
+    if (south !== undefined) {
+      links.push([index, south])
+    }
+  }
+
+  const gate = spots.reduce(
+    (best, spot, index) => (spot.y < (spots[best]?.y ?? 0) ? index : best),
+    0,
+  )
+  return { spots, links, gate }
 }
 
 /** The rows things stand in on the apron, as the band each one occupies across the berth. */

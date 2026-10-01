@@ -27,6 +27,7 @@ import { walksOf } from './moorings'
 
 import type { Box, Harbour, Way } from './moorings'
 import type { Spot } from './plan'
+import type { Ground } from './vessel'
 
 /** What a route is travelled by. Two, because a harbour has boards and it has water. */
 export type Carriage = 'foot' | 'water'
@@ -285,13 +286,13 @@ export interface Network {
 export function networkOf(
   harbour: Harbour,
   /**
-   * Per mooring node, the rings of walkable ground that hang off her plank — in world units.
+   * Per mooring node, the pieces of walkable ground that hang off her plank — in world units.
    *
-   * Rings rather than one ring: a berth has two pieces of ground a person can be on, her deck and
-   * the apron her load waits on, and both reach the planking at the same place. Each is a closed
-   * loop, so one shape of thing covers both and the network needs no second idea.
+   * Pieces rather than one: a berth has her deck and the apron her load waits on, and both reach
+   * the planking. Each carries its own links, so a ring (a deck) and a field (an apron somebody
+   * walks freely) are the same kind of thing here and neither is special-cased.
    */
-  aboard: ReadonlyMap<number, readonly (readonly Spot[])[]> = new Map(),
+  aboard: ReadonlyMap<number, readonly Ground[]> = new Map(),
 ): Network {
   const where = new Map<Place, Spot>()
   const next = new Map<Place, Place[]>()
@@ -321,28 +322,27 @@ export function networkOf(
   }
 
   /*
-   * And aboard, which is the whole point of the gangway being drawn at all.
+   * And the ground at each berth, which is the whole point of the gangway being drawn at all.
    *
-   * The ring hangs off the plank she lies against: her first spot is where the gangway lands, so
-   * walking aboard is one step from the planking and not a jump. The ring closes on itself, so a
-   * figure can go round her instead of pacing one side.
+   * One spot of each piece touches the planking — its `gate` — so walking aboard, or out among
+   * the packages, is one step from the quay and never a jump.
    */
-  for (const [node, rings] of aboard) {
+  for (const [node, grounds] of aboard) {
     const plank: Place = `q${String(node)}`
     if (!where.has(plank)) {
       continue
     }
-    rings.forEach((ring, which) => {
-      if (ring.length === 0) {
+    grounds.forEach((ground, which) => {
+      if (ground.spots.length === 0) {
         return
       }
       const name = (index: number): Place => `d${String(node)}.${String(which)}.${String(index)}`
-      ring.forEach((spot, index) => {
+      ground.spots.forEach((spot, index) => {
         where.set(name(index), spot)
       })
-      join(plank, name(0))
-      for (let index = 0; index < ring.length; index += 1) {
-        join(name(index), name((index + 1) % ring.length))
+      join(plank, name(ground.gate))
+      for (const [one, other] of ground.links) {
+        join(name(one), name(other))
       }
     })
   }
