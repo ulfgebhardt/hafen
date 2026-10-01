@@ -31,6 +31,7 @@ import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pi
 
 import { PIER } from './chosen'
 import { conditionOf } from './condition'
+import { boomLoaded, boomTip, carriesOut, craneCycle } from './crane'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
 import { harbourOf as laneHarbour } from './lanes'
@@ -47,6 +48,7 @@ import {
   fieldOf,
   bridgeOf,
   cargoOf,
+  deckOf,
   hasPlume,
   hullOf,
   gangwayBox,
@@ -59,8 +61,6 @@ import {
   mooringOf,
   offsetOf,
   pierMarks,
-  promenadeOf,
-  ringAs,
   questAt,
   yawOf,
 } from './vessel'
@@ -98,6 +98,14 @@ import type { FederatedPointerEvent } from 'pixi.js'
 const PENNANT = { staff: 2.6, fly: 1.8, every: 26 } as const
 
 const PLANK = 4.6
+
+/**
+ * The lighter line round the edge of the concrete, in pixels each side.
+ *
+ * One, and the same width the apron's coping is stroked at, because they are the same line: a way
+ * running into an apron has to come out as one surface with one edge round it.
+ */
+const COPING = 1
 
 /** How many boats run one lane. Two, so a lane is traffic and not one boat going back and forth. */
 const PER_LANE = 2
@@ -292,14 +300,31 @@ function ground(harbour: Harbour, extent: Extent): Container {
    * What still varies is the *flag* it carries, and only where one applies: a walkway inside a
    * dock is that organisation's, the ones between docks are everybody's.
    */
+  /*
+   * The coping under the concrete, and the concrete over it.
+   *
+   * Two passes and not one stroke over another at the same width: the second stroke used to cover
+   * the whole plank, so a way came out a *lighter shade of surface* than the apron it runs into —
+   * two materials where there is one. Drawn a little wider underneath and then covered, the
+   * lighter line survives only along the edges, which is where a coping is.
+   *
+   * Every halo first and every fill after, in that order: at a junction the crossing way's fill
+   * has to be able to cover the stub of coping the first one left across it. One Graphics, two
+   * loops — the cheapest way to say "the union of these, outlined".
+   */
   const planks = new Graphics()
-  for (const walk of walksOf(harbour).filter((one) => one.kind === 'tree')) {
+  const laid = walksOf(harbour).filter((one) => one.kind === 'tree')
+  for (const walk of laid) {
+    const from = project(walk.from)
+    const to = project(walk.to)
+    planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
+    planks.stroke({ width: PLANK + COPING * 2, color: hex(SCENE.quayEdge), alpha: 0.6 })
+  }
+  for (const walk of laid) {
     const from = project(walk.from)
     const to = project(walk.to)
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
     planks.stroke({ width: PLANK, color: hex(SCENE.quay), alpha: 1 })
-    planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
-    planks.stroke({ width: PLANK, color: hex(SCENE.quayEdge), alpha: 0.5 })
   }
   group.addChild(planks)
 
@@ -577,11 +602,24 @@ function pierLoad(ship: Ship, hull: Hull, reach: number, forge: ForgeStats | nul
   const apron = apronOf([...owed, ...pierMarks(ship, hull), ...open], -reach)
   if (apron !== null) {
     slab(load, apron.spot, apron.along, apron.across).fill({ color: hex(SCENE.quay), alpha: 1 })
-    slab(load, apron.spot, apron.along, apron.across).stroke({
-      width: 1,
-      color: hex(SCENE.quayEdge),
-      alpha: 0.6,
-    })
+    /*
+     * Outlined on **three** sides, and the fourth is the point.
+     *
+     * The edge at the top is where `apronOf` runs the platform up to meet the plank, so a stroke
+     * there drew a line *across* one continuous piece of concrete and cut it in two. A coping runs
+     * round the edge of a surface, not through the middle of it — what is left is one shape with a
+     * lighter line round the outside of it, which is what it is.
+     */
+    const left = (apron.spot.x - apron.along / 2) * UNIT
+    const right = (apron.spot.x + apron.along / 2) * UNIT
+    const top = (apron.spot.y - apron.across / 2) * UNIT
+    const foot = (apron.spot.y + apron.across / 2) * UNIT
+    load
+      .moveTo(left, top)
+      .lineTo(left, foot)
+      .lineTo(right, foot)
+      .lineTo(right, top)
+      .stroke({ width: 1, color: hex(SCENE.quayEdge), alpha: 0.6 })
   }
   for (const box of owed) {
     const color = hex(VERDICT_COLOR[box.quest.verdict])
@@ -1505,16 +1543,47 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         y: berth.spot.y + side * (spot.y + (afloat ? offset : 0)),
       })
       const field = fieldOf(onApron, apronOf(onApron, -reach))
+
+      /*
+       * Her deck, and the plank that is the **only** way onto it.
+       *
+       * Two things were wrong and they share one cause: the deck was a hand-laid ring, joined at
+       * its first spot straight to the quay node. So a figure crossed the water wherever that node
+       * happened to be rather than walking up the gangway, and she walked the ring over whatever
+       * stood in its way, because the ring was fractions of a hull and not a reading of one.
+       *
+       * The plank's two ends are now the first two spots of this ground and the head of it is the
+       * gate, so every route aboard runs head → foot → deck. The deck itself is `deckOf`: inside
+       * her outline, with the cargo, the deckhouse and the marks left out.
+       */
+      const planked = hasGangway(berth.ship)
+        ? deckOf(hull, [
+            ...cargoOf(berth.ship, hull),
+            bridgeOf(berth.ship, hull),
+            ...hullMarks(berth.ship, hull),
+          ])
+        : null
       walkable.set(berth.node, [
-        /*
-         * Her deck, and only where there is a gangway to reach it by.
-         *
-         * A ship nobody can reach from anywhere else is a ship nobody walks aboard — the ring is
-         * simply absent, rather than connected to a plank that is not drawn.
-         */
-        ...(hasGangway(berth.ship)
-          ? [{ ...ringAs(promenadeOf(hull).map((spot) => toHarbour(spot, true))), gate: 0 }]
-          : []),
+        ...(planked === null
+          ? []
+          : [
+              {
+                spots: [
+                  toHarbour({ x: hull.length * 0.22, y: -reach - offset }, true),
+                  toHarbour({ x: hull.length * 0.22, y: -hull.beam / 2 }, true),
+                  ...planked.spots.map((spot) => toHarbour(spot, true)),
+                ],
+                links: [
+                  [0, 1] as const,
+                  [1, planked.gate + 2] as const,
+                  ...planked.links.map(([one, other]): readonly [number, number] => [
+                    one + 2,
+                    other + 2,
+                  ]),
+                ],
+                gate: 0,
+              },
+            ]),
         ...(field === null
           ? []
           : [
@@ -1733,56 +1802,17 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     /*
      * The crane: slew to the stack, lift, slew to the ship, set down, and back empty.
      *
-     * The boom is a line from the post to wherever it is pointing, and the tip is interpolated in
-     * **polar** terms — angle and length separately — so it reads as a crane slewing rather than
-     * as a point sliding across the drawing. The length differs because the stack and the
-     * forecastle are not the same distance from the post.
+     * Where the boom points is `crane.ts` and not this loop: it is a rule with a property worth
+     * asserting — it never jumps — and nothing over a canvas can be asserted.
      *
      * The package hangs under the tip on a short fall, and exists only between the lift and the
      * set-down. The measured stack never moves: a box that travelled from the apron onto the deck
      * would say a demand had been met because a crane picked it up.
      */
     for (const yard of cranes) {
-      const cycle = (((now / yard.period + yard.phase) % 1) + 1) % 1
-      const swing = (
-        one: { x: number; y: number },
-        other: { x: number; y: number },
-        at: number,
-      ) => {
-        const a = Math.atan2(one.y - yard.foot.y, one.x - yard.foot.x)
-        const b = Math.atan2(other.y - yard.foot.y, other.x - yard.foot.x)
-        // The short way round, so the boom never sweeps backwards through the ship.
-        const turn = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI
-        const reach =
-          Math.hypot(one.x - yard.foot.x, one.y - yard.foot.y) * (1 - at) +
-          Math.hypot(other.x - yard.foot.x, other.y - yard.foot.y) * at
-        const angle = a + turn * at
-        return {
-          x: yard.foot.x + Math.cos(angle) * reach,
-          y: yard.foot.y + Math.sin(angle) * reach,
-        }
-      }
-
-      /*
-       * One swing out and one back, always between the same two places — and **never a jump**.
-       *
-       * The two ends used to swap every other period, so at the turn of a cycle the boom was at
-       * the stack and the next frame declared the stack to be where the ship is: it teleported.
-       * It now runs stack → ship → stack for ever, and what alternates is only *which leg carries*
-       * — out with a box one round, back with one the next, which is what a quay crane does.
-       */
-      const carriesOut = Math.floor(now / yard.period + yard.phase) % 2 === 0
-      const tip =
-        cycle < 0.08
-          ? yard.stack
-          : cycle < 0.46
-            ? swing(yard.stack, yard.ship, (cycle - 0.08) / 0.38)
-            : cycle < 0.54
-              ? yard.ship
-              : swing(yard.ship, yard.stack, (cycle - 0.54) / 0.38)
-      const outward = cycle >= 0.08 && cycle < 0.46
-      const homeward = cycle >= 0.54 && cycle < 0.92
-      const carrying = carriesOut ? outward : homeward
+      const cycle = craneCycle(now, yard.period, yard.phase)
+      const tip = boomTip(yard.foot, yard.stack, yard.ship, cycle)
+      const carrying = boomLoaded(cycle, carriesOut(now, yard.period, yard.phase))
 
       yard.arm.clear()
       yard.arm

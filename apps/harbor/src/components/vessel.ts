@@ -439,22 +439,13 @@ export const STRIDE = 1.1
  * A piece of walkable ground: where somebody may stand on it, and which steps it allows.
  *
  * `links` are pairs of indices into `spots`, and `gate` is the spot that touches the planking.
- * A ring (a ship's deck) and a field (an apron) are both this, which is the whole point: the walk
- * network knows one shape of thing and neither has to be special-cased in it.
+ * A deck and an apron are both this, which is the whole point: the walk network knows one shape of
+ * thing and neither has to be special-cased in it.
  */
 export interface Ground {
   spots: readonly Spot[]
   links: readonly (readonly [number, number])[]
   gate: number
-}
-
-/** A closed ring as ground: one step from each spot to the next, and the first one is the gate. */
-export function ringAs(spots: readonly Spot[]): Ground {
-  return {
-    spots,
-    links: spots.map((_, index): readonly [number, number] => [index, (index + 1) % spots.length]),
-    gate: 0,
-  }
 }
 
 /**
@@ -523,77 +514,6 @@ export function fieldOf(items: readonly Box[], apron: Box | null): Ground | null
     0,
   )
   return { spots, links, gate }
-}
-
-/** The rows things stand in on the apron, as the band each one occupies across the berth. */
-function rowsOf(items: readonly Box[]): readonly { from: number; to: number }[] {
-  const rows: { from: number; to: number }[] = []
-  for (const item of items) {
-    const from = item.spot.y - item.across / 2
-    const to = item.spot.y + item.across / 2
-    const same = rows.find((row) => from < row.to && to > row.from)
-    if (same === undefined) {
-      rows.push({ from, to })
-      continue
-    }
-    same.from = Math.min(same.from, from)
-    same.to = Math.max(same.to, to)
-  }
-  return [...rows].sort((one, other) => one.from - other.from)
-}
-
-/**
- * Where somebody may walk on the apron: **between** the rows and round the ends.
- *
- * A boustrophedon loop — along the aisle above the first row to the far end, down into the next
- * aisle, back, and so on. Every leg runs either in an aisle or past an end, so a figure never
- * walks over a package; and because it closes on itself, the walk network carries it exactly as
- * it carries a ship's deck.
- *
- * The aisle between two rows is where it is because `LANDED.pitch` was widened to 2.2 for it: a
- * box is 1.2 across and a figure 0.84 wide, so the old 1.9 left somebody walking through the
- * boxes rather than between them.
- */
-export function apronWalk(items: readonly Box[]): readonly Spot[] {
-  const apron = apronOf(items)
-  if (apron === null) {
-    return []
-  }
-  const rows = rowsOf(items)
-  const left = apron.spot.x - apron.along / 2 + APRON_EDGE / 2
-  const right = apron.spot.x + apron.along / 2 - APRON_EDGE / 2
-  const aisles = [
-    (rows[0]?.from ?? 0) - APRON_EDGE / 2,
-    ...rows.slice(1).map((row, index) => ((rows[index]?.to ?? 0) + row.from) / 2),
-    (rows.at(-1)?.to ?? 0) + APRON_EDGE / 2,
-  ]
-  const snake = aisles.flatMap((y, index) =>
-    // Alternating, so the ring snakes through the aisles instead of crossing the stack to get
-    // back to the side it started on.
-    index % 2 === 0
-      ? [
-          { x: left, y },
-          { x: right, y },
-        ]
-      : [
-          { x: right, y },
-          { x: left, y },
-        ],
-  )
-  /*
-   * And one corner where the snake ends on the far side.
-   *
-   * With an odd number of aisles the last leg finishes at `right`, and closing the ring from
-   * there to the first point would draw a diagonal straight across the stack — a figure walking
-   * over every package on her way back. The corner sends her up the end of the stack instead,
-   * which is clear ground by construction: `left` and `right` lie outside the boxes.
-   */
-  const last = snake.at(-1)
-  const first = snake[0]
-  if (last !== undefined && first !== undefined && last.x !== first.x) {
-    snake.push({ x: last.x, y: first.y })
-  }
-  return snake
 }
 
 export interface Landed {
@@ -745,32 +665,107 @@ export function gangwayOf(hull: Hull, offset: number, reach: number = BERTH.lane
 }
 
 /**
- * Where somebody may walk once she is aboard, in the hull's own coordinates.
+ * Whether a point is inside a closed polygon — the crossing-number rule.
  *
- * Up the gangway, along the inboard side, round the stern and back down the outboard side: the
- * two strips of deck that carry nothing. Everything a click answers for — the cargo, the marks,
- * the gangway itself — stands between `DECK.from` and `DECK.to` on the centreline, and these run
- * outboard of all of it at `0.82` of the half beam, which is clear of the widest stack
- * (`hull.beam * 0.72`, see `cargoOf`) with room to spare.
- *
- * A ring and not a line: a figure that walks to the bow and turns round walks the same planks
- * back, which from above reads as a pendulum. Round the stern it reads as somebody working.
- *
- * The first spot is where the gangway lands, so the path can simply be hung off it.
+ * Needed because the deck is the one surface here whose edge is not a rectangle: a hull tapers,
+ * and a walk laid out in fractions of her length rather than against her actual outline is a walk
+ * that leaves her at the bow on some ships and not on others.
  */
-export function promenadeOf(hull: Hull): readonly Spot[] {
-  const side = (hull.beam / 2) * 0.82
-  const aft = hull.length * 0.12
-  const fore = hull.length * 0.88
-  return [
-    { x: hull.length * 0.22, y: -side },
-    { x: fore, y: -side },
-    { x: hull.length * 0.95, y: 0 },
-    { x: fore, y: side },
-    { x: aft, y: side },
-    { x: hull.length * 0.05, y: 0 },
-    { x: aft, y: -side },
-  ]
+export function within(outline: readonly Spot[], spot: Spot): boolean {
+  let inside = false
+  for (let i = 0, j = outline.length - 1; i < outline.length; j = i, i += 1) {
+    const a = outline[i]
+    const b = outline[j]
+    if (a === undefined || b === undefined) {
+      continue
+    }
+    if (a.y > spot.y !== b.y > spot.y) {
+      const cut = a.x + ((spot.y - a.y) / (b.y - a.y)) * (b.x - a.x)
+      if (spot.x < cut) {
+        inside = !inside
+      }
+    }
+  }
+  return inside
+}
+
+/**
+ * The deck somebody may walk: inside her outline, and never over what stands on her.
+ *
+ * It used to be a ring at seven hand-picked fractions of her length and `0.82` of her half beam,
+ * and both halves of that were wrong. `0.82` is clear of the widest *cargo* stack but not of the
+ * deckhouse, which is `0.72` of the beam and sits exactly where the ring's aft leg runs — so
+ * figures walked through it. And a ring that turns at `x * 0.95` is outside a hull whose bow has
+ * been tapering since `0.82`.
+ *
+ * Built the way the apron is, for the same reason: a grid with everything standing on it left
+ * out, so "nicht über die Kästen" and "nicht über die Bordwand" hold by construction rather than
+ * by two constants somebody has to keep true. A cell is deck only where all four of its corners
+ * are inside the outline, which is the clearance a figure needs at the rail.
+ */
+export function deckOf(hull: Hull, standing: readonly Placed[]): Ground | null {
+  // Her own outline and not a second one computed from her dimensions: the drawing strokes this
+  // polygon, and a walk measured against a different one would be clear of a rail nobody sees.
+  const outline = hull.outline
+  const columns = Math.max(1, Math.round(hull.length / STRIDE))
+  const rows = Math.max(1, Math.round(hull.beam / STRIDE))
+  const alongStep = hull.length / columns
+  const acrossStep = hull.beam / rows
+
+  const spots: Spot[] = []
+  const at = new Map<string, number>()
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const spot = { x: (column + 0.5) * alongStep, y: -hull.beam / 2 + (row + 0.5) * acrossStep }
+      const corners = [
+        { x: spot.x - alongStep / 2, y: spot.y - acrossStep / 2 },
+        { x: spot.x + alongStep / 2, y: spot.y - acrossStep / 2 },
+        { x: spot.x - alongStep / 2, y: spot.y + acrossStep / 2 },
+        { x: spot.x + alongStep / 2, y: spot.y + acrossStep / 2 },
+      ]
+      if (!corners.every((corner) => within(outline, corner))) {
+        continue
+      }
+      const blocked = standing.some(
+        (item) =>
+          Math.abs(spot.x - item.spot.x) < item.along / 2 + alongStep / 2 &&
+          Math.abs(spot.y - item.spot.y) < item.across / 2 + acrossStep / 2,
+      )
+      if (blocked) {
+        continue
+      }
+      at.set(`${String(column)}.${String(row)}`, spots.length)
+      spots.push(spot)
+    }
+  }
+  if (spots.length === 0) {
+    return null
+  }
+
+  const links: (readonly [number, number])[] = []
+  for (const [key, index] of at) {
+    const [column, row] = key.split('.').map(Number)
+    const east = at.get(`${String((column ?? 0) + 1)}.${String(row ?? 0)}`)
+    const south = at.get(`${String(column ?? 0)}.${String((row ?? 0) + 1)}`)
+    if (east !== undefined) {
+      links.push([index, east])
+    }
+    if (south !== undefined) {
+      links.push([index, south])
+    }
+  }
+
+  // The foot of the gangway: where somebody who has just come aboard is standing.
+  const landing = { x: hull.length * 0.22, y: -hull.beam / 2 }
+  const away = (spot: Spot | undefined): number =>
+    spot === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.hypot(spot.x - landing.x, spot.y - landing.y)
+  const gate = spots.reduce(
+    (best, spot, index) => (away(spot) < away(spots[best]) ? index : best),
+    0,
+  )
+  return { spots, links, gate }
 }
 
 /**
