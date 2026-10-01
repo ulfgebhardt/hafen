@@ -1,7 +1,8 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue'
+  import { computed, ref } from 'vue'
 
   import PointValue from './PointValue.vue'
+  import { revealChosen } from './revealing'
   import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_MEANING } from './theme'
 
   import type { QuestResult, Task } from '@hafen/core'
@@ -57,19 +58,12 @@
    * Opened and not only marked: somebody who clicked a specific container asked about *that*
    * demand, and a highlighted row they then have to click again is a step that answers nothing.
    */
-  watch(
+  revealChosen(
     () => chosen,
-    (picked) => {
-      if (!picked) {
-        return
-      }
+    () => row.value,
+    () => {
       open.value = true
-      // `start` and not `nearest`: a row that was already partly visible stayed where it was, so
-      // choosing a box in the harbour looked like it had done nothing. The panel's
-      // `scroll-margin-top` is what keeps the row clear of the sticky header.
-      row.value?.scrollIntoView({ block: 'start' })
     },
-    { immediate: true },
   )
 
   const mark = computed(

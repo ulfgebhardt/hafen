@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import ForgeFacts from './ForgeFacts.vue'
 
@@ -94,5 +94,34 @@ describe('what is open, drawn', () => {
     const panel = mount(ForgeFacts, { props: { stats: { ...STATS, issues: 0 } } })
 
     expect(panel.findAll('li')[0]?.text()).toContain('keine')
+  })
+})
+
+describe('a heap chosen on the drawing', () => {
+  /**
+   * The row brings itself into view. It was the one chosen thing in the sheet that only *marked*
+   * its row — the ring went on somewhere below the fold and the reader had to go looking for what
+   * they had just clicked. jsdom has no `scrollIntoView`, so it is stubbed and watched.
+   */
+  it('scrolls to the row the chosen heap belongs to', async () => {
+    const scrolled = vi.fn<() => void>()
+    Element.prototype.scrollIntoView = scrolled
+
+    const panel = mount(ForgeFacts, { props: { stats: STATS } })
+    await panel.setProps({ chosen: { kind: 'forge', open: 'pull' } })
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(panel.findAll('li')[1]?.find('button').classes().join(' ')).toContain('ring')
+  })
+
+  /** A choice that belongs to somebody else moves nothing here. */
+  it('leaves the panel alone for a choice that is not a heap', async () => {
+    const scrolled = vi.fn<() => void>()
+    Element.prototype.scrollIntoView = scrolled
+
+    const panel = mount(ForgeFacts, { props: { stats: STATS } })
+    await panel.setProps({ chosen: { kind: 'mark', mark: 'stash' } })
+
+    expect(scrolled).not.toHaveBeenCalled()
   })
 })

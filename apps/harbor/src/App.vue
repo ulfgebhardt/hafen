@@ -12,6 +12,7 @@
     viewOf,
   } from './components/band'
   import BandTabs from './components/BandTabs.vue'
+  import { chosenKey } from './components/chosen'
   import ContractList from './components/ContractList.vue'
   import { filterByContract } from './components/contracts'
   import FleetBar from './components/FleetBar.vue'
@@ -62,6 +63,19 @@
    * the two it was set from. Two states would disagree the first time somebody used both.
    */
   const demand = ref<Chosen | null>(null)
+
+  /**
+   * Choosing the same thing twice lets go of it.
+   *
+   * One place and not two: the drawing and the sheet both hand a choice up here, and a toggle
+   * implemented in either of them would be a toggle the other does not do. Compared by
+   * `chosenKey`, because a click builds a fresh object every time and `===` on those is never
+   * true — the same reason the templates compare by key rather than by identity.
+   */
+  const choose = (pick: Chosen | null): void => {
+    demand.value = pick !== null && chosenKey(pick) === chosenKey(demand.value) ? null : pick
+  }
+
   const sheet = computed(() => picked.value ?? hovered.value)
 
   /**
@@ -561,13 +575,14 @@
             :key="`${page}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
-            v-model:quest="demand"
+            :quest="demand"
             :forge="forgeByPath"
             :layout="layout"
             :ships="shown"
             :centre="picked"
             :hold="hold"
             :found="found"
+            @update:quest="choose"
           />
         </main>
 
@@ -586,7 +601,7 @@
             @measure="measure($event)"
             @archive="archive(sheet.path, $event)"
             @enlist="enlist(sheet.path, $event)"
-            @pick="demand = $event"
+            @pick="choose"
             @tool="useTool($event, sheet.path)"
             @prune="prune(sheet.path, $event)"
             @open="visit($event)"

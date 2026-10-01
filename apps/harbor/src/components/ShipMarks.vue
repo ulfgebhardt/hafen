@@ -12,10 +12,11 @@
    * make the cap look like the measurement.
    */
 
-  import { computed, ref, useTemplateRef, watch } from 'vue'
+  import { computed, ref, useTemplateRef } from 'vue'
 
   import { isMark, isPier } from './chosen'
   import { MARK_LABEL, MARK_MEANING, marksOf } from './marks'
+  import { revealChosen } from './revealing'
   import { MARK_COLOR } from './theme'
 
   import type { Chosen } from './chosen'
@@ -38,20 +39,10 @@
    */
   const section = useTemplateRef<HTMLElement>('section')
 
-  watch(
+  revealChosen(
     () => chosen,
-    (pick) => {
-      // The gangway stands for the whole of this, so it brings the whole section into view.
-      if (isPier(pick)) {
-        section.value?.scrollIntoView({ block: 'start' })
-        return
-      }
-      if (pick?.kind !== 'mark') {
-        return
-      }
-      rows.value[pick.mark]?.scrollIntoView({ block: 'start' })
-    },
-    { immediate: true },
+    // The gangway stands for the whole of this, so it brings the whole section into view.
+    (pick) => (isPier(pick) ? section.value : pick.kind === 'mark' ? rows.value[pick.mark] : null),
   )
 
   /** Vue hands a `ref` function the component instance too; only an element is of use here. */
