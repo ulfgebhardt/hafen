@@ -15,7 +15,7 @@ import {
   STEPS,
 } from './basins'
 import { NO_ORG } from './flags'
-import { reachesShore } from './moorings'
+import { berthBox, overlaps, reachesShore } from './moorings'
 import { ship } from './testing'
 
 describe(ringOf, () => {
@@ -282,6 +282,26 @@ describe(harbourOf, () => {
    */
   it('joins every berth to the shore', () => {
     expect(reachesShore(harbour)).toBe(true)
+  })
+
+  /**
+   * Clear water round every basin, which is what makes twenty-three projects countable.
+   *
+   * Asserted against the *footprint* and not merely against the spots: two berths a hair apart are
+   * two hulls on top of each other. This went both ways before it settled — boxes edge to edge left
+   * meaningless channels, nesting them closed the gaps and made one field of ships — and the moat
+   * is the first arrangement here under which nothing overlaps at all.
+   */
+  it('leaves every berth standing clear of every other', () => {
+    for (const one of harbour.moorings) {
+      for (const other of harbour.moorings) {
+        if (one === other) {
+          continue
+        }
+
+        expect(overlaps(berthBox(one), berthBox(other))).toBe(false)
+      }
+    }
   })
 
   /** Two ships are two cells, and two cells are a lattice apart — nothing is searched. */
