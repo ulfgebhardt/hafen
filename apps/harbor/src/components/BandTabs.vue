@@ -10,12 +10,16 @@
     isBand,
     PAGE_LABEL,
     PAGE_MEANING,
-    PAGES,
+    pagesOf,
+    VIEW_LABEL,
+    VIEW_MEANING,
+    VIEWS,
   } from './band'
   import { tallyContracts } from './contracts'
   import PointValue from './PointValue.vue'
   import { VERDICT_LABEL } from './theme'
 
+  import type { Page, View } from './band'
   import type { ContractFilter } from './contracts'
   import type { Ship } from '@hafen/core'
 
@@ -25,9 +29,22 @@
     contract?: ContractFilter | null
   }>()
 
-  const emit = defineEmits<{ clear: [] }>()
+  const emit = defineEmits<{ clear: []; view: [(typeof VIEWS)[number]] }>()
 
-  const page = defineModel<(typeof PAGES)[number]>('page', { required: true })
+  const page = defineModel<Page>('page', { required: true })
+
+  /**
+   * Which question the bar is offering pages for.
+   *
+   * Held rather than read off the page, and the catalog is why: it belongs to both views, so a
+   * reader who opens it from the fleet must not find the band tabs under their hand afterwards.
+   * Everything else keeps the two in step — see `showView` and the watcher beside it.
+   *
+   * Pressing a button only *asks*. Which page that lands on is the parent's to say, because only
+   * it knows whether a ship is being read and which band she falls in.
+   */
+  const view = defineModel<View>('view', { required: true })
+  const offered = computed(() => pagesOf(view.value))
 
   /**
    * What is typed into the filter.
@@ -62,8 +79,51 @@
     to read. The catalog sits last because it is the only page that is not a set of ships.
   -->
   <nav class="flex gap-px overflow-hidden border-b border-slate-800 bg-slate-950 px-2">
+    <!--
+      The question before the page: two buttons, one of them always down.
+      Eight figures and five tabs on one line was a bar nobody could aim at — the fleet page and
+      the band pages answer different things, so the reader picks the question here and the tabs
+      beside it are the ones that belong to it. No figures on these two: a count on the switch
+      would be a third number for a thing that is not a page.
+    -->
+    <span class="mr-3 flex shrink-0 items-center gap-px self-center border-r border-slate-800 pr-3">
+      <button
+        v-for="name in VIEWS"
+        :key="name"
+        class="px-2 py-1"
+        :class="view === name ? 'text-slate-100' : 'text-slate-600 hover:text-slate-400'"
+        :aria-pressed="view === name"
+        :title="`${VIEW_LABEL[name]} — ${VIEW_MEANING[name]}`"
+        @click="emit('view', name)"
+      >
+        <svg
+          class="h-3.5 w-3.5"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.2"
+          aria-hidden="true"
+        >
+          <!--
+            Two plans and not two pictures: the dock is berths along a quay, the fleet is one
+            trunk branching to many. Drawn in the same line weight as the harbour itself.
+          -->
+          <template v-if="name === 'dock'">
+            <path d="M2 3h12M2 8h12M2 13h12" />
+            <path d="M4 1.5v3M9 6.5v3M6 11.5v3" />
+          </template>
+          <template v-else>
+            <path d="M8 15V9" />
+            <path d="M8 9 3 4M8 9l5-5M8 9V2" />
+            <path d="M2.4 3.4h1.2M12.4 3.4h1.2M7.4 1.4h1.2" />
+          </template>
+        </svg>
+        <span class="sr-only">{{ VIEW_LABEL[name] }}</span>
+      </button>
+    </span>
+
     <button
-      v-for="name in PAGES"
+      v-for="name in offered"
       :key="name"
       class="group shrink-0 px-3 py-1.5 text-left whitespace-nowrap"
       :class="

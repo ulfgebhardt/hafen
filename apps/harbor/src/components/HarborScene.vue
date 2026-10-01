@@ -11,8 +11,16 @@
     ships,
     forge = new Map(),
     layout = 'lanes',
+    centre = null,
   } = defineProps<{
     ships: readonly Ship[]
+    /**
+     * A ship to put in the middle of the window once the harbour is drawn.
+     *
+     * For the moment a reader changes pages: this component is keyed on the page, so a switch
+     * builds a new drawing, and the ship they were reading about would be somewhere in it.
+     */
+    centre?: Ship | null
     /** Which harbour to draw: docks in lanes, or the fan that can branch. */
     layout?: 'lanes' | 'fan'
     /**
@@ -61,6 +69,7 @@
     })
     scene.draw(ships, forge, layout)
     scene.highlight(picked.value, demand.value)
+    scene.focus(centre)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
@@ -70,6 +79,7 @@
     ([next, stats, kind]) => {
       scene?.draw(next, stats, kind)
       scene?.highlight(picked.value, demand.value)
+      scene?.focus(centre)
     },
   )
 

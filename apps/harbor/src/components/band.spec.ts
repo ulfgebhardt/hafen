@@ -12,6 +12,9 @@ import {
   PAGE_LABEL,
   PAGE_MEANING,
   PAGES,
+  pagesOf,
+  VIEWS,
+  viewOf,
 } from './band'
 import { ship } from './testing'
 
@@ -94,6 +97,49 @@ describe('the fleet page', () => {
     for (const page of PAGES) {
       expect(PAGE_LABEL[page]).not.toBe('')
       expect(PAGE_MEANING[page]).not.toBe('')
+    }
+  })
+})
+
+describe(pagesOf, () => {
+  /** The question first, the page second: five tabs on one line was a bar nobody could aim at. */
+  it('offers the bands in the dock view and the fleet in the other', () => {
+    expect(pagesOf('dock')).toStrictEqual(['active', 'dormant', 'archived', CONTRACTS])
+    expect(pagesOf('fleet')).toStrictEqual([FLEET, CONTRACTS])
+  })
+
+  /** The catalog is in both because it is in neither: it counts demands and not hulls. */
+  it('keeps the catalog in both views', () => {
+    for (const view of VIEWS) {
+      expect(pagesOf(view)).toContain(CONTRACTS)
+    }
+  })
+
+  it('offers every page in exactly one view besides the catalog', () => {
+    const offered = VIEWS.flatMap((view) => pagesOf(view)).filter((page) => page !== CONTRACTS)
+
+    expect([...new Set(offered)]).toHaveLength(offered.length)
+    expect(offered).toHaveLength(PAGES.length - 1)
+  })
+})
+
+describe(viewOf, () => {
+  it('puts the buttons right for a page picked somewhere else', () => {
+    expect(viewOf(FLEET)).toBe('fleet')
+
+    for (const band of BANDS) {
+      expect(viewOf(band)).toBe('dock')
+    }
+
+    expect(viewOf(CONTRACTS)).toBe('dock')
+  })
+
+  /** Both ways round: whatever a view offers, it is the view that page says it belongs to. */
+  it('agrees with what each view offers', () => {
+    for (const view of VIEWS) {
+      for (const page of pagesOf(view).filter((one) => one !== CONTRACTS)) {
+        expect(viewOf(page)).toBe(view)
+      }
     }
   })
 })
