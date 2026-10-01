@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { mockContract, mockPorts } from './mock'
-import { measureQuests, runCheck } from './probe'
+import { measureQuests, namedInCi, runCheck } from './probe'
 
 import type { QuestFacts } from './probe'
 import type { Quest, QuestCheck } from './quest'
@@ -365,5 +365,95 @@ describe('datei-eine-von', () => {
     const result = runCheck(oneOf('LICENSE, COPYING'), seen({ LICENSE: null, COPYING: null }))
 
     expect(result.evidence.where).toBe('LICENSE, COPYING')
+  })
+})
+
+describe(namedInCi, () => {
+  const workflow = [
+    'jobs:',
+    '  release-please:',
+    '    steps:',
+    '      - uses: googleapis/release-please-action@v5',
+    '        with:',
+    '          config-file: .github/release-please/config.json',
+    '          manifest-file: ".github/release-please/manifest.json"',
+  ].join('\n')
+
+  /** The path is measured out of the workflow, not guessed from where people usually put it. */
+  it('reads the path a workflow names under a key', () => {
+    expect(namedInCi([workflow], 'config-file')).toBe('.github/release-please/config.json')
+    expect(namedInCi([workflow], 'manifest-file')).toBe('.github/release-please/manifest.json')
+  })
+
+  it('says nothing where no workflow names it', () => {
+    expect(namedInCi([workflow], 'gibt-es-nicht')).toBeNull()
+    expect(namedInCi([], 'config-file')).toBeNull()
+    expect(namedInCi([workflow], '')).toBeNull()
+  })
+
+  /**
+   * A workflow is a file in somebody else's repository. It must not be able to make this survey
+   * read outside the ship — the same refusal `wantedFiles` makes.
+   */
+  it('refuses a path that climbs out of the ship', () => {
+    expect(namedInCi(['  config-file: ../../.ssh/id_ed25519'], 'config-file')).toBeNull()
+    expect(namedInCi(['  config-file: /etc/passwd'], 'config-file')).toBeNull()
+  })
+})
+
+describe('a configuration the CI points at', () => {
+  const workflows = ['  with:\n    config-file: .github/release-please/config.json']
+
+  /**
+   * The failure this answers: two repositories on this fleet run release-please with the config
+   * under `.github/release-please/`, and a quest naming the default path alone called both of
+   * them a gap — while the workflow beside it said exactly where the file is.
+   */
+  it('reads the file where the workflow says it is', () => {
+    const seenFacts: QuestFacts = {
+      ...facts(),
+      workflows,
+      files: new Map([['.github/release-please/config.json', '{}']]),
+    }
+
+    const seen = runCheck(
+      check('datei-aus-ci', { schluessel: 'config-file', sonst: 'release-please-config.json' }),
+      seenFacts,
+    )
+
+    expect(seen.ok).toBe(true)
+    expect(seen.evidence.where).toContain('.github/workflows')
+  })
+
+  /** Where no workflow names one, the tool's own default is the question — and it is said so. */
+  it('falls back to the default and says that it did', () => {
+    const seenFacts: QuestFacts = {
+      ...facts(),
+      workflows: ['  with:\n    token: x'],
+      files: new Map([['release-please-config.json', '{}']]),
+    }
+
+    const seen = runCheck(
+      check('datei-aus-ci', { schluessel: 'config-file', sonst: 'release-please-config.json' }),
+      seenFacts,
+    )
+
+    expect(seen.ok).toBe(true)
+    expect(seen.evidence.where).toContain('Vorgabe')
+  })
+
+  it('is unmeasured where neither a key nor a default was named', () => {
+    expect(runCheck(check('datei-aus-ci', {}), facts()).ok).toBeNull()
+  })
+
+  /** A missing file is still a missing file, wherever the workflow pointed. */
+  it('reports the gap where the named file is not there', () => {
+    const seenFacts: QuestFacts = {
+      ...facts(),
+      workflows,
+      files: new Map([['.github/release-please/config.json', null]]),
+    }
+
+    expect(runCheck(check('datei-aus-ci', { schluessel: 'config-file' }), seenFacts).ok).toBe(false)
   })
 })
