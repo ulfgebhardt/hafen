@@ -14,11 +14,22 @@
   import { forgeLinks } from '@hafen/core'
   import { computed } from 'vue'
 
+  import { isForge } from './chosen'
   import { SCENE } from './theme'
 
+  import type { Chosen } from './chosen'
   import type { ForgeStats } from '@hafen/core'
 
-  const { stats, at = '' } = defineProps<{ stats: ForgeStats; at?: string }>()
+  const {
+    stats,
+    at = '',
+    chosen = null,
+  } = defineProps<{
+    stats: ForgeStats
+    at?: string
+    /** What was pointed at on the ship — so the row that matches a chosen heap can say so. */
+    chosen?: Chosen | null
+  }>()
 
   const emit = defineEmits<{ open: [string] }>()
 
@@ -59,6 +70,7 @@
   const open = computed(() => [
     {
       name: 'Issues',
+      kind: 'issue' as const,
       count: stats.issues,
       drawn: Math.min(stats.issues, MOST),
       cut: stats.issues > MOST,
@@ -75,6 +87,7 @@
     },
     {
       name: 'PRs',
+      kind: 'pull' as const,
       count: stats.pulls,
       drawn: Math.min(stats.pulls, MOST),
       cut: stats.pulls > MOST,
@@ -118,6 +131,7 @@
       <li v-for="row in open" :key="row.name">
         <button
           class="group flex w-full items-center gap-2"
+          :class="isForge(chosen, row.kind) ? 'ring-1 ring-orange-400/70' : ''"
           :title="`${row.count} offene ${row.name} auf ${stats.slug.host} ansehen`"
           @click="emit('open', row.href ?? links['repo'] ?? '')"
         >

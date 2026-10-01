@@ -322,10 +322,13 @@ describe('the score and what went into it', () => {
    * The rows under it are points, the line above them is counts — and "Autoren 2.200" under
    * "110 Autoren" read as a second author count that was wrong by a factor of twenty.
    */
-  it('says that the breakdown is points and not counts', () => {
+  it('bills the score line by line, with counts and rates apart', () => {
     const sheet = mount(ShipSheet, { props: { ship: ship({ ledger: LEDGER }) } })
 
-    expect(sheet.text()).toContain('Punkte aus')
-    expect(sheet.text()).toContain('110 Autoren')
+    expect(sheet.text()).toContain('Punkteabrechnung')
+    // The count, the rate and what it comes to — the three things that used to be one number.
+    expect(sheet.text()).toContain('110')
+    expect(sheet.text()).toContain('× 20')
+    expect(sheet.text()).toContain('2.200')
   })
 })

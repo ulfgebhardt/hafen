@@ -13,7 +13,16 @@
 import type { MarkKind } from './marks'
 
 export type Chosen =
-  { kind: 'quest'; id: string } | { kind: 'mark'; mark: MarkKind } | { kind: 'pier' }
+  | { kind: 'quest'; id: string }
+  | { kind: 'mark'; mark: MarkKind }
+  | { kind: 'pier' }
+  /**
+   * What the forge has open: a heap of issues, or one of pull requests.
+   *
+   * A kind and not an id, like a mark and for the same reason: twelve open issues are one heap,
+   * not twelve. What the sheet answers with is the row in the forge panel.
+   */
+  | { kind: 'forge'; open: 'issue' | 'pull' }
 
 /** The one that stands for "everything waiting here", which is what the gangway draws. */
 export const PIER: Chosen = { kind: 'pier' }
@@ -32,7 +41,10 @@ export function chosenKey(chosen: Chosen | null): string {
   if (chosen.kind === 'quest') {
     return `quest:${chosen.id}`
   }
-  return chosen.kind === 'mark' ? `mark:${chosen.mark}` : 'pier'
+  if (chosen.kind === 'mark') {
+    return `mark:${chosen.mark}`
+  }
+  return chosen.kind === 'forge' ? `forge:${chosen.open}` : 'pier'
 }
 
 /** Whether a choice is this demand. */
@@ -43,6 +55,11 @@ export function isQuest(chosen: Chosen | null, id: string): boolean {
 /** Whether a choice is this kind of mark. */
 export function isMark(chosen: Chosen | null, mark: MarkKind): boolean {
   return chosen?.kind === 'mark' && chosen.mark === mark
+}
+
+/** Whether a choice is this heap of open work. */
+export function isForge(chosen: Chosen | null, open: 'issue' | 'pull'): boolean {
+  return chosen?.kind === 'forge' && chosen.open === open
 }
 
 /**
