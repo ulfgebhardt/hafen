@@ -331,6 +331,14 @@
       </dl>
     </section>
 
+    <!--
+      What the forge says, right under what the repository did.
+      It stood under the test contract, five sections down, where the one reading that is about
+      *other people* — who watches this, what they have opened — was the last thing anybody saw.
+      Two readings of the same work belong next to each other; their ages are said separately.
+    -->
+    <ForgeFacts v-if="stats !== null" :stats="stats" :at="forgeAt" @open="emit('open', $event)" />
+
     <section class="border-b border-slate-800 px-4 py-3">
       <p class="text-[10px] tracking-wide text-slate-600 uppercase">Remotes</p>
       <p v-if="origin === null" class="text-slate-500">kein origin</p>
@@ -375,8 +383,6 @@
         in CI: {{ ship.contract.inCi.join(', ') }}
       </p>
     </section>
-
-    <ForgeFacts v-if="stats !== null" :stats="stats" :at="forgeAt" @open="emit('open', $event)" />
 
     <ShipMarks :ship="ship" :chosen="chosenQuest" @pick="emit('pick', $event)" />
 
