@@ -298,18 +298,22 @@ const AS: Record<'trunk' | 'spur' | 'edge', Rank> = {
 const LANES = [1, 2, 3, 4, 5]
 
 /**
- * How far a basin's neighbour may stand inside its box.
+ * How much open water stands round a basin, in lattice cells.
  *
- * A ring is round and its box is not, so the four corners of every basin are open water. Packing
- * the boxes edge to edge therefore left a gap between two rings the width of two empty corners —
- * the picture had its ships crowded round their own middles and a channel of nothing between the
- * kindreds, which reads as the space meaning something. It does not.
+ * This went both ways before it settled, and both ends were wrong for the same reason: a ring is
+ * round and its box is not, so what the numbers say and what the eye sees are different things.
  *
- * The boxes are allowed to nest instead, and the amount is measured rather than chosen: at this
- * share no two berths of neighbouring basins overlap on the fleet this was built for, and the
- * test says so rather than the eye.
+ * Boxes edge to edge left a channel between two rings the width of two empty corners, and the
+ * picture read as crowded middles with meaningless gaps between them. Letting the boxes *nest* —
+ * each basin standing a fifth of its width inside its neighbour — closed that, and closed it too
+ * far: the rings touched, and a harbour of twenty-three projects read as one field of ships.
+ *
+ * A moat instead, measured in the lattice's own units so it scales with everything else: a clear
+ * cell of water on every side, which is the smallest gap that cannot be mistaken for a place a
+ * ship could stand. What a reader gets back is the thing the basins are for — twenty-three
+ * countable clusters.
  */
-const NEST = 0.78
+export const MOAT = { along: 1.4, across: 1.2 } as const
 
 /**
  * Every berth's plank is on the same side of her.
@@ -352,7 +356,7 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
 
     if (x !== left && x + basin.width > left + room) {
       x = left
-      y = laneTop + laneHeight * NEST + GAP.y
+      y = laneTop + laneHeight + LATTICE.across * MOAT.across
       laneTop = y
       laneHeight = 0
     }
@@ -425,7 +429,7 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
       label: { x: west + basin.label.x, y: top + basin.label.y },
     })
 
-    x += basin.width * NEST + GAP.x
+    x += basin.width + LATTICE.along * MOAT.along
     far = Math.max(far, west + basin.width)
     laneHeight = Math.max(laneHeight, basin.height)
   })
@@ -436,7 +440,7 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
     moorings,
     blocks,
     width: Math.max(1, far + MARGIN.x),
-    height: Math.max(1, laneTop + laneHeight + GAP.y + MARGIN.y),
+    height: Math.max(1, laneTop + laneHeight + LATTICE.across * MOAT.across + MARGIN.y),
     root: { x: TRUNK_X, y: MARGIN.y },
   })
 }
