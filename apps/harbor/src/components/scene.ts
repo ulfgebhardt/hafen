@@ -477,12 +477,23 @@ export interface Scene {
    * about something they did not ask.
    */
   highlight: (ship: Ship | null, chosen?: Chosen | null) => void
+  /**
+   * Put this ship in the middle of the window, at whatever zoom is set.
+   *
+   * For the moment a reader changes pages: the ship they are reading about is on the new page too,
+   * and a window that redraws around her without saying where she went has lost her for them.
+   * Does nothing for a ship this page does not carry, which is the honest answer — there is
+   * nothing to centre on.
+   */
+  focus: (ship: Ship | null) => void
   destroy: () => void
 }
 
 /** One drawn berth, and the pieces the scene keeps a handle on. */
 interface Placed {
   ship: Ship
+  /** Where her berth sits in the drawing, in pixels — what `focus` centres the window on. */
+  spot: { x: number; y: number }
   /** The halo under the hull. */
   chosen: Graphics
   /** The ring around one box aboard — in the body, because the cargo moves with her. */
@@ -1284,6 +1295,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       fleet.addChild(slot)
       placed.push({
         ship: berth.ship,
+        spot: { x: flat.x + (BERTH.pitch / 2) * UNIT, y: flat.y },
         chosen,
         aboard,
         ashore,
@@ -1507,6 +1519,19 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
   })
 
+  const focus = (ship: Ship | null): void => {
+    const entry = placed.find((one) => one.ship.path === ship?.path)
+    if (entry === undefined) {
+      return
+    }
+    const view = viewOf()
+    const scale = zoom ?? fitScale(extent, view)
+    pan = { x: view.width / 2 - entry.spot.x * scale, y: view.height / 2 - entry.spot.y * scale }
+    // Through `settle`, so the same clamp applies as to a drag: a harbour smaller than the window
+    // cannot be pushed off it, and centring must not be the one way round that.
+    settle()
+  }
+
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault()
 
@@ -1600,6 +1625,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * ground because an outline around a body seen from a corner is a shape nobody reads at a
      * glance — that reason went with the view.
      */
+    focus,
     highlight: (ship, chosen = null) => {
       const accent = hex(SCENE.accent)
       for (const entry of placed) {

@@ -126,3 +126,35 @@ export function isBand(page: Page): page is Band {
 export function draws(page: Page): boolean {
   return page !== CONTRACTS
 }
+
+/**
+ * Which set of pages the tab bar offers, and it is a **view** rather than a fourth page.
+ *
+ * Eight figures and five tabs on one line was a bar nobody could aim at: the fleet page and the
+ * band pages answer different questions, and offering both at once made the reader pick the
+ * question before they could pick the page. So the question is picked first, with two buttons,
+ * and the tabs under it are the ones that belong to it.
+ *
+ * The catalog is in both, because it is in neither: it counts demands and not hulls, and is as
+ * much about one dock as about the whole fleet.
+ */
+export const VIEWS = ['dock', 'fleet'] as const
+
+export type View = (typeof VIEWS)[number]
+
+export const VIEW_LABEL: Record<View, string> = { dock: 'Dock', fleet: 'Flotte' }
+
+export const VIEW_MEANING: Record<View, string> = {
+  dock: 'die Baender: Aktiv, Ruhend, Archiviert',
+  fleet: 'die ganze Flotte auf einem Blatt, nach Reederei',
+}
+
+/** The pages one view offers, in the order they are drawn. */
+export function pagesOf(view: View): readonly Page[] {
+  return view === 'fleet' ? [FLEET, CONTRACTS] : [...BANDS, CONTRACTS]
+}
+
+/** Which view a page belongs to — so a page picked elsewhere can put the buttons right. */
+export function viewOf(page: Page): View {
+  return page === FLEET ? 'fleet' : 'dock'
+}

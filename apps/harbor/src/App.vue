@@ -1,7 +1,16 @@
 <script setup lang="ts">
-  import { computed, onErrorCaptured, onMounted, ref } from 'vue'
+  import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
 
-  import { byBand, CONTRACTS, draws, firstBand, FLEET, isBand } from './components/band'
+  import {
+    bandOf,
+    byBand,
+    CONTRACTS,
+    draws,
+    firstBand,
+    FLEET,
+    isBand,
+    viewOf,
+  } from './components/band'
   import BandTabs from './components/BandTabs.vue'
   import ContractList from './components/ContractList.vue'
   import { filterByContract } from './components/contracts'
@@ -24,7 +33,7 @@
     statsFor,
   } from './snapshot'
 
-  import type { Page } from './components/band'
+  import type { Page, View } from './components/band'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
@@ -62,6 +71,35 @@
    */
   const page = ref<Page>('active')
   const query = ref('')
+
+  /**
+   * Switching between the two questions the harbour answers.
+   *
+   * The ship being read comes along: she is on both pages, so the one place a reader could lose
+   * her is exactly here. The band page is therefore hers and not the first non-empty one, and the
+   * drawing centres on her once it is built — see `centre` on the scene.
+   */
+  const view = ref<View>('dock')
+  const showView = (next: View): void => {
+    view.value = next
+    if (next === 'fleet') {
+      page.value = FLEET
+      return
+    }
+    const held = picked.value
+    page.value = held === null ? firstBand(fleet.value) : bandOf(held)
+  }
+
+  /*
+   * A page chosen anywhere else pulls the switch with it — except the catalog, which is in both.
+   * Without this, opening the first band after a snapshot is read would leave the buttons saying
+   * "Flotte" over the band tabs.
+   */
+  watch(page, (next) => {
+    if (next !== CONTRACTS) {
+      view.value = viewOf(next)
+    }
+  })
 
   /**
    * Which demand the basin is narrowed to, picked on the catalog page.
@@ -364,10 +402,12 @@
       />
       <BandTabs
         v-model:page="page"
+        v-model:view="view"
         v-model:query="query"
         :ships="narrowed"
         :contract="contract"
         @clear="contract = null"
+        @view="showView"
       />
 
       <!--
@@ -445,6 +485,7 @@
             :forge="forgeByPath"
             :layout="layout"
             :ships="shown"
+            :centre="picked"
           />
         </main>
 
