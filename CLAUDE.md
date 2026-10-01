@@ -73,9 +73,9 @@ Technik, das Werkzeug ist der Hafen; kein Konflikt.
 ## Quests
 
 Die **Forderung ist eine Entscheidung, die Prüfung eine Messung.** Die Forderung liegt als Datei
-im Store (`$XDG_DATA_HOME/hafen/quests/<kette>/<id>.md`), die Prüfung steht in `probe.ts`, und
-geschrieben wird nur ihr Ergebnis. Beides andersherum scheitert: eine Norm im Code kann niemand ohne Release
-ändern, und eine Prüfung als Prosa lässt sich nicht laufen.
+(`quests/<kette>/<id>.md`), die Prüfung steht in `probe.ts`, und geschrieben wird nur ihr Ergebnis.
+Beides andersherum scheitert: eine Norm im Code kann niemand ohne Release ändern, und eine Prüfung
+als Prosa lässt sich nicht laufen.
 
 **Fünf Urteile, und `nicht messbar` ist keins der anderen vier.** `erfuellt`, `verletzt`,
 `nicht anwendbar`, `Voraussetzung offen`, `nicht messbar`. Das letzte in `verletzt` zu falten
@@ -86,6 +86,13 @@ Lücke zu behaupten.
 **Jede Antwort trägt ihre Evidenz**: was gefragt wurde, wo nachgesehen wurde, was dort stand.
 Ein blankes Urteilswort wäre zu glauben statt zu prüfen — und damit dasselbe wie das gepflegte
 Statusfeld, das es ersetzt. `--evidenz` zeigt sie.
+
+**Der Katalog liegt im Repo** (`store/quests/`, `BUILTIN_STORE` in `command.ts`), der lokale Store
+daneben. Bis 01.10.2026 lag er nur in `$XDG_DATA_HOME/hafen`: eine frische Installation forderte
+dann nichts und zeichnete eine Flotte ohne ein einziges Urteil — das Werkzeug sah kaputt aus,
+obwohl es korrekt eine leere Norm gemessen hatte. Im Store bleibt, was eine *Entscheidung dieser
+Maschine* ist: `register.md` und zusätzliche Quests. Die Richtung ist dieselbe wie unten, nur eine
+Ebene höher: der mitgelieferte Katalog führt, der Store ergänzt und schwächt nie ab.
 
 **Der Katalog führt, ein Schiff darf ergänzen und nie abschwächen** (`catalog.ts`). Ein Repo
 kann in `.hafen/quests/` eigene Forderungen ablegen — `gilt_fuer` ist eine geschlossene Vokabel

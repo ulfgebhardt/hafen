@@ -1,7 +1,8 @@
-import { mockPorts, renderQuest } from '@hafen/core'
+import { mockPorts, readQuestCatalog, renderQuest } from '@hafen/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DEFAULT_ROOT, DEFAULT_STORE, main, USAGE } from './command'
+import { nodePorts } from './adapters/node'
+import { BUILTIN_STORE, DEFAULT_ROOT, DEFAULT_STORE, main, USAGE } from './command'
 
 import type { MockSetup, Ports, ProcPort, Quest } from '@hafen/core'
 
@@ -442,6 +443,13 @@ describe(main, () => {
       'git for-each-ref --format=',
       'git branch --merged',
       'git symbolic-ref --short refs/remotes/origin/HEAD',
+      /*
+       * Added with the size reading: `git grep -I -c '' HEAD` counts the lines of every text file
+       * in the tree, and the `-I` leaves git to decide what is binary. A search is a question —
+       * and this list noticed it before anybody had to think about it, which is the whole reason
+       * it is an allow list.
+       */
+      'git grep -I -c',
       'git submodule status',
       // The forge reading, and the only two that leave this machine. Both are GETs: a GraphQL
       // *query* has no side effect by definition, and `curl` is given no method and no body.
@@ -670,5 +678,48 @@ describe('schnappschuss --forge', () => {
       main(['schnappschuss', ROOT, '--forge=', `--store=${STORE}`], withShip()),
     ).resolves.toBe(0)
     expect((JSON.parse(stdout()) as { ships: unknown[] }).ships).toHaveLength(1)
+  })
+})
+
+describe('the catalog that travels with the tool', () => {
+  /**
+   * A fresh checkout used to measure against no demands at all: the catalog lived in a store
+   * somebody had to create first, so every quest verdict was simply absent. Read off the real
+   * directory with the real adapter, because "it ships with the tool" is a claim about the disk.
+   */
+  it('ships a readable catalog in the repository', async () => {
+    const catalog = await readQuestCatalog(nodePorts.fs, BUILTIN_STORE)
+
+    expect(catalog.unreadable).toStrictEqual([])
+    expect(catalog.quests.map((one) => one.id)).toContain('lint')
+    expect(catalog.quests.length).toBeGreaterThan(5)
+  })
+
+  /** The built-in catalog leads and the store adds — and a repeated id is said out loud. */
+  it('says which ids a store repeats', async () => {
+    const stderr = err()
+    const lint = roleQuest('lint', 'lint')
+    const mine = storing([lint])
+    const both = {
+      dirs: {
+        ...mine.dirs,
+        [`${BUILTIN_STORE}/quests`]: ['werft'],
+        [`${BUILTIN_STORE}/quests/werft`]: ['lint.md'],
+      },
+      files: {
+        ...mine.files,
+        [`${BUILTIN_STORE}/quests/werft/lint.md`]: renderQuest(lint),
+      },
+    }
+
+    await expect(
+      main(
+        ['schnappschuss', ROOT, `--store=${STORE}`],
+        nodeShip({ 'test:lint': 'eslint .' }, both),
+      ),
+    ).resolves.toBe(0)
+
+    expect(stderr()).toContain('fordert 1 Id(s) erneut')
+    expect(stderr()).toContain('lint')
   })
 })

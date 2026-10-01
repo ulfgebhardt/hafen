@@ -108,17 +108,15 @@ eine Forderung, die hier nicht gilt, ist keine bestandene.
 
 ## Der Katalog
 
-Was die Flotte fordert, liegt als Markdown im Store — `$HAFEN_STORE`, sonst
-`$XDG_DATA_HOME/hafen` (also meist `~/.local/share/hafen`):
+Was die Flotte fordert, liegt als Markdown **in diesem Repository** — `store/quests/`, und damit
+fordert eine frische Installation von Anfang an etwas:
 
 ```
-~/.local/share/hafen/
-  quests/werft/lint.md              # ein Schritt misst Lint, und die CI ruft ihn auf
-  quests/werft/gitignore.md         # .gitignore liegt im Wurzelverzeichnis
-  quests/werft/env-ignoriert.md     # sie nennt .env, bevor jemand eine anlegt
-  quests/flagge/lizenz.md           # LICENSE, LICENCE oder COPYING — eine davon
-  quests/auslauf/release-please.md  # der Release-Weg liegt im Repo
-  register.md
+store/quests/werft/lint.md              # ein Schritt misst Lint, und die CI ruft ihn auf
+store/quests/werft/gitignore.md         # .gitignore liegt im Wurzelverzeichnis
+store/quests/werft/env-ignoriert.md     # sie nennt .env, bevor jemand eine anlegt
+store/quests/flagge/lizenz.md           # LICENSE, LICENCE oder COPYING — eine davon
+store/quests/auslauf/release-please.md  # der Release-Weg liegt im Repo
 ```
 
 Die Kette vor der Id ist keine Ordnung zum Sortieren, sondern die aus Konzept §4: `werft` ist
@@ -127,12 +125,23 @@ nennt ihre Prüfung im Frontmatter, ihre Begründung im Fließtext, und was sie 
 kann, benennt sie als `manuell` — der blinde Fleck soll klein und benannt sein, statt still zu
 wachsen.
 
+Daneben steht der **Store**: `$HAFEN_STORE`, sonst `$XDG_DATA_HOME/hafen` (meist
+`~/.local/share/hafen`). Er ist eine Ergänzung und keine Voraussetzung — in ihm steht, was eine
+Entscheidung ist und keine Messung:
+
+```
+~/.local/share/hafen/
+  register.md          # welche Verzeichnisse aufgenommen und welche archiviert sind
+  quests/…             # zusätzliche Forderungen dieser Flotte
+```
+
 Der Store bleibt **lokal**. `register.md` führt jedes Repo mit absolutem Pfad, und das ist eine
 Liste von Projekten und Kunden — nichts, was in ein öffentliches Repository gehört.
 
-Ein einzelnes Repo darf in `.hafen/quests/` eigene Forderungen ergänzen. **Der Katalog führt:**
-eine lokale Quest mit einer Id, die der Katalog schon fordert, wird verworfen — und das steht in
-der Ausgabe, damit die Regel sichtbar ist.
+Beide Richtungen ergänzen, keine schwächt ab, und **der mitgelieferte Katalog führt**: eine Quest
+aus dem Store oder aus dem `.hafen/quests/` eines einzelnen Repos, deren Id hier schon gefordert
+wird, wird verworfen — und das steht in der Ausgabe, damit die Regel sichtbar ist. Befreien geht
+die andere Richtung und gehört ins Register, an eine Stelle und von Hand.
 
 ## Das Fenster
 

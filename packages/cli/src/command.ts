@@ -1,4 +1,6 @@
 import { homedir } from 'node:os'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   EMPTY_REGISTER,
@@ -7,6 +9,7 @@ import {
   inspectShip,
   isRead,
   parseRegister,
+  mergeCatalogs,
   readQuestCatalog,
   readStats,
   renderRegister,
@@ -68,6 +71,15 @@ export const DEFAULT_STORE =
   // eslint-disable-next-line n/no-process-env -- same reason, one line down
   process.env['HAFEN_STORE'] ??
   `${XDG_DATA !== undefined && XDG_DATA !== '' ? XDG_DATA : `${homedir()}/.local/share`}/hafen`
+
+/**
+ * The catalog that travels with the tool.
+ *
+ * Resolved from this file rather than from the working directory: `hafen` is run from inside
+ * whatever repository somebody happens to be in, and a relative path would read that repository's
+ * `store/` instead of its own. Two levels up from `packages/cli/src` is the checkout.
+ */
+export const BUILTIN_STORE = resolve(dirname(fileURLToPath(import.meta.url)), '../../..', 'store')
 
 /**
  * Where `hafen forge` writes, and therefore where the survey looks for it.
@@ -180,11 +192,35 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
    * quest file with a typo is a demand the whole fleet silently stops being held to.
    */
   const demands = async (): Promise<readonly Quest[]> => {
-    const catalog = await readQuestCatalog(ports.fs, store)
-    for (const path of catalog.unreadable) {
+    /*
+     * The catalog the tool **brings with it**, and then whatever the store adds.
+     *
+     * It used to live only in a store somebody had to create, so a fresh checkout measured a fleet
+     * against no demands at all and every quest verdict was simply absent. The demands in `store/`
+     * are the fleet's — they travel with the tool, and a machine that clones this repository has a
+     * working harbour on the first run.
+     *
+     * The built-in catalog **leads**, the store **adds**: the same rule a ship's own
+     * `.hafen/quests` follows, one level up. A store quest that reuses an id of the catalog is
+     * discarded and said out loud — a rule whose only bite is invisible is no rule.
+     */
+    const builtIn = await readQuestCatalog(ports.fs, BUILTIN_STORE)
+    const mine = await readQuestCatalog(ports.fs, store)
+    for (const path of builtIn.unreadable) {
+      process.stderr.write(`! keine lesbare Quest: ${BUILTIN_STORE}/${path}\n`)
+    }
+    for (const path of mine.unreadable) {
       process.stderr.write(`! keine lesbare Quest: ${store}/${path}\n`)
     }
-    return catalog.quests
+    const merged = mergeCatalogs(builtIn, mine)
+    if (merged.overridden.length > 0) {
+      // One line and not one per id: a store that mirrors the catalog would otherwise print a
+      // wall of them on every run, and a message nobody reads is a message nobody reads.
+      process.stderr.write(
+        `! ${store} fordert ${String(merged.overridden.length)} Id(s) erneut — der mitgelieferte Katalog gilt: ${merged.overridden.join(', ')}\n`,
+      )
+    }
+    return merged.quests
   }
 
   /**
