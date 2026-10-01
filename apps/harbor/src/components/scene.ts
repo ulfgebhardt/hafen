@@ -34,7 +34,7 @@ import { conditionOf } from './condition'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
 import { harbourOf as laneHarbour } from './lanes'
-import { harbourOf as fanHarbour, MARGIN, QUAY, walksOf, waysAt } from './moorings'
+import { harbourOf as fanHarbour, MARGIN, QUAY, reachOf, walksOf, waysAt } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { carriageOf, lanesOf, PACE, routesOf } from './traffic'
@@ -300,7 +300,16 @@ function ground(harbour: Harbour, extent: Extent): Container {
   return group
 }
 
-/** The organisation's name on its own dock, because a flag alone does not spell anything. */
+/**
+ * The organisation's name on its own dock, because a flag alone does not spell anything.
+ *
+ * Centred over the dock rather than hung on its left corner: the name belongs to the whole block,
+ * and read from the corner it looked like it belonged to the ship standing there. Over and not
+ * *in* the block — the one band that is certainly free is the water above it, and a label laid
+ * across the middle would sit on hulls, captions and cargo at once.
+ *
+ * The flag goes to the left of the text and moves with it, so the two stay one object.
+ */
 function dockLabels(harbour: Harbour): Container {
   const group = new Container()
   for (const block of harbour.blocks) {
@@ -308,11 +317,14 @@ function dockLabels(harbour: Harbour): Container {
       text: fit(block.org, Math.max(6, Math.floor(block.width / 3.4))),
       style: DOCK_LABEL,
     })
-    text.position.set(block.at.x * UNIT, (block.at.y - 6) * UNIT)
+    const middle = (block.at.x + block.width / 2) * UNIT
+    // Measured off the text itself: a monospace guess is wrong for every name but one.
+    const left = middle - text.width / 2
+    text.position.set(left, (block.at.y - 6) * UNIT)
     group.addChild(text)
 
     const mark = new Graphics()
-    mark.rect(block.at.x * UNIT - 10, (block.at.y - 5.6) * UNIT, 6, 8)
+    mark.rect(left - 10, (block.at.y - 5.6) * UNIT, 6, 8)
     mark.fill({ color: flagTint(block.org), alpha: 0.9 })
     group.addChild(mark)
   }
@@ -433,6 +445,8 @@ interface Placed {
   hull: Hull
   /** How far off her pier she lies — the gangway is drawn from it, so the ring needs it too. */
   offset: number
+  /** How far her planking is, measured. The gangway ends on it, so the ring has to know as well. */
+  reach: number
   restY: number
   restRotation: number
   /** How much she moves at her own berth — her size, never her condition. */
@@ -822,6 +836,8 @@ function drawVessel(
   offset: number,
   traits: Traits,
   org: string,
+  /** How far her planking really is — measured per berth, see `reachOf`. */
+  reach: number,
 ): void {
   const condition = conditionOf(ship)
   const plate = hex(HULL_COLOR[rustLevel(ship.rustDays)])
@@ -835,7 +851,7 @@ function drawVessel(
    * before it finds a crate among crates.
    */
   if (pierMarks(ship, hull).length > 0) {
-    const plank = gangwayOf(hull, offset)
+    const plank = gangwayOf(hull, offset, reach)
     const from = project(plank.from)
     const to = project(plank.to)
     rigging
@@ -845,7 +861,7 @@ function drawVessel(
   }
 
   const mooring = rigging
-  for (const line of mooringOf(hull, offset)) {
+  for (const line of mooringOf(hull, offset, reach)) {
     const from = project(line.from)
     const to = project(line.to)
     mooring.moveTo(from.x, from.y).lineTo(to.x, to.y)
@@ -1076,7 +1092,14 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * different frames at all.
      */
     const onTap =
-      (ship: Ship, hull: Hull, offset: number, body: Container, quayside: Container) =>
+      (
+        ship: Ship,
+        hull: Hull,
+        offset: number,
+        reach: number,
+        body: Container,
+        quayside: Container,
+      ) =>
       (event: FederatedPointerEvent): void => {
         const aboard = event.getLocalPosition(body)
         const ashore = event.getLocalPosition(quayside)
@@ -1104,7 +1127,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
         // Last, because it is the widest target and stands for the least specific thing.
         const plank =
-          pierMarks(ship, hull).length > 0 && boxAt([gangwayBox(hull, offset)], onDeck) !== null
+          pierMarks(ship, hull).length > 0 &&
+          boxAt([gangwayBox(hull, offset, reach)], onDeck) !== null
         selected(ship, plank ? PIER : null)
       }
 
@@ -1120,6 +1144,12 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
       const hull = hullOf(berth.ship, scoreOf(berth.ship))
       const offset = offsetOf(berth.ship)
+      /*
+       * How far her planking is, asked of the graph rather than taken from the berth arithmetic.
+       * The two agree in the fan and differ by half a pier in the lanes, where two rows share one
+       * spine — and the drawing followed the arithmetic, so the lines stopped in open water.
+       */
+      const reach = reachOf(harbour, berth)
 
       // The planking: it belongs to the berth, so it is mirrored with the side and never moved.
       const quayside = new Container()
@@ -1138,7 +1168,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       body.addChild(chosen)
       slot.addChild(body)
 
-      drawVessel(berth.ship, body, hull, offset, traits, berth.org)
+      drawVessel(berth.ship, body, hull, offset, traits, berth.org, reach)
       // On top of the cargo: a ring under a box would be hidden by the box it marks.
       body.addChild(aboard)
       slot.addChild(caption(berth.ship, side))
@@ -1156,7 +1186,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         (BERTH.pier + BERTH.lane + BERTH.caption) * UNIT,
       )
       slot.on('pointerover', onEnter(berth.ship))
-      slot.on('pointertap', onTap(berth.ship, hull, offset, body, quayside))
+      slot.on('pointertap', onTap(berth.ship, hull, offset, reach, body, quayside))
 
       fleet.addChild(slot)
       placed.push({
@@ -1167,6 +1197,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         body,
         hull,
         offset,
+        reach,
         restY: side * offset * UNIT,
         restRotation: body.rotation,
         /*
@@ -1251,7 +1282,12 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
 
     for (const [index, berth] of order.entries()) {
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
-      const plankY = (berth.spot.y - berth.side * BERTH.laneCentre) * UNIT
+      /*
+       * On the walkway and not beside it: the same measured distance the lines use. With
+       * `BERTH.laneCentre` the lift ran half a pier off the spine in every lane view, which is
+       * what "die Wege sind fuer die Kraene viel zu klein" was actually showing.
+       */
+      const plankY = (berth.spot.y - berth.side * reachOf(harbour, berth)) * UNIT
       const from = berth.spot.x * UNIT
       const to = (berth.spot.x + BERTH.pitch) * UNIT
 
@@ -1512,7 +1548,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
            * the crates lit up and the plank stayed grey, which reads as "that did something else".
            * In the body, because that is where it is drawn: the gangway moves with her.
            */
-          const plank = gangwayOf(entry.hull, entry.offset)
+          const plank = gangwayOf(entry.hull, entry.offset, entry.reach)
           const from = project(plank.from)
           const to = project(plank.to)
           entry.aboard

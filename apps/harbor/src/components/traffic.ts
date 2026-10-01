@@ -248,25 +248,17 @@ export function lanesOf(harbour: Harbour): readonly Segment[] {
       (spot) => spot.x,
     ),
   ])
-  const down = scan(harbour.width, harbour.height, (x) => [
-    ...walls
-      .filter((wall) => x >= wall.x && x <= wall.x + wall.width)
-      .map((wall) => ({ from: wall.y, to: wall.y + wall.height })),
-    ...alongside(
-      x,
-      (spot) => spot.x,
-      (spot) => spot.y,
-    ),
-  ])
-
-  return [
-    ...across.map((lane) => ({
-      from: { x: lane.span.from, y: lane.at },
-      to: { x: lane.span.to, y: lane.at },
-    })),
-    ...down.map((lane) => ({
-      from: { x: lane.at, y: lane.span.from },
-      to: { x: lane.at, y: lane.span.to },
-    })),
-  ]
+  /*
+   * Across only, and never down.
+   *
+   * A launch is drawn from above as a hull pointing along its course, and at this scale a hull
+   * seen end-on is a wedge with nothing to read in it — a boat climbing the picture looked like a
+   * rocket rather than like traffic. The harbour runs east-west in both arrangements anyway:
+   * every plank, every quay and every ship lies that way, so a lane across the water is the one
+   * that reads as a fairway beside them.
+   */
+  return across.map((lane) => ({
+    from: { x: lane.span.from, y: lane.at },
+    to: { x: lane.span.to, y: lane.at },
+  }))
 }

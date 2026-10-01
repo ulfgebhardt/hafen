@@ -383,6 +383,63 @@ function shift(harbour: Harbour): Harbour {
 }
 
 /**
+ * Walkways cut back until every loose end carries a ship.
+ *
+ * A limb is laid out to a group's sector before the berths on it are placed, and where a berth is
+ * rejected on geometry the piece of walkway that was going to serve it stays. Measured on this
+ * fleet: three such ends in the fan, none in the lanes — and in the drawing they are the little
+ * peaks that run out and stop in open water, which is exactly what a walkway must never look
+ * like. A way is a promise that somebody can get somewhere.
+ *
+ * Cut repeatedly, because the end behind a cut end is a new end. The root stays whatever happens:
+ * it stands on the quay and is where every route begins.
+ */
+export function trimmed(harbour: Harbour): Harbour {
+  const moored = new Set(harbour.moorings.map((mooring) => mooring.node))
+  let quays = harbour.quays
+  let ways = harbour.ways
+  for (;;) {
+    const touches = new Map<number, number>()
+    for (const way of ways) {
+      touches.set(way.from, (touches.get(way.from) ?? 0) + 1)
+      touches.set(way.to, (touches.get(way.to) ?? 0) + 1)
+    }
+    const loose = new Set(
+      quays
+        .filter(
+          (quay) =>
+            quay.rank !== 'root' && !moored.has(quay.id) && (touches.get(quay.id) ?? 0) <= 1,
+        )
+        .map((quay) => quay.id),
+    )
+    if (loose.size === 0) {
+      return { ...harbour, quays, ways }
+    }
+    quays = quays.filter((quay) => !loose.has(quay.id))
+    ways = ways.filter((way) => !loose.has(way.from) && !loose.has(way.to))
+  }
+}
+
+/**
+ * Whether every loose end of the walkways carries a ship.
+ *
+ * The other half of `reachesShore`: that one says every ship can reach the land, this one says
+ * every piece of walkway is there for a ship. Both are about the same graph and neither implies
+ * the other — a way to nowhere strands nobody, it just lies about being a route.
+ */
+export function endsAtAShip(harbour: Harbour): boolean {
+  const moored = new Set(harbour.moorings.map((mooring) => mooring.node))
+  const touches = new Map<number, number>()
+  for (const way of harbour.ways) {
+    touches.set(way.from, (touches.get(way.from) ?? 0) + 1)
+    touches.set(way.to, (touches.get(way.to) ?? 0) + 1)
+  }
+  return harbour.quays.every(
+    (quay) => quay.rank === 'root' || moored.has(quay.id) || (touches.get(quay.id) ?? 0) > 1,
+  )
+}
+
+/**
  * Lay the fleet out as a fan, then hang the walkways off the shore.
  *
  * Groups arrive biggest-first from `fleetlets` and are dealt into sectors from the middle outward,
@@ -845,7 +902,7 @@ export function harbourOf(groups: readonly Fleetlet[], aspect = 16 / 9): Harbour
     })
   }
 
-  return shift({ quays, ways, moorings, blocks, width: 1, height: 1, root })
+  return shift(trimmed({ quays, ways, moorings, blocks, width: 1, height: 1, root }))
 }
 
 /**
@@ -903,6 +960,49 @@ export function reachesShore(harbour: Harbour, ways: readonly Way[] = harbour.wa
 /** Which ways touch this quay — what somebody standing on it can walk. */
 export function waysAt(harbour: Harbour, quay: number): readonly Way[] {
   return harbour.ways.filter((way) => way.from === quay || way.to === quay)
+}
+
+/**
+ * How far her planking really is, measured off the graph instead of assumed.
+ *
+ * `BERTH.laneCentre` is what the berth arithmetic *intends*, and it is right in the fan, where
+ * every ship has a plank of her own. The lane harbour hangs two rows off one shared spine, so the
+ * drawn line runs down the middle of the planking and is half a pier further away — measured,
+ * 6.2 units against 4.6. Her lines therefore ended in open water and her travel lift ran beside
+ * the walkway rather than on it, in every view but one.
+ *
+ * So the drawing asks rather than assumes. Returns the intended distance where a berth has no
+ * walkway at all, which cannot happen in either arrangement and must still answer with a number.
+ */
+export function reachOf(harbour: Harbour, mooring: Mooring): number {
+  const byId = new Map(harbour.quays.map((quay) => [quay.id, quay.spot]))
+  let nearest: number | null = null
+  for (const way of harbour.ways) {
+    if (way.kind !== 'tree' || (way.from !== mooring.node && way.to !== mooring.node)) {
+      continue
+    }
+    const from = byId.get(way.from)
+    const to = byId.get(way.to)
+    if (from === undefined || to === undefined) {
+      continue
+    }
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const square = dx * dx + dy * dy
+    const along =
+      square === 0
+        ? 0
+        : Math.min(
+            1,
+            Math.max(0, ((mooring.spot.x - from.x) * dx + (mooring.spot.y - from.y) * dy) / square),
+          )
+    const gap = Math.hypot(
+      mooring.spot.x - (from.x + dx * along),
+      mooring.spot.y - (from.y + dy * along),
+    )
+    nearest = nearest === null ? gap : Math.min(nearest, gap)
+  }
+  return nearest ?? BERTH.laneCentre
 }
 
 /** What one berth occupies, for the checks that ask whether two of them can both be right. */
