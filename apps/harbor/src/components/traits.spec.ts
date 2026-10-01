@@ -4,6 +4,7 @@ import { quest, ship } from './testing'
 import {
   CREW_MOST,
   livelinessOf,
+  OPERATOR_DAYS,
   readingsOf,
   reachOf,
   standingOf,
@@ -12,6 +13,7 @@ import {
   traitsOf,
 } from './traits'
 
+import type { Readings, Traits } from './traits'
 import type { ForgeStats } from '@hafen/core'
 
 const stats = (stars: number): ForgeStats => ({
@@ -211,5 +213,41 @@ describe(livelinessOf, () => {
     const mixed = [ship({ rustDays: 1 }), ship({ archived: true, rustDays: 2000 })]
 
     expect(livelinessOf(mixed)).toBeLessThan(livelinessOf([ship({ rustDays: 1 })]))
+  })
+})
+
+describe('the crane on an apron', () => {
+  const traits = (overrides: Partial<Readings>): Traits =>
+    traitsOf({ ...readingsOf(ship(), null), ...overrides })
+
+  /** A crane where there is something to lift: a repository that owes nothing has a bare apron. */
+  it('stands where something is waiting, and nowhere else', () => {
+    expect(traits({ binding: 4, met: 1 }).crane).toBe(true)
+    expect(traits({ binding: 4, met: 4 }).crane).toBe(false)
+    expect(traits({ binding: 0, met: 0 }).crane).toBe(false)
+  })
+
+  /** Somebody is at it only where the work is current — a week, the sharp end of `active`. */
+  it('is worked only on what was touched this week', () => {
+    expect(traits({ binding: 3, met: 0, rustDays: OPERATOR_DAYS }).operator).toBe(true)
+    expect(traits({ binding: 3, met: 0, rustDays: OPERATOR_DAYS + 1 }).operator).toBe(false)
+    expect(traits({ binding: 3, met: 0, rustDays: null }).operator).toBe(false)
+  })
+
+  /**
+   * Not tied to size or score: a small repository worked on yesterday is being worked on, and a
+   * big one nobody has opened in a month is not.
+   */
+  it('says nothing about how big she is', () => {
+    const small = traits({ binding: 2, met: 0, rustDays: 1, points: 10 })
+    const large = traits({ binding: 2, met: 0, rustDays: 40, points: 30000 })
+
+    expect(small.operator).toBe(true)
+    expect(large.operator).toBe(false)
+  })
+
+  /** No stack, no operator: there would be nothing for them to move. */
+  it('puts nobody at a crane that is not there', () => {
+    expect(traits({ binding: 2, met: 2, rustDays: 0 }).operator).toBe(false)
   })
 })

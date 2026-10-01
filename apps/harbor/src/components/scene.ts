@@ -41,6 +41,10 @@ import { lanesOf, networkOf, PACE, routesOf, stepFrom } from './traffic'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
 import {
   boxAt,
+  APRON_EDGE,
+  apronOf,
+  apronWalk,
+  apronX,
   bridgeOf,
   cargoOf,
   hasPlume,
@@ -48,6 +52,7 @@ import {
   gangwayBox,
   gangwayOf,
   hullMarks,
+  LANDED,
   landedOf,
   mooringOf,
   offsetOf,
@@ -531,6 +536,23 @@ function pierLoad(ship: Ship, hull: Hull): Graphics {
   const load = new Graphics()
 
   const owed = landedOf(ship, hull)
+  /*
+   * The ground the stack stands on, before the stack.
+   *
+   * It floated until now: boxes on open water, which says nothing about how anybody would ever
+   * get at them. Drawn as the same concrete as the planking, one margin wider than the boxes on
+   * every side — and that margin is exactly the aisle `apronWalk` walks, so the platform and the
+   * path are one measurement rather than two that can drift.
+   */
+  const apron = apronOf([...owed, ...pierMarks(ship, hull)])
+  if (apron !== null) {
+    slab(load, apron.spot, apron.along, apron.across).fill({ color: hex(SCENE.quay), alpha: 1 })
+    slab(load, apron.spot, apron.along, apron.across).stroke({
+      width: 1,
+      color: hex(SCENE.quayEdge),
+      alpha: 0.6,
+    })
+  }
   for (const box of owed) {
     const color = hex(VERDICT_COLOR[box.quest.verdict])
     const form = SEGMENT[box.quest.verdict]
@@ -851,6 +873,33 @@ function windows(hull: Hull, traits: Traits, decks: number): Graphics {
 }
 
 /**
+ * A crane on the apron: a post, a boom reaching for the bow, and the ground it stands on.
+ *
+ * Drawn where there is something to lift, which is a stack of open demands — a ship that owes
+ * nothing gets a bare apron, and that is the right picture. The boom points over the forecastle
+ * and never over the cargo: the deck between `DECK.from` and `DECK.to` is the contract, and the
+ * one thing this drawing does not do is put a grey bar across it.
+ */
+function crane(hull: Hull, reach: { x: number; y: number }): Graphics {
+  const post = new Graphics()
+  const steel = hex(SCENE.crane)
+  const foot = project({ x: apronX(hull) - APRON_EDGE, y: 0 })
+
+  post.circle(foot.x, foot.y, 1.1 * UNIT).stroke({ width: 1.2, color: steel, alpha: 0.75 })
+  post.circle(foot.x, foot.y, 0.4 * UNIT).fill({ color: steel, alpha: 0.5 })
+  post
+    .moveTo(foot.x, foot.y)
+    .lineTo(reach.x, reach.y)
+    .stroke({ width: 1.2, color: steel, alpha: 0.5 })
+  // A counterweight astern of the post, so the boom reads as a boom and not as a stray line.
+  post
+    .moveTo(foot.x, foot.y)
+    .lineTo(foot.x + 1.8 * UNIT, foot.y)
+    .stroke({ width: 2.4, color: steel, alpha: 0.4 })
+  return post
+}
+
+/**
  * The organisation's flag, at the masthead aft.
  *
  * Cut and colour, never colour alone — the same rule the verdict segments follow, and here it
@@ -1123,6 +1172,22 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     roll: () => number
   }[] = []
   let network: Network = { where: new Map(), next: new Map() }
+  /**
+   * The packages a crane is carrying, and they exist **only while they are in the air**.
+   *
+   * A crate is taken up at the stack and set down on the forecastle, and the drawing must not
+   * claim anything by that: a demand that is still owed is still owed wherever the picture shows
+   * a box moving. So the measured stack never changes — the crate comes into being at the pick
+   * and ceases at the set-down, which is also exactly what somebody watching a crane sees.
+   */
+  let hoists: {
+    crate: Graphics
+    from: { x: number; y: number }
+    to: { x: number; y: number }
+    /** Seconds for one lift, and where in that cycle this one starts. */
+    period: number
+    phase: number
+  }[] = []
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
   let zoom: number | null = null
@@ -1160,6 +1225,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     placed = []
     traffic = []
     crews = []
+    hoists = []
 
     /*
      * The shape the plan is laid out towards is the *window's*, not a constant.
@@ -1248,7 +1314,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * Collected here because this is where the hull is worked out anyway, and handed to the walk
      * network below: the gangway is drawn as a way aboard, so it had better be one.
      */
-    const walkable = new Map<number, readonly Spot[]>()
+    const walkable = new Map<number, readonly (readonly Spot[])[]>()
 
     for (const berth of order) {
       const side: Side = berth.side
@@ -1304,19 +1370,65 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       slot.on('pointertap', onTap(berth.ship, hull, offset, reach, body, quayside))
 
       /*
+       * The crane, and the one package it is carrying right now.
+       *
+       * The crane stands where something waits; somebody is at it only where the repository was
+       * touched this week — `traits.crane` and `traits.operator`, both measured in `traits.ts`.
+       * Without an operator the crane stands there and nothing moves, which is a harbour too.
+       */
+      const owed = landedOf(berth.ship, hull)
+      const toBow = project({ x: hull.length * 0.9, y: 0 })
+      if (traits.crane) {
+        quayside.addChild(crane(hull, toBow))
+      }
+      if (traits.operator && owed.length > 0) {
+        const crate = new Graphics()
+        const first = owed[0]?.spot ?? { x: apronX(hull), y: 0 }
+        slab(crate, { x: 0, y: 0 }, LANDED.along * 0.7, LANDED.across * 0.9).fill({
+          color: hex(SCENE.crane),
+          alpha: 0.45,
+        })
+        slab(crate, { x: 0, y: 0 }, LANDED.along * 0.7, LANDED.across * 0.9).stroke({
+          width: 1,
+          color: hex(SCENE.crane),
+          alpha: 0.8,
+        })
+        crate.visible = false
+        quayside.addChild(crate)
+        hoists.push({
+          crate,
+          from: project(first),
+          to: toBow,
+          // Slower for a big stack: a crane with twenty boxes to move does not hurry each one.
+          period: 6 + (owed.length % 4),
+          phase: drift(berth.ship.path),
+        })
+      }
+
+      /*
        * Her deck, in the harbour's own coordinates.
        *
        * The berth's frame is mirrored for a ship on the other side (`body.scale.y = side`) and
        * shifted by how far off the pier she lies, so the same two numbers that place her place
        * the walk aboard her. Nothing here rotates: a berth is drawn square in both arrangements.
        */
-      walkable.set(
-        berth.node,
-        promenadeOf(hull).map((spot) => ({
-          x: berth.spot.x + spot.x,
-          y: berth.spot.y + side * (spot.y + offset),
-        })),
-      )
+      const toHarbour = (spot: Spot, afloat: boolean): Spot => ({
+        x: berth.spot.x + spot.x,
+        y: berth.spot.y + side * (spot.y + (afloat ? offset : 0)),
+      })
+      walkable.set(berth.node, [
+        promenadeOf(hull).map((spot) => toHarbour(spot, true)),
+        /*
+         * And the apron, which is the second piece of ground at this berth.
+         *
+         * It hangs off the same plank, so somebody can walk from the quay out among the packages
+         * and back. Not shifted by `offset`: the stack stands on the pier and stays there however
+         * far off it the ship happens to lie.
+         */
+        apronWalk([...landedOf(berth.ship, hull), ...pierMarks(berth.ship, hull)]).map((spot) =>
+          toHarbour(spot, false),
+        ),
+      ])
 
       fleet.addChild(slot)
       placed.push({
@@ -1522,6 +1634,26 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * rather than losing it. On arrival she is asked once where to go next — that one question is
      * the whole behaviour, and it lives in `stepFrom`.
      */
+    /*
+     * The crane's cycle: lift, carry, set down, and nothing in between.
+     *
+     * The crate is invisible outside the carry, which is what "the packages come into being when
+     * they are picked up and cease when they are set down" means — and it is the only way to draw
+     * this without the drawing claiming a demand was met.
+     */
+    for (const hoist of hoists) {
+      const cycle = (((now / hoist.period + hoist.phase) % 1) + 1) % 1
+      const carrying = cycle > 0.15 && cycle < 0.75
+      hoist.crate.visible = carrying
+      if (carrying) {
+        const along = (cycle - 0.15) / 0.6
+        hoist.crate.position.set(
+          hoist.from.x + (hoist.to.x - hoist.from.x) * along,
+          hoist.from.y + (hoist.to.y - hoist.from.y) * along,
+        )
+      }
+    }
+
     const seconds = app.ticker.deltaMS / 1000
     for (const crew of crews) {
       const from = network.where.get(crew.from)

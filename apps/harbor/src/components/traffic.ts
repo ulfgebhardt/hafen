@@ -281,11 +281,17 @@ export interface Network {
   next: ReadonlyMap<Place, readonly Place[]>
 }
 
-/** The walkways as a graph of places, plus whatever deck each berth offers. */
+/** The walkways as a graph of places, plus whatever walkable ground each berth offers. */
 export function networkOf(
   harbour: Harbour,
-  /** Per mooring node, the ring of spots aboard her — in world units. */
-  aboard: ReadonlyMap<number, readonly Spot[]> = new Map(),
+  /**
+   * Per mooring node, the rings of walkable ground that hang off her plank — in world units.
+   *
+   * Rings rather than one ring: a berth has two pieces of ground a person can be on, her deck and
+   * the apron her load waits on, and both reach the planking at the same place. Each is a closed
+   * loop, so one shape of thing covers both and the network needs no second idea.
+   */
+  aboard: ReadonlyMap<number, readonly (readonly Spot[])[]> = new Map(),
 ): Network {
   const where = new Map<Place, Spot>()
   const next = new Map<Place, Place[]>()
@@ -321,21 +327,24 @@ export function networkOf(
    * walking aboard is one step from the planking and not a jump. The ring closes on itself, so a
    * figure can go round her instead of pacing one side.
    */
-  for (const [node, ring] of aboard) {
+  for (const [node, rings] of aboard) {
     const plank: Place = `q${String(node)}`
-    if (!where.has(plank) || ring.length === 0) {
+    if (!where.has(plank)) {
       continue
     }
-    ring.forEach((spot, index) => {
-      where.set(`d${String(node)}.${String(index)}`, spot)
+    rings.forEach((ring, which) => {
+      if (ring.length === 0) {
+        return
+      }
+      const name = (index: number): Place => `d${String(node)}.${String(which)}.${String(index)}`
+      ring.forEach((spot, index) => {
+        where.set(name(index), spot)
+      })
+      join(plank, name(0))
+      for (let index = 0; index < ring.length; index += 1) {
+        join(name(index), name((index + 1) % ring.length))
+      }
     })
-    join(plank, `d${String(node)}.0`)
-    for (let index = 0; index < ring.length; index += 1) {
-      join(
-        `d${String(node)}.${String(index)}`,
-        `d${String(node)}.${String((index + 1) % ring.length)}`,
-      )
-    }
   }
 
   return { where, next }
