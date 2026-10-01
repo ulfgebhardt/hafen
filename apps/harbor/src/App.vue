@@ -148,8 +148,22 @@
    * in use: a filter that leaves three ships and a tab that still says 41 is a window disagreeing
    * with itself, and the reader has no way to tell which half to believe.
    */
-  const fleet = computed(() =>
-    snapshot.value === null ? [] : filterShips(snapshot.value.ships, query.value),
+  const fleet = computed(() => snapshot.value?.ships ?? [])
+
+  /**
+   * What the search found — **marked** in the drawing rather than filtered out of it.
+   *
+   * Filtering rebuilt the harbour out of whatever matched, which answers "what matched" and loses
+   * the question a drawing exists for: where they are, and what lies around them. The fleet stays
+   * whole, the matches are ringed, and the view moves to hold exactly them.
+   */
+  const found = computed(() =>
+    query.value.trim() === '' ? [] : filterShips(shown.value, query.value),
+  )
+
+  /** How many the search finds in the whole fleet — the useful half of "none on this page". */
+  const matchesAnywhere = computed(() =>
+    query.value.trim() === '' ? 0 : filterShips(fleet.value, query.value).length,
   )
   /**
    * The catalog is tallied before the contract filter and the basin after it.
@@ -471,7 +485,10 @@
         and only one of the two has a remedy the reader can act on.
       -->
       <p
-        v-if="draws(page) && shown.length === 0 && (query.trim() !== '' || contract !== null)"
+        v-if="
+          draws(page) &&
+          ((query.trim() !== '' && found.length === 0) || (contract !== null && shown.length === 0))
+        "
         class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
       >
         <!--
@@ -487,9 +504,15 @@
           >Auf dieser Seite schuldet keines {{ contract.id }} —
           {{ narrowed.length }} anderswo.</template
         >
-        <template v-else-if="fleet.length === 0">Kein Schiff passt zu „{{ query }}“.</template>
+        <!--
+          Nothing matched here, and whether anything matched elsewhere is the useful half: the
+          search marks rather than filters now, so "nothing is ringed" is what a reader sees and
+          this says why.
+        -->
+        <template v-else-if="matchesAnywhere === 0">Kein Schiff passt zu „{{ query }}“.</template>
         <template v-else
-          >Auf dieser Seite passt keines zu „{{ query }}“ — {{ fleet.length }} anderswo.</template
+          >Auf dieser Seite ist keines zu „{{ query }}“ markiert —
+          {{ matchesAnywhere }} anderswo.</template
         >
       </p>
 
@@ -535,7 +558,7 @@
           <HarborScene
             v-else-if="draws(page)"
             ref="harbour"
-            :key="`${page}:${query}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
+            :key="`${page}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
             v-model:quest="demand"
@@ -544,6 +567,7 @@
             :ships="shown"
             :centre="picked"
             :hold="hold"
+            :found="found"
           />
         </main>
 

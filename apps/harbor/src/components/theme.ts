@@ -150,6 +150,8 @@ export const SCENE = {
    * the same reason every verdict carries a form as well as a colour. They sit apart from
    * `MARK_COLOR` because they are not this repository's own state: somebody else left them open.
    */
+  /** What a search found. Its own colour, because a found ship may also be the chosen one. */
+  found: '#d7b35c',
   issue: '#c9a24a',
   pull: '#5f93b8',
   /**
