@@ -11,6 +11,7 @@ import {
   STAR_CEILING,
   STAR_WEIGHT,
   traitsOf,
+  waiting,
 } from './traits'
 
 import type { Readings, Traits } from './traits'
@@ -32,6 +33,7 @@ const reading = (over: Partial<ReturnType<typeof readingsOf>> = {}) => ({
   binding: 0,
   stars: 0,
   issues: 0,
+  pulls: 0,
   authors: 1,
   asked: false,
   rustDays: 0,
@@ -220,11 +222,21 @@ describe('the crane on an apron', () => {
   const traits = (overrides: Partial<Readings>): Traits =>
     traitsOf({ ...readingsOf(ship(), null), ...overrides })
 
-  /** A crane where there is something to lift: a repository that owes nothing has a bare apron. */
+  /** A crane where there is something to lift: a repository with nothing open has a bare apron. */
   it('stands where something is waiting, and nowhere else', () => {
     expect(traits({ binding: 4, met: 1 }).crane).toBe(true)
     expect(traits({ binding: 4, met: 4 }).crane).toBe(false)
     expect(traits({ binding: 0, met: 0 }).crane).toBe(false)
+  })
+
+  /**
+   * Open issues and pull requests count as waiting work, because they are: the apron carries what
+   * is outstanding, and somebody else's open request is outstanding too.
+   */
+  it('stands for what the forge has open as well', () => {
+    expect(traits({ binding: 2, met: 2, issues: 3 }).crane).toBe(true)
+    expect(traits({ binding: 2, met: 2, pulls: 1 }).crane).toBe(true)
+    expect(waiting(reading({ binding: 5, met: 1, issues: 2, pulls: 3 }))).toBe(9)
   })
 
   /** Somebody is at it only where the work is current — a week, the sharp end of `active`. */

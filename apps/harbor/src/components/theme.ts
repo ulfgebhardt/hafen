@@ -135,6 +135,15 @@ export const SCENE = {
   lamp: '#f2c877',
   /** The walkways: the one structure every ship is joined to the shore by. */
   walk: '#4a5b6e',
+  /**
+   * What the forge has open, on the apron: a question and a request for code.
+   *
+   * Two colours and two shapes — an outline for an issue, a filled box for a pull request — for
+   * the same reason every verdict carries a form as well as a colour. They sit apart from
+   * `MARK_COLOR` because they are not this repository's own state: somebody else left them open.
+   */
+  issue: '#c9a24a',
+  pull: '#5f93b8',
 } as const
 
 /**

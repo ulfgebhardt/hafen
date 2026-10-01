@@ -53,6 +53,7 @@ import {
   gangwayOf,
   hullMarks,
   LANDED,
+  forgeLoad,
   landedOf,
   mooringOf,
   offsetOf,
@@ -533,7 +534,7 @@ interface Placed {
  * them answer "what is there to do here", and that is what the pier is. Everything that is
  * *finished* is aboard, and the rail between the two is the whole reading.
  */
-function pierLoad(ship: Ship, hull: Hull, reach: number): Graphics {
+function pierLoad(ship: Ship, hull: Hull, reach: number, forge: ForgeStats | null): Graphics {
   const load = new Graphics()
 
   const owed = landedOf(ship, hull)
@@ -545,7 +546,8 @@ function pierLoad(ship: Ship, hull: Hull, reach: number): Graphics {
    * every side — and that margin is exactly the aisle `apronWalk` walks, so the platform and the
    * path are one measurement rather than two that can drift.
    */
-  const apron = apronOf([...owed, ...pierMarks(ship, hull)], -reach)
+  const open = forgeLoad(hull, forge?.issues ?? 0, forge?.pulls ?? 0)
+  const apron = apronOf([...owed, ...pierMarks(ship, hull), ...open], -reach)
   if (apron !== null) {
     slab(load, apron.spot, apron.along, apron.across).fill({ color: hex(SCENE.quay), alpha: 1 })
     slab(load, apron.spot, apron.along, apron.across).stroke({
@@ -588,6 +590,33 @@ function pierLoad(ship: Ship, hull: Hull, reach: number): Graphics {
       crate.stroke({ width: 1, color, alpha: 0.8 })
     } else {
       crate.fill({ color, alpha: 0.8 })
+    }
+  }
+
+  /*
+   * What the forge has open, on its own row beyond the rest.
+   *
+   * An outline for an issue, which is a question; a filled box for a pull request, which carries
+   * code — the same pair of shapes the datasheet uses, one place over. Beyond the other rows
+   * because these are what *other people* have left open here, and because the side that merges
+   * with the walkway has to stay the side a person walks on.
+   */
+  for (const box of open) {
+    const color = hex(box.kind === 'pull' ? SCENE.pull : SCENE.issue)
+    const crate = slab(load, box.spot, box.along, box.across)
+    if (box.kind === 'issue') {
+      crate.stroke({ width: 1, color, alpha: 0.8 })
+    } else {
+      crate.fill({ color, alpha: 0.7 })
+    }
+    if (box.capped) {
+      const at = project({ x: box.spot.x + box.along / 2 + 0.7, y: box.spot.y })
+      load
+        .moveTo(at.x - 0.3 * UNIT, at.y)
+        .lineTo(at.x + 0.3 * UNIT, at.y)
+        .moveTo(at.x, at.y - 0.3 * UNIT)
+        .lineTo(at.x, at.y + 0.3 * UNIT)
+        .stroke({ width: 1, color, alpha: 0.8 })
     }
   }
 
@@ -1335,7 +1364,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       // The planking: it belongs to the berth, so it is mirrored with the side and never moved.
       const quayside = new Container()
       quayside.scale.y = side
-      quayside.addChild(pierLoad(berth.ship, hull, reach))
+      quayside.addChild(pierLoad(berth.ship, hull, reach, statsOf(berth.ship)))
       slot.addChild(quayside)
 
       const body = new Container()
@@ -1376,8 +1405,19 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
        * this week. Without an operator the post stands there and nothing slews, which is a harbour
        * too — and with one, the boom swings whether it is carrying or not.
        */
+      /*
+       * Everything standing at this berth: what she owes, what is untidy, what the forge has open.
+       * One list, because the platform, the walk on it and the crane beside it all ask the same
+       * question — what is waiting here.
+       */
+      const said = statsOf(berth.ship)
       const owed = landedOf(berth.ship, hull)
-      if (traits.crane && owed.length > 0) {
+      const onApron = [
+        ...owed,
+        ...pierMarks(berth.ship, hull),
+        ...forgeLoad(hull, said?.issues ?? 0, said?.pulls ?? 0),
+      ]
+      if (traits.crane && onApron.length > 0) {
         const foot = project({ x: apronX(hull) - APRON_EDGE, y: 0 })
         quayside.addChild(crane(foot))
         if (traits.operator) {
@@ -1386,10 +1426,10 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
           cranes.push({
             arm,
             foot,
-            stack: project(owed[0]?.spot ?? { x: apronX(hull), y: 0 }),
+            stack: project(onApron[0]?.spot ?? { x: apronX(hull), y: 0 }),
             ship: project({ x: hull.length * 0.86, y: 0 }),
             // Slower for a big stack: a crane with twenty boxes to move does not hurry each one.
-            period: 7 + (owed.length % 4),
+            period: 7 + (onApron.length % 4),
             phase: drift(berth.ship.path),
           })
         }
@@ -1411,7 +1451,6 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         x: berth.spot.x + spot.x,
         y: berth.spot.y + side * (spot.y + (afloat ? offset : 0)),
       })
-      const onApron = [...landedOf(berth.ship, hull), ...pierMarks(berth.ship, hull)]
       const field = fieldOf(onApron, apronOf(onApron, -reach))
       walkable.set(berth.node, [
         { ...ringAs(promenadeOf(hull).map((spot) => toHarbour(spot, true))), gate: 0 },
