@@ -182,6 +182,48 @@ export function bodyRoles(body: string): readonly CheckRole[] {
   return commandRoles(splitCommands(body))
 }
 
+/**
+ * What builds an artifact — and it is **not** a fifth role.
+ *
+ * A role is something that returns a verdict about the source; a build returns an artifact and
+ * writes to the tree (`dist/`, `target/`). Making it a `CheckRole` would put a `fehlt: build` gap
+ * on every repository that publishes TypeScript sources, which is not a gap at all. So it is its
+ * own question, asked by its own quest, and `judges` is deliberately not applied: a build is not
+ * a judge.
+ *
+ * Read off the command like everything else here. A fleet-wide name check would find `build` in
+ * repositories that only delegate it and miss `"bundle": "vite build"`.
+ */
+const BUILD_COMMANDS: readonly RoleCommand[] = [
+  { tool: 'vite', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'tsc', needs: [/(^|\s)(-b|--build)(\s|$)/u] },
+  { tool: 'nuxt', needs: [/(^|\s)(build|generate)(\s|$)/u] },
+  { tool: 'next', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'astro', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'vue-cli-service', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'ng', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'webpack' },
+  { tool: 'rollup' },
+  { tool: 'esbuild' },
+  { tool: 'parcel', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'cargo', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'tauri', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'docker', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'make', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'gradle', needs: [/(^|\s)(build|assemble)(\s|$)/u] },
+  { tool: 'mvn', needs: [/(^|\s)(package|install)(\s|$)/u] },
+]
+
+/** Whether this one command builds an artifact. */
+export function buildsArtifact(command: string): boolean {
+  return BUILD_COMMANDS.some((entry) => runs(command, entry))
+}
+
+/** Whether anything in this script body builds one. */
+export function bodyBuilds(body: string): boolean {
+  return splitCommands(body).some(buildsArtifact)
+}
+
 /** A script that runs another script instead of a tool. */
 export interface Delegation {
   /** The script name that is run. */

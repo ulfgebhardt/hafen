@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { bodyRoles, delegationOf, namedAsWriter, nameProximity } from './role'
+import {
+  bodyBuilds,
+  bodyRoles,
+  buildsArtifact,
+  delegationOf,
+  namedAsWriter,
+  nameProximity,
+} from './role'
 
 describe(bodyRoles, () => {
   it('reads the same role out of two different script names', () => {
@@ -178,5 +185,35 @@ describe(nameProximity, () => {
   it('reads a name in its parts, however the project separates them', () => {
     expect(nameProximity('test-e2e', 'e2e', 'test:e2e', [])).toBe(3)
     expect(nameProximity('test:units', 'unit', 'test:unit', [])).toBe(1)
+  })
+})
+
+describe(buildsArtifact, () => {
+  /** Read off the command: `"bundle": "vite build"` builds, and the name says nothing. */
+  it('finds the builders by what they run', () => {
+    expect(buildsArtifact('vite build')).toBe(true)
+    expect(buildsArtifact('nuxt generate')).toBe(true)
+    expect(buildsArtifact('cargo build --release')).toBe(true)
+    expect(buildsArtifact('tauri build')).toBe(true)
+    expect(buildsArtifact('tsc -b')).toBe(true)
+  })
+
+  /** A tool that also does other things only builds where it says so. */
+  it('does not take every run of a build tool for a build', () => {
+    expect(buildsArtifact('vite')).toBe(false)
+    expect(buildsArtifact('cargo test')).toBe(false)
+    expect(buildsArtifact('tsc --noEmit')).toBe(false)
+    expect(buildsArtifact('next lint')).toBe(false)
+  })
+
+  /** And never a word inside something else: `rebuild-index.js` is a script, not a build. */
+  it('matches the tool as a word', () => {
+    expect(buildsArtifact('node scripts/rebuild-index.js')).toBe(false)
+    expect(buildsArtifact('echo build')).toBe(false)
+  })
+
+  it('reads a whole body, however many commands it holds', () => {
+    expect(bodyBuilds('rimraf dist && vite build')).toBe(true)
+    expect(bodyBuilds('eslint . && vitest run')).toBe(false)
   })
 })

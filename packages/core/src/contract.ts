@@ -1,4 +1,5 @@
 import {
+  bodyBuilds,
   CHECK_ROLES,
   commandRoles,
   delegationOf,
@@ -100,6 +101,14 @@ export interface Contract {
   inCi: readonly CheckRole[]
   /** Roles nothing measures — empty for `other`, where nothing is owed. */
   gaps: readonly CheckRole[]
+  /**
+   * Whether any script of this ship builds a deliverable artifact.
+   *
+   * Beside the roles and not among them: a role returns a verdict about the source, a build
+   * returns an artifact and writes to the tree. Counting it as a fifth role would hang a gap on
+   * every repository that publishes its TypeScript as source — which owes no build at all.
+   */
+  builds: boolean
 }
 
 /** Where a single-package repo tends to keep its app, used only when git has no answer. */
@@ -640,6 +649,9 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
     kind,
     scripts,
     members,
+    builds: manifests.some((manifest) =>
+      Object.values(manifest.scripts).some((body) => bodyBuilds(body)),
+    ),
     devEntry,
     inCi: readCiRoles(await readWorkflows(fs, shipPath), rolesOfScript),
     gaps: kind === 'other' ? [] : CHECK_ROLES.filter((role) => !scripts[role]),

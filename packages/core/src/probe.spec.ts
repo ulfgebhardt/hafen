@@ -457,3 +457,38 @@ describe('a configuration the CI points at', () => {
     expect(runCheck(check('datei-aus-ci', { schluessel: 'config-file' }), seenFacts).ok).toBe(false)
   })
 })
+
+describe('whether anything here builds', () => {
+  /** Read off the commands: `"bundle": "vite build"` builds and `"build": "turbo build"` delegates. */
+  it('answers from the scripts and not from a name', () => {
+    const builds = facts({ contract: mockContract({ builds: true }) })
+    const not = facts({ contract: mockContract({ builds: false }) })
+
+    expect(runCheck(check('baut'), builds).ok).toBe(true)
+    expect(runCheck(check('baut'), not).ok).toBe(false)
+  })
+
+  /** No manifest is no answer: a repository with nothing to read owes no build either. */
+  it('is unmeasured where there is no manifest at all', () => {
+    const bare = facts({ contract: mockContract({ members: [] }) })
+
+    expect(runCheck(check('baut'), bare).ok).toBeNull()
+  })
+
+  it('finds a build among the run steps of a workflow', () => {
+    const ci = facts({ workflows: ['jobs:\n  x:\n    steps:\n      - run: pnpm vite build\n'] })
+
+    expect(runCheck(check('baut-in-ci'), ci).ok).toBe(true)
+  })
+
+  /** And not in a job *called* build, which half the workflows on this fleet are. */
+  it('does not take a job name for a build step', () => {
+    const named = facts({ workflows: ['jobs:\n  build:\n    steps:\n      - run: pnpm test\n'] })
+
+    expect(runCheck(check('baut-in-ci'), named).ok).toBe(false)
+  })
+
+  it('is unmeasured where the ship has no workflows', () => {
+    expect(runCheck(check('baut-in-ci'), facts()).ok).toBeNull()
+  })
+})
