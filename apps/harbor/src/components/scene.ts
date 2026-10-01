@@ -34,10 +34,10 @@ import { conditionOf } from './condition'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
 import { harbourOf as laneHarbour } from './lanes'
-import { harbourOf as fanHarbour, MARGIN, QUAY, reachOf, walksOf, waysAt } from './moorings'
+import { harbourOf as fanHarbour, MARGIN, QUAY, reachOf, walksOf } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
-import { carriageOf, lanesOf, PACE, routesOf } from './traffic'
+import { lanesOf, networkOf, PACE, routesOf, stepFrom } from './traffic'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
 import {
   boxAt,
@@ -52,6 +52,7 @@ import {
   mooringOf,
   offsetOf,
   pierMarks,
+  promenadeOf,
   questAt,
   yawOf,
 } from './vessel'
@@ -68,6 +69,7 @@ import {
 import type { Chosen } from './chosen'
 import type { Harbour } from './moorings'
 import type { Side, Spot } from './plan'
+import type { Network, Place } from './traffic'
 import type { Traits } from './traits'
 import type { Container as Container_, Hull, MarkBox } from './vessel'
 import type { Extent, Pan } from './viewport'
@@ -1063,6 +1065,27 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     /** A boat turns onto its course; a figure seen from above is a dot and only ever faces about. */
     turns: boolean
   }[] = []
+  /**
+   * Her authors, and they walk a **graph** rather than a line.
+   *
+   * Everything else in the picture goes back and forth on one segment, which is right for a lift
+   * on its plank and for a launch in its fairway. A person is not that: she comes off her own
+   * ship, and at every corner she decides again. `stepFrom` makes that decision and this holds
+   * where she is while she walks to it.
+   */
+  let crews: {
+    node: Container
+    /** Her ship, in plan units — every decision is about how far from it she stands. */
+    home: Spot
+    from: Place
+    to: Place
+    /** How far along she is between the two, 0 … 1. */
+    at: number
+    pace: number
+    /** Her own seeded sequence: the same fleet walks the same way twice. */
+    roll: () => number
+  }[] = []
+  let network: Network = { where: new Map(), next: new Map() }
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
   let zoom: number | null = null
@@ -1099,6 +1122,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     world.removeChildren()
     placed = []
     traffic = []
+    crews = []
 
     /*
      * The shape the plan is laid out towards is the *window's*, not a constant.
@@ -1181,6 +1205,14 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     const fleet = new Container()
     world.addChild(fleet)
 
+    /*
+     * Where somebody may walk once she is aboard, per berth and in plan units.
+     *
+     * Collected here because this is where the hull is worked out anyway, and handed to the walk
+     * network below: the gangway is drawn as a way aboard, so it had better be one.
+     */
+    const walkable = new Map<number, readonly Spot[]>()
+
     for (const berth of order) {
       const side: Side = berth.side
       const slot = new Container()
@@ -1234,6 +1266,21 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       slot.on('pointerover', onEnter(berth.ship))
       slot.on('pointertap', onTap(berth.ship, hull, offset, reach, body, quayside))
 
+      /*
+       * Her deck, in the harbour's own coordinates.
+       *
+       * The berth's frame is mirrored for a ship on the other side (`body.scale.y = side`) and
+       * shifted by how far off the pier she lies, so the same two numbers that place her place
+       * the walk aboard her. Nothing here rotates: a berth is drawn square in both arrangements.
+       */
+      walkable.set(
+        berth.node,
+        promenadeOf(hull).map((spot) => ({
+          x: berth.spot.x + spot.x,
+          y: berth.spot.y + side * (spot.y + offset),
+        })),
+      )
+
       fleet.addChild(slot)
       placed.push({
         ship: berth.ship,
@@ -1271,8 +1318,6 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      */
     const moving = new Container()
     world.addChild(moving)
-    const spots = new Map(harbour.quays.map((quay) => [quay.id, quay.spot]))
-    const quayAt = (id: number): Spot => spots.get(id) ?? { x: 0, y: 0 }
 
     /*
      * Somebody on **every** walkway, and `traffic.ts` says which ways those are.
@@ -1326,6 +1371,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       }
     }
 
+    /*
+     * The walkways as a graph, with every ship's deck hung off the plank she lies against.
+     *
+     * Built once per draw and kept, because the figures ask it at every corner for as long as the
+     * picture stands. It is the one place where the harbour and the ships are the same network:
+     * a gangway drawn as a way aboard is a way aboard.
+     */
+    network = networkOf(harbour, walkable)
+
     for (const [index, berth] of order.entries()) {
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
       /*
@@ -1351,45 +1405,30 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       })
 
       /*
-       * Her authors, on the ways around her — not routed from the shore.
+       * Her authors, and they start **at her**.
        *
-       * This is what the edge list is for. A figure takes one of the ways *touching her plank*:
-       * the plank itself, the stub that reaches it, whatever else meets there. So one docker paces
-       * alongside her and the next is out on the branch, which is what a berth looks like — rather
-       * than three figures walking the same line in step.
+       * One figure per address that has committed here, put on the plank she lies against and
+       * then left to decide for herself: `stepFrom` is asked at every corner, and the further she
+       * has strayed the likelier her next step is back towards her own ship. Walking out that
+       * reads as turning round, walking back as carrying on home — the same arithmetic.
        *
-       * Deterministic by index, like everything else that is read repeatedly: the same fleet must
-       * draw the same harbour twice, and a random walker would make every other figure suspect.
+       * Her roll is a seeded sequence of her repository's path, so the same fleet walks the same
+       * way twice. A random walker would make every other figure in the picture suspect.
        */
-      const nearby = waysAt(harbour, berth.node).filter(
-        // Boards only. `waysAt` hands back the ways round as well, and those are open water by
-        // construction — an author sent along one was a figure strolling across the fairway.
-        (way) => carriageOf(way.kind) === 'foot',
-      )
       for (let hand = 0; hand < traits.crew; hand += 1) {
-        const way = nearby[hand % Math.max(nearby.length, 1)]
-        const ends =
-          way === undefined
-            ? [
-                { x: from + 1.5 * UNIT, y: plankY },
-                { x: to - 1.5 * UNIT, y: plankY },
-              ]
-            : [project(quayAt(way.from)), project(quayAt(way.to))]
-
         const figure = walker()
         moving.addChild(figure)
-        traffic.push({
+        const roll = sequence(Math.floor(drift(berth.ship.path) * 4294967296) + hand * 7919)
+        const start: Place = `q${String(berth.node)}`
+        crews.push({
           node: figure,
-          a: ends[0] ?? { x: from, y: plankY },
-          b: ends[1] ?? { x: to, y: plankY },
-          // Each at their own pace and their own place, so a berth does not march in step.
+          home: berth.spot,
+          from: start,
+          to: stepFrom(network, start, berth.spot, roll()),
+          // Spread over the first leg, so a berth's crew does not set off in step.
+          at: roll(),
           pace: PACE.foot * (0.8 + ((index + hand) % 5) * 0.1),
-          offset: (index * 0.31 + hand * 0.41) % 1,
-          heading: Math.atan2(
-            (ends[1]?.y ?? plankY) - (ends[0]?.y ?? plankY),
-            (ends[1]?.x ?? to) - (ends[0]?.x ?? from),
-          ),
-          turns: false,
+          roll,
         })
       }
     }
@@ -1435,6 +1474,36 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       } else {
         mover.node.scale.x = mover.b.x >= mover.a.x === t < 1 ? 1 : -1
       }
+    }
+
+    /*
+     * The authors, who walk from place to place rather than back and forth.
+     *
+     * Stepped by elapsed time and not by frame count: a figure on a 60 Hz screen and one on a
+     * 144 Hz screen are the same walk, and a dropped frame moves her the distance she missed
+     * rather than losing it. On arrival she is asked once where to go next — that one question is
+     * the whole behaviour, and it lives in `stepFrom`.
+     */
+    const seconds = app.ticker.deltaMS / 1000
+    for (const crew of crews) {
+      const from = network.where.get(crew.from)
+      const to = network.where.get(crew.to)
+      if (from === undefined || to === undefined) {
+        continue
+      }
+      const span = Math.hypot(to.x - from.x, to.y - from.y)
+      crew.at += span === 0 ? 1 : (seconds * crew.pace * lively) / span
+      if (crew.at >= 1) {
+        crew.from = crew.to
+        crew.to = stepFrom(network, crew.to, crew.home, crew.roll())
+        crew.at = 0
+        continue
+      }
+      crew.node.position.set(
+        (from.x + (to.x - from.x) * crew.at) * UNIT,
+        (from.y + (to.y - from.y) * crew.at) * UNIT,
+      )
+      crew.node.scale.x = to.x >= from.x ? 1 : -1
     }
   })
 

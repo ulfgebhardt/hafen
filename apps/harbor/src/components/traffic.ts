@@ -262,3 +262,128 @@ export function lanesOf(harbour: Harbour): readonly Segment[] {
     to: { x: lane.span.to, y: lane.at },
   }))
 }
+
+/**
+ * How far from her own ship a figure strays before the harbour pulls her back, in world units.
+ *
+ * Not a wall: it is the distance at which turning for home becomes *certain*, and halfway out it
+ * is an even bet. Measured against the lane harbour, which is about 690 by 300 — so a figure
+ * ranges over her own dock and the next one, and the quay at the far end is somebody else's.
+ */
+export const ROAM = 90
+
+/** A place a figure can stand: a quay, or a spot on a deck. */
+export type Place = string
+
+export interface Network {
+  where: ReadonlyMap<Place, Spot>
+  /** Who can be reached from here in one go. Both ways round, always. */
+  next: ReadonlyMap<Place, readonly Place[]>
+}
+
+/** The walkways as a graph of places, plus whatever deck each berth offers. */
+export function networkOf(
+  harbour: Harbour,
+  /** Per mooring node, the ring of spots aboard her — in world units. */
+  aboard: ReadonlyMap<number, readonly Spot[]> = new Map(),
+): Network {
+  const where = new Map<Place, Spot>()
+  const next = new Map<Place, Place[]>()
+  const link = (one: Place, other: Place): void => {
+    const already = next.get(one)
+    if (already === undefined) {
+      next.set(one, [other])
+      return
+    }
+    already.push(other)
+  }
+  const join = (one: Place, other: Place): void => {
+    link(one, other)
+    link(other, one)
+  }
+
+  for (const quay of harbour.quays) {
+    where.set(`q${String(quay.id)}`, quay.spot)
+  }
+  for (const way of harbour.ways) {
+    if (carriageOf(way.kind) !== 'foot') {
+      continue
+    }
+    // No guard on the two ends: a way is laid between two quays by construction, and `trimmed`
+    // drops the ways of a quay it cuts. A check here would be a branch nothing can enter.
+    join(`q${String(way.from)}`, `q${String(way.to)}`)
+  }
+
+  /*
+   * And aboard, which is the whole point of the gangway being drawn at all.
+   *
+   * The ring hangs off the plank she lies against: her first spot is where the gangway lands, so
+   * walking aboard is one step from the planking and not a jump. The ring closes on itself, so a
+   * figure can go round her instead of pacing one side.
+   */
+  for (const [node, ring] of aboard) {
+    const plank: Place = `q${String(node)}`
+    if (!where.has(plank) || ring.length === 0) {
+      continue
+    }
+    ring.forEach((spot, index) => {
+      where.set(`d${String(node)}.${String(index)}`, spot)
+    })
+    join(plank, `d${String(node)}.0`)
+    for (let index = 0; index < ring.length; index += 1) {
+      join(
+        `d${String(node)}.${String(index)}`,
+        `d${String(node)}.${String((index + 1) % ring.length)}`,
+      )
+    }
+  }
+
+  return { where, next }
+}
+
+/**
+ * Where she goes from here, decided at the place she has just reached.
+ *
+ * The whole behaviour is one number: **the further she is from her own ship, the more likely her
+ * next step is towards it.** Walking out, that reads as the chance of turning round; walking back,
+ * as the chance of carrying on home — which is why both sentences describe the same arithmetic
+ * and only the outcome they name differs.
+ *
+ * The roll is handed in rather than drawn here, so this stays a function: the same place, the same
+ * roll and the same ship give the same answer, and the scene owns the seeded sequence. A harbour
+ * that walked differently on every draw would make every other difference in it suspect.
+ */
+export function stepFrom(network: Network, at: Place, home: Spot, roll: number): Place {
+  const options = network.next.get(at) ?? []
+  const first = options[0]
+  if (first === undefined) {
+    return at
+  }
+  const here = network.where.get(at)
+  const gap = (place: Place): number => {
+    const spot = network.where.get(place)
+    return spot === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.hypot(spot.x - home.x, spot.y - home.y)
+  }
+  const far =
+    here === undefined ? 0 : Math.min(1, Math.hypot(here.x - home.x, here.y - home.y) / ROAM)
+
+  let homeward = first
+  for (const option of options) {
+    if (gap(option) < gap(homeward)) {
+      homeward = option
+    }
+  }
+  if (roll < far) {
+    return homeward
+  }
+
+  // The rest of the roll, spread over everything else — and over `homeward` itself where there is
+  // nothing else, because a dead end is a place you leave the way you came.
+  const others = options.filter((option) => option !== homeward)
+  const rest = others.length === 0 ? [homeward] : others
+  // `far` cannot be 1 here: a roll is below 1 and anything below `far` has already gone home.
+  const spread = (roll - far) / (1 - far)
+  return rest[Math.min(rest.length - 1, Math.floor(spread * rest.length))] ?? homeward
+}

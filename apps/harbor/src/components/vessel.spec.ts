@@ -18,6 +18,7 @@ import {
   mooringOf,
   offsetOf,
   outlineOf,
+  promenadeOf,
   pierMarks,
   pierRows,
   pierRowY,
@@ -405,5 +406,38 @@ describe(gangwayOf, () => {
     expect(snug.to.y).toBeLessThan(snug.from.y)
     expect(off.to.y).toBeLessThan(snug.to.y)
     expect(off.from.x).toBe(snug.from.x)
+  })
+})
+
+describe(promenadeOf, () => {
+  const hull = hullOf(ship(), 400)
+
+  /** Outboard of the widest stack, so nobody walks through the cargo. */
+  it('keeps the walk clear of anything a click answers for', () => {
+    const widest = (hull.beam * 0.72) / 2
+
+    for (const spot of promenadeOf(hull)) {
+      const onDeck = spot.x > hull.length * DECK.from && spot.x < hull.length * DECK.to
+
+      expect(!onDeck || Math.abs(spot.y) > widest).toBe(true)
+    }
+  })
+
+  /** It starts where the gangway lands, so the path hangs off the one way aboard. */
+  it('starts at the head of the gangway', () => {
+    const plank = gangwayOf(hull, 0)
+    const first = promenadeOf(hull)[0]
+
+    expect(first?.x).toBeCloseTo(plank.from.x)
+    expect(first?.y).toBeLessThan(0)
+  })
+
+  /** A ring: walking out to the bow and back the same way reads as a pendulum, not as work. */
+  it('goes round the ship and not up and down one side', () => {
+    const walk = promenadeOf(hull)
+
+    expect(walk.some((spot) => spot.y > 0)).toBe(true)
+    expect(walk.some((spot) => spot.y < 0)).toBe(true)
+    expect(walk.length).toBeGreaterThan(4)
   })
 })
