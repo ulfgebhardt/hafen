@@ -19,6 +19,7 @@ import {
   spanOf,
   stepFrom,
 } from './traffic'
+import { ringAs } from './vessel'
 
 import type { Harbour } from './moorings'
 import type { Spot } from './plan'
@@ -324,7 +325,7 @@ describe(networkOf, () => {
       { x: 20, y: 10 },
       { x: 20, y: 20 },
     ]
-    const network = networkOf(harbour, new Map([[node, [ring]]]))
+    const network = networkOf(harbour, new Map([[node, [ringAs(ring)]]]))
 
     expect(network.next.get(`q${String(node)}`)).toContain(`d${String(node)}.0.0`)
     expect(network.next.get(`d${String(node)}.0.0`)).toContain(`d${String(node)}.0.1`)
@@ -334,7 +335,7 @@ describe(networkOf, () => {
   })
 
   it('takes a deck for a berth that does not exist as nothing at all', () => {
-    const network = networkOf(harbour, new Map([[9999, [[{ x: 1, y: 1 }]]]]))
+    const network = networkOf(harbour, new Map([[9999, [ringAs([{ x: 1, y: 1 }])]]]))
 
     expect(network.where.has('d9999.0.0')).toBe(false)
   })
@@ -350,7 +351,7 @@ describe(networkOf, () => {
       { x: 8, y: 1 },
       { x: 9, y: 1 },
     ]
-    const network = networkOf(harbour, new Map([[node, [deck, apron]]]))
+    const network = networkOf(harbour, new Map([[node, [ringAs(deck), ringAs(apron)]]]))
     const plank = network.next.get(`q${String(node)}`) ?? []
 
     expect(plank).toContain(`d${String(node)}.0.0`)
@@ -360,7 +361,7 @@ describe(networkOf, () => {
 
   it('takes an empty deck as no deck', () => {
     const mooring = harbour.moorings[0]
-    const network = networkOf(harbour, new Map([[mooring?.node ?? 0, [[], []]]]))
+    const network = networkOf(harbour, new Map([[mooring?.node ?? 0, [ringAs([]), ringAs([])]]]))
 
     expect([...network.where.keys()].some((place) => place.startsWith('d'))).toBe(false)
   })
