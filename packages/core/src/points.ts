@@ -155,6 +155,67 @@ export function shipPoints(ship: Ship): ShipPoints {
   }
 }
 
+/** One line of the bill: what was counted, how many, at what rate, for how much. */
+export interface PointLine {
+  /** The thing counted — a commit kind, or one of the four terms. */
+  name: string
+  count: number
+  rate: number
+  points: number
+}
+
+/**
+ * The whole score, line by line, so it can be argued with rather than believed.
+ *
+ * The sheet used to show four sums and the weights lived in this file: a reader who wanted to
+ * know why a repository scores 26 831 had to read the source. A bill says the same thing in the
+ * place where the question is asked — and makes the two kinds of entry visible, because they are
+ * different: the counts are measurements, the rates are decisions.
+ *
+ * Commit kinds come first and in their own lines, because that is where nearly all of it comes
+ * from: on this fleet 96 % of commits carry no convention at all, and a single "Commits" line
+ * would hide exactly that.
+ */
+export function pointLines(ship: Ship): readonly PointLine[] {
+  const work = ship.ledger.total
+  const lines: PointLine[] = COMMIT_KINDS.filter((kind) => (work.byKind[kind] ?? 0) > 0).map(
+    (kind) => ({
+      name: kind,
+      count: work.byKind[kind] ?? 0,
+      rate: KIND_POINTS[kind],
+      points: (work.byKind[kind] ?? 0) * KIND_POINTS[kind],
+    }),
+  )
+  const rest: readonly PointLine[] = [
+    {
+      name: 'ohne Convention',
+      count: work.unscored,
+      rate: UNSCORED_POINTS,
+      points: work.unscored * UNSCORED_POINTS,
+    },
+    { name: 'PRs', count: work.pulls, rate: PULL_POINTS, points: work.pulls * PULL_POINTS },
+    {
+      name: 'Autoren',
+      count: work.authors,
+      rate: AUTHOR_POINTS,
+      points: work.authors * AUTHOR_POINTS,
+    },
+    {
+      name: 'Prüfungen',
+      count: coveredChecks(ship),
+      rate: CHECK_POINTS,
+      points: coveredChecks(ship) * CHECK_POINTS,
+    },
+    {
+      name: 'in CI',
+      count: ship.contract.inCi.length,
+      rate: CI_POINTS,
+      points: ship.contract.inCi.length * CI_POINTS,
+    },
+  ]
+  return [...lines, ...rest].filter((line) => line.count > 0)
+}
+
 /**
  * What counts as a project somebody is currently holding.
  *

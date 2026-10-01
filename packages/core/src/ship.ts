@@ -92,6 +92,14 @@ export interface Ship {
    * measurement — which matters, because the first set of weights is always wrong.
    */
   ledger: Ledger
+  /**
+   * Lines of text in the tree at `HEAD`, binaries excluded — `null` where git could not say.
+   *
+   * A size reading beside the score: a repository can be enormous and quiet, or small and busy,
+   * and one number cannot be both. Generated files are in it, because they are text somebody
+   * committed.
+   */
+  lines: number | null
   /** Days since the last commit — the source of `rust`. */
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
@@ -367,6 +375,29 @@ export interface InspectOptions {
   forge?: readonly ForgeStats[]
 }
 
+/**
+ * The lines `git grep -I -c '' HEAD` reported, added up.
+ *
+ * Each line is `HEAD:<path>:<count>`, and a path may hold colons — so the count is read from the
+ * **end** and never by splitting the line into three. `null` for a repository git could not
+ * answer about at all: no git, no HEAD, an empty tree. Nought lines and "no answer" are two
+ * different things and must not look alike.
+ */
+export function countLines(output: string | null): number | null {
+  if (output === null) {
+    return null
+  }
+  let total = 0
+  for (const line of output.split('\n')) {
+    const at = line.lastIndexOf(':')
+    const count = at === -1 ? Number.NaN : Number(line.slice(at + 1))
+    if (Number.isFinite(count)) {
+      total += count
+    }
+  }
+  return total
+}
+
 export async function inspectShip(
   ports: Ports,
   path: string,
@@ -390,6 +421,7 @@ export async function inspectShip(
     refs,
     remoteHead,
     modules,
+    text,
   ] = await Promise.all([
     ports.fs.isDirectory(`${path}/.git`),
     git(ports, path, ['remote', '-v']),
@@ -430,6 +462,19 @@ export async function inspectShip(
      * survey walked straight through one and read whatever lay inside as the parent's.
      */
     git(ports, path, ['submodule', 'status']),
+    /*
+     * How much text this repository holds, counted once by git.
+     *
+     * `git grep -I -c '' HEAD` prints a line per **text** file with its line count, and the `-I`
+     * is the whole reason this is honest: git decides what is binary, so no list of extensions
+     * has to be kept and no image is counted as code. Measured on the biggest repository here —
+     * 3 577 text files, 596 932 lines — at 0.29 s, which is cheaper than several of the calls
+     * above it.
+     *
+     * It counts what is *in* the tree, generated files included: a lockfile is text somebody
+     * committed. That is a size reading and not a craftsmanship one, and it is used as a size.
+     */
+    git(ports, path, ['grep', '-I', '-c', '', 'HEAD']),
   ])
 
   // The ship's own tree is in that list and is no dock of anybody's.
@@ -500,6 +545,7 @@ export async function inspectShip(
     working,
     stash,
     ledger,
+    lines: countLines(text),
     rustDays,
     docks,
     ahead,
