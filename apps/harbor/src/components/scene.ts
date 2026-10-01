@@ -1335,7 +1335,11 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * from here down is written once and knows nothing about which arrangement it is drawing.
      * They differ in what they can do: lanes pack tighter, the fan can branch at an angle.
      */
-    const harbour = (layout === 'basins' ? basinHarbour : harbourOf)(fleetlets(ships))
+    /*
+     * Two arrangements, two units. Lanes group by organisation — the directory a repository is
+     * filed under — and basins by *project*, which `kin.ts` measures and no directory knows.
+     */
+    const harbour = layout === 'basins' ? basinHarbour(ships) : harbourOf(fleetlets(ships))
     const order = harbour.moorings
     extent = { width: harbour.width * UNIT, height: harbour.height * UNIT }
     lively = livelinessOf(ships)
