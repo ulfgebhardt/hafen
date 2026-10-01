@@ -120,6 +120,7 @@ export function mockContract(overrides: Partial<Contract> = {}): Contract {
     members: [{ dir: '.', checks: mockChecks(scripts) }],
     devEntry: 'none',
     inCi: [],
+    builds: false,
     gaps: CHECK_ROLES.filter((role) => !scripts[role]),
     ...overrides,
   }
