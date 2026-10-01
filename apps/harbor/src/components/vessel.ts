@@ -99,6 +99,37 @@ export function outlineOf(length: number, beam: number): readonly Spot[] {
  */
 export const LENGTH_FLOOR = 20
 
+/**
+ * Where a hull starts and stops getting **wider**, in lines of text.
+ *
+ * Her length is what the repository has *done*; her beam is how much of it there *is*. Two
+ * readings that must be able to disagree: a repository can be enormous and quiet, or small and
+ * busy, and until now both came off the same number — so every ship in the harbour had exactly
+ * one shape, scaled.
+ *
+ * Measured over this fleet: 1 line at the bottom, 17 305 at the median, 174 624 at the ninetieth
+ * percentile and 3 663 532 at the top. Heavy-tailed like everything else here, so logarithmic
+ * like everything else here.
+ */
+export const BEAM_FLOOR = 100
+export const BEAM_CEILING = 1_000_000
+
+/**
+ * Her share of the beam range, 0 … 1 — and `null` lines sit at the bottom rather than nowhere.
+ *
+ * A repository git could not answer about is drawn narrow, which is the same thing the rest of
+ * the drawing does with an absent reading: it says "nothing known" by looking like nothing much,
+ * never by inventing a middle.
+ */
+export function beamShare(lines: number | null): number {
+  if (lines === null) {
+    return 0
+  }
+  const low = Math.log1p(BEAM_FLOOR)
+  const high = Math.log1p(BEAM_CEILING)
+  return Math.min(1, Math.max(0, (Math.log1p(Math.max(lines, 0)) - low) / (high - low)))
+}
+
 /** Her share of the length range, 0 … 1 — logarithmic between the floor and the ceiling. */
 export function lengthShare(points: number): number {
   const low = Math.log1p(LENGTH_FLOOR)
@@ -118,9 +149,8 @@ export function lengthShare(points: number): number {
  * root over one is a scale for its tail.
  */
 export function hullOf(ship: Ship, points: number): Hull {
-  const reach = lengthShare(points)
-  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * reach
-  const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * reach
+  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * lengthShare(points)
+  const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * beamShare(ship.lines ?? null)
   return { length, beam, outline: outlineOf(length, beam) }
 }
 
@@ -682,12 +712,30 @@ export function questAt(
 }
 
 /**
- * The plank from the planking to her deck.
+ * Whether there is a gangway at all — and it is about her **remote**, not her tidiness.
  *
- * Drawn only where something is waiting, which makes it the one mark that says "there is work
- * here" without counting anything — the eye finds a line between two shapes before it finds a
- * crate among crates. It also has to reach: a ship standing off because her tree is untidy is
- * exactly the ship with a loaded pier, so the plank grows with the gap.
+ * It used to appear when something was waiting on the planking, so a gangway came and went with
+ * the working tree: a repository with a clean checkout had no way aboard, and the same repository
+ * with one untracked file had one. That reads as a statement about the ship and was a statement
+ * about a `git status`.
+ *
+ * A remote is the honest reading: a repository nobody can reach from anywhere else is a ship with
+ * no connection to the shore, and that is a fact about her that holds whatever her tree looks
+ * like. Without one, nobody walks aboard either — see the walk network.
+ *
+ * *Any* remote and not the origin, although every one of the 86 reachable repositories here has
+ * an origin. The question a plank answers is whether there is a way between this ship and the
+ * shore at all, and a tree whose only remote is an `upstream` has one.
+ */
+export function hasGangway(ship: Ship): boolean {
+  return ship.remotes.length > 0
+}
+
+/**
+ * The plank from the planking to her deck, for a ship that has one.
+ *
+ * It has to reach: a ship standing off because her tree is untidy is exactly the ship with a
+ * loaded pier, so the plank grows with the gap.
  */
 export function gangwayOf(hull: Hull, offset: number, reach: number = BERTH.laneCentre): Line {
   return {

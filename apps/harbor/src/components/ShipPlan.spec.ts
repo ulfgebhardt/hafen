@@ -4,6 +4,20 @@ import { describe, expect, it } from 'vitest'
 import ShipPlan from './ShipPlan.vue'
 import { quest, ship } from './testing'
 
+import type { ForgeStats } from '@hafen/core'
+
+/** Only the two counts the heaps read; the rest of a forge reading is not drawn. */
+const forge = (issues: number, pulls: number): ForgeStats => ({
+  slug: { host: 'github.com', owner: 'o', repo: 'r' },
+  stars: 0,
+  watchers: 0,
+  forks: 0,
+  issues,
+  pulls,
+  language: null,
+  guard: null,
+})
+
 const subject = ship({
   quests: [quest('erfuellt', 'met'), quest('offen', 'violated'), quest('wartet', 'waiting')],
 })
@@ -75,6 +89,54 @@ describe('shipPlan', () => {
 
     expect(Number(ring?.attributes('width'))).toBeGreaterThan(Number(box?.attributes('width')))
     expect(Number(ring?.attributes('x'))).toBeLessThan(Number(box?.attributes('x')))
+  })
+
+  /**
+   * The heaps were measured, drawn in the harbour and missing here, so clicking a crate of open
+   * issues in the harbour led to a panel that did not show one.
+   */
+  it('draws what the forge has open, and hands it up when a heap is clicked', async () => {
+    const plan = mount(ShipPlan, { props: { ship: subject, stats: forge(300, 2) } })
+    const heaps = plan
+      .findAll('rect')
+      .filter((one) => one.find('title').exists() && one.find('title').text().includes('Offene'))
+
+    expect(heaps.length).toBeGreaterThanOrEqual(6)
+
+    const issue = heaps.find((one) => one.find('title').text().includes('Issues'))
+    await issue?.trigger('click')
+
+    expect(plan.emitted('pick')).toStrictEqual([[{ kind: 'forge', open: 'issue' }]])
+  })
+
+  /** Unasked is not "none open": a forge nobody questioned heaps nothing at all. */
+  it('heaps nothing where the forge was not asked', () => {
+    const plan = mount(ShipPlan, { props: { ship: subject } })
+
+    expect(plan.findAll('title').filter((one) => one.text().includes('Offene'))).toHaveLength(0)
+  })
+
+  /**
+   * The plank is her remote and not her tidiness — a repository nobody can reach from anywhere
+   * else has no way aboard, however clean or dirty her tree happens to be.
+   */
+  it('draws the plank for a ship with a remote and leaves it off one without', () => {
+    const planks = (one: ReturnType<typeof mount>) =>
+      one.findAll('line').filter((line) => line.attributes('stroke-width') === '3')
+
+    const moored = mount(ShipPlan, {
+      props: {
+        ship: ship({
+          remotes: [{ name: 'origin', url: 'git@github.com:o/r.git', forge: 'github' }],
+        }),
+      },
+    })
+    const adrift = mount(ShipPlan, {
+      props: { ship: ship({ remotes: [], stash: 4, dirty: true }) },
+    })
+
+    expect(planks(moored).length).toBeGreaterThan(0)
+    expect(planks(adrift)).toHaveLength(0)
   })
 
   /** A ship nothing is demanded of still has a hull, and the frame still holds it. */

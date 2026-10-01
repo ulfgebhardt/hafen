@@ -4,6 +4,9 @@ import { BERTH } from './plan'
 import { quest, ship } from './testing'
 import {
   apronOf,
+  BEAM_CEILING,
+  BEAM_FLOOR,
+  beamShare,
   apronWalk,
   BERTH_SLACK,
   bridgeOf,
@@ -13,6 +16,7 @@ import {
   heapLevel,
   forgeLoad,
   gangwayOf,
+  hasGangway,
   hasPlume,
   hullMarks,
   hullOf,
@@ -90,7 +94,8 @@ describe(hullOf, () => {
     const huge = hullOf(ship(), LENGTH_CEILING * 5)
 
     expect(big.length).toBeGreaterThan(small.length)
-    expect(big.beam).toBeGreaterThan(small.beam)
+    // The beam is not in this: it follows the text in the tree, which these three share.
+    expect(big.beam).toBe(small.beam)
     expect(small.length).toBeGreaterThanOrEqual(SIZE.minLength)
     expect(huge.length).toBeLessThanOrEqual(SIZE.maxLength)
     expect(huge.beam).toBeLessThanOrEqual(SIZE.maxBeam)
@@ -671,6 +676,37 @@ describe(heapLevel, () => {
   })
 })
 
+describe(hasGangway, () => {
+  const remote = { name: 'origin', url: 'git@github.com:o/r.git', forge: 'github' as const }
+
+  /** The question is whether anybody can reach her from anywhere else. */
+  it('gives a plank to a ship with a remote', () => {
+    expect(hasGangway(ship({ remotes: [remote] }))).toBe(true)
+    expect(hasGangway(ship({ remotes: [] }))).toBe(false)
+  })
+
+  /**
+   * And never off her working tree. Six repositories here have no remote at all; before this,
+   * each of them grew a gangway the moment somebody left one untracked file lying about, and lost
+   * it again on the next `git clean`.
+   */
+  it('does not read a dirty tree as a way aboard', () => {
+    const open = { staged: 2, unstaged: 3, untracked: 12, conflicted: 0 }
+
+    expect(hasGangway(ship({ remotes: [], dirty: true, working: open, stash: 4 }))).toBe(false)
+    expect(hasGangway(ship({ remotes: [remote], dirty: false }))).toBe(true)
+  })
+
+  /** Any remote, because the plank asks for a way to the shore and not for where she came from. */
+  it('counts a remote that is not the origin', () => {
+    expect(
+      hasGangway(
+        ship({ remotes: [{ name: 'upstream', url: 'git@github.com:o/r.git', forge: 'github' }] }),
+      ),
+    ).toBe(true)
+  })
+})
+
 describe(forgeLoad, () => {
   const hull = hullOf(ship(), 400)
 
@@ -719,5 +755,36 @@ describe(forgeLoad, () => {
     const thin = forgeLoad(hull, 1, 300).filter((box) => box.kind === 'pull')
 
     expect(thin.map((box) => box.spot.x)).toStrictEqual(full.map((box) => box.spot.x))
+  })
+})
+
+describe(beamShare, () => {
+  /**
+   * Her length is what the repository has done, her beam is how much of it there is — and until
+   * these came apart, every ship in the harbour had one shape at ninety sizes.
+   */
+  it('widens with the text in the tree', () => {
+    expect(beamShare(17305)).toBeGreaterThan(beamShare(1000))
+    expect(beamShare(1000)).toBeGreaterThan(beamShare(10))
+  })
+
+  it('stops at both ends rather than running off', () => {
+    expect(beamShare(BEAM_FLOOR)).toBe(0)
+    expect(beamShare(BEAM_CEILING * 10)).toBe(1)
+    expect(beamShare(-5)).toBe(0)
+  })
+
+  /** A repository git could not answer about is drawn narrow, never at an invented middle. */
+  it('takes no answer as the bottom of the range', () => {
+    expect(beamShare(null)).toBe(0)
+  })
+
+  /** Two readings, and they have to be able to disagree. */
+  it('leaves the length out of it', () => {
+    const busy = hullOf(ship({ lines: 200 }), 25000)
+    const vast = hullOf(ship({ lines: 900000 }), 25000)
+
+    expect(vast.beam).toBeGreaterThan(busy.beam)
+    expect(vast).toHaveLength(busy.length)
   })
 })

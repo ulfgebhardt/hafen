@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { chosenKey, isMark, isPier, isQuest, PIER } from './chosen'
+import { chosenKey, isForge, isMark, isPier, isQuest, PIER } from './chosen'
 
 describe(chosenKey, () => {
   /**
@@ -33,5 +33,19 @@ describe('telling the three apart', () => {
     expect(isQuest(PIER, 'lint')).toBe(false)
     expect(isPier({ kind: 'mark', mark: 'stash' })).toBe(false)
     expect(isPier(null)).toBe(false)
+  })
+})
+
+describe(isForge, () => {
+  /** A kind and not an id: twelve open issues are one heap, not twelve. */
+  it('tells the two heaps apart', () => {
+    expect(isForge({ kind: 'forge', open: 'issue' }, 'issue')).toBe(true)
+    expect(isForge({ kind: 'forge', open: 'issue' }, 'pull')).toBe(false)
+    expect(isForge(null, 'issue')).toBe(false)
+    expect(isForge({ kind: 'pier' }, 'issue')).toBe(false)
+  })
+
+  it('has its own spelling as a key', () => {
+    expect(chosenKey({ kind: 'forge', open: 'pull' })).toBe('forge:pull')
   })
 })

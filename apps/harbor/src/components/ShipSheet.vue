@@ -5,6 +5,7 @@
     localTasks,
     mirrorsOf,
     originOf,
+    pointLines,
     rustLevel,
     shipPoints,
     taskForQuest,
@@ -94,19 +95,15 @@
     return when === '' ? null : new Date(when).toLocaleString('de-DE')
   })
 
-  /** The named parts of the project score, in the order they are worth reading. */
-  const PART_LABEL = {
-    work: 'Commits & PRs',
-    authors: 'Autoren',
-    checks: 'Prüfungen',
-    ci: 'in CI',
-  } as const
-
-  const breakdown = computed(() =>
-    (Object.keys(PART_LABEL) as (keyof typeof PART_LABEL)[])
-      .map((key) => ({ name: PART_LABEL[key], value: points.value.from[key] }))
-      .filter((part) => part.value > 0),
-  )
+  /**
+   * The score as a bill: what was counted, how many, at what rate.
+   *
+   * Four sums with the weights living in `points.ts` meant that "why does this repository score
+   * 26 831" was a question only the source could answer. The counts are measurements and the
+   * rates are decisions — two different kinds of entry, and a reader is allowed to argue with the
+   * second.
+   */
+  const bill = computed(() => pointLines(ship))
 
   /**
    * Only what the repository itself is asking for.
@@ -239,6 +236,7 @@
         :class="scrolled ? 'mt-1 max-h-12 cursor-zoom-in' : 'mt-2 max-h-36'"
         :ship="ship"
         :chosen="chosenQuest"
+        :stats="stats"
         :title="scrolled ? 'Ganz nach oben — Plan in voller Größe' : undefined"
         @pick="backToTop"
       />
@@ -346,17 +344,34 @@
         until they look important. A term worth nothing is left out rather than written as zero.
       -->
       <!--
-        Said out loud, because these are **points** and the line above them is counts.
-        "Autoren 2.200" under "110 Autoren" read as a second, wrong author count — and 2 200 is
-        what the 110 of them are worth, at 20 points each.
+        The bill. Three columns, because three different things stand in them: how many were
+        counted, what one of them is worth, and what that comes to. "Autoren 2.200" used to stand
+        alone under "110 Autoren" and read as a second, wrong author count.
       -->
-      <p class="mt-1.5 text-[10px] tracking-wide text-slate-600 uppercase">Punkte aus</p>
-      <dl class="mt-0.5 grid grid-cols-[auto_1fr] gap-x-3 font-mono text-[11px]">
-        <template v-for="part in breakdown" :key="part.name">
-          <dt class="text-slate-600">{{ part.name }}</dt>
-          <dd class="text-slate-500">{{ part.value.toLocaleString('de-DE') }}</dd>
-        </template>
-      </dl>
+      <p class="mt-1.5 text-[10px] tracking-wide text-slate-600 uppercase">Punkteabrechnung</p>
+      <table class="mt-0.5 w-full font-mono text-[11px]">
+        <tbody>
+          <tr v-for="line in bill" :key="line.name">
+            <td class="text-slate-600">{{ line.name }}</td>
+            <td class="text-right text-slate-500">{{ line.count.toLocaleString('de-DE') }}</td>
+            <td class="text-right text-slate-700">× {{ line.rate }}</td>
+            <td class="text-right text-slate-400">{{ line.points.toLocaleString('de-DE') }}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr class="border-t border-slate-800">
+            <td class="text-slate-600" colspan="3">Projektpunkte</td>
+            <td class="text-right text-sky-300">
+              {{ points.project.toLocaleString('de-DE') }}
+            </td>
+          </tr>
+          <!-- And what of it is the reader's: commits and pull requests alone, never the rest. -->
+          <tr v-if="points.own > 0">
+            <td class="text-slate-600" colspan="3">davon deine</td>
+            <td class="text-right text-emerald-300">{{ points.own.toLocaleString('de-DE') }}</td>
+          </tr>
+        </tfoot>
+      </table>
     </section>
 
     <!--
@@ -365,7 +380,13 @@
       *other people* — who watches this, what they have opened — was the last thing anybody saw.
       Two readings of the same work belong next to each other; their ages are said separately.
     -->
-    <ForgeFacts v-if="stats !== null" :stats="stats" :at="forgeAt" @open="emit('open', $event)" />
+    <ForgeFacts
+      v-if="stats !== null"
+      :stats="stats"
+      :at="forgeAt"
+      :chosen="chosenQuest"
+      @open="emit('open', $event)"
+    />
 
     <section class="border-b border-slate-800 px-4 py-3">
       <p class="text-[10px] tracking-wide text-slate-600 uppercase">Remotes</p>

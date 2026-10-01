@@ -15,18 +15,34 @@
   import { shipPoints } from '@hafen/core'
   import { computed } from 'vue'
 
-  import { isMark, isPier, isQuest, PIER } from './chosen'
+  import { isForge, isMark, isPier, isQuest, PIER } from './chosen'
   import { MARK_LABEL, MARK_MEANING } from './marks'
   import { MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR, VERDICT_LABEL } from './theme'
-  import { bridgeOf, cargoOf, gangwayOf, hullMarks, hullOf, landedOf, pierMarks } from './vessel'
+  import {
+    bridgeOf,
+    cargoOf,
+    forgeLoad,
+    gangwayOf,
+    hasGangway,
+    hullMarks,
+    hullOf,
+    landedOf,
+    pierMarks,
+  } from './vessel'
 
   import type { Chosen } from './chosen'
-  import type { Ship } from '@hafen/core'
+  import type { ForgeStats, Ship } from '@hafen/core'
 
-  const { ship, chosen = null } = defineProps<{
+  const {
+    ship,
+    chosen = null,
+    stats = null,
+  } = defineProps<{
     ship: Ship
     /** What is lit on her, wherever it stands. */
     chosen?: Chosen | null
+    /** What the forge said — the heaps on her apron are drawn from it, where it was asked. */
+    stats?: ForgeStats | null
   }>()
 
   const emit = defineEmits<{ pick: [Chosen | null] }>()
@@ -46,14 +62,21 @@
   const marks = computed(() => [...pierMarks(ship, hull.value), ...hullMarks(ship, hull.value)])
 
   /**
-   * The gangway, where anything is waiting on the planking.
+   * The heaps of open work, from the same function the harbour heaps them with.
    *
-   * The same line the harbour draws, from the same function — it says "there is work here" without
-   * counting anything, and a plan that left it out would be a plan of a different ship.
+   * "Jedes gezeichnete Element hat eine Entsprechung im Detail" only holds if the detail draws the
+   * same elements — a plan that showed the cargo and left out what the forge has open would answer
+   * half the clicks with nothing.
    */
-  const gangway = computed(() =>
-    marks.value.some((box) => box.spot.y < -hull.value.beam / 2) ? gangwayOf(hull.value, 0) : null,
-  )
+  const open = computed(() => forgeLoad(hull.value, stats?.issues ?? 0, stats?.pulls ?? 0))
+
+  /**
+   * The gangway, where she has a remote to be reached from.
+   *
+   * The same reading the harbour uses, from the same function. It used to appear when something
+   * was waiting on the planking, so the way aboard came and went with the working tree.
+   */
+  const gangway = computed(() => (hasGangway(ship) ? gangwayOf(hull.value, 0) : null))
 
   /**
    * The drawing's own box, in the ship's coordinates.
@@ -65,7 +88,7 @@
    */
   const frame = computed(() => {
     const half = hull.value.beam / 2
-    const drawn = [...landed.value, ...marks.value]
+    const drawn = [...landed.value, ...marks.value, ...open.value]
     const top = Math.min(-half, ...drawn.map((box) => box.spot.y - box.across / 2)) - 1
     const bottom = Math.max(half, ...drawn.map((box) => box.spot.y + box.across / 2)) + 1
     const right = Math.max(hull.value.length, ...drawn.map((box) => box.spot.x + box.along / 2))
@@ -93,6 +116,7 @@
       ...cargo.value.map((box) => ({ box, on: isQuest(chosen, box.quest.id) })),
       ...landed.value.map((box) => ({ box, on: isQuest(chosen, box.quest.id) })),
       ...marks.value.map((box) => ({ box, on: isMark(chosen, box.kind) })),
+      ...open.value.map((box) => ({ box, on: isForge(chosen, box.kind) })),
     ]
     return all
       .filter((one) => one.on)
@@ -189,6 +213,31 @@
         @click.stop="emit('pick', { kind: 'quest', id: box.quest.id })"
       >
         <title>{{ box.quest.id }} — {{ VERDICT_LABEL[box.quest.verdict] }}</title>
+      </rect>
+    </g>
+
+    <!--
+      What the forge has open, heaped beyond the rest.
+      An outline for an issue, which is a question; a filled crate for a pull request, which
+      carries code — the same pair of shapes and the same two colours as everywhere else.
+    -->
+    <g v-for="(box, index) in open" :key="`fo-${box.kind}-${String(index)}`">
+      <rect
+        class="cursor-pointer"
+        :x="box.spot.x - box.along / 2"
+        :y="box.spot.y - box.across / 2"
+        :width="box.along"
+        :height="box.across"
+        :fill="box.kind === 'pull' ? SCENE.pull : 'transparent'"
+        fill-opacity="0.7"
+        :stroke="box.kind === 'pull' ? SCENE.pull : SCENE.issue"
+        stroke-width="0.8"
+        @click.stop="emit('pick', { kind: 'forge', open: box.kind })"
+      >
+        <title>
+          {{ box.kind === 'pull' ? 'Offene Pull Requests' : 'Offene Issues' }} —
+          {{ box.kind === 'pull' ? (stats?.pulls ?? 0) : (stats?.issues ?? 0) }}
+        </title>
       </rect>
     </g>
 

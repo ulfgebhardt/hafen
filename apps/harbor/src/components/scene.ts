@@ -51,6 +51,7 @@ import {
   hullOf,
   gangwayBox,
   gangwayOf,
+  hasGangway,
   hullMarks,
   LANDED,
   forgeLoad,
@@ -895,35 +896,35 @@ function tiers(ship: Ship, hull: Hull, traits: Traits): Graphics {
 }
 
 /**
- * The lit windows: stars, and nothing else.
+ * What a crowd of watchers looks like **from above**: floodlights on the deckhouse roof.
  *
- * The one feature that is **dark until somebody asks the forge**, which is exactly what it means —
- * nobody has looked. It is deliberately not the hull size doing double duty: a repository can be
- * small and admired, and those are two readings that have to be able to disagree.
+ * It was four rectangles a side, read as cabin windows — and from above a window is the one thing
+ * a deckhouse does not show. A roof shows its lights, and a ship somebody watches is a ship that
+ * is lit.
+ *
+ * The one feature that is **dark until somebody asks the forge**, which is exactly what it means:
+ * nobody has looked. Deliberately not the hull size doing double duty — a repository can be small
+ * and admired, and those are two readings that have to be able to disagree.
  */
-function windows(hull: Hull, traits: Traits, decks: number): Graphics {
+function floodlights(ship: Ship, hull: Hull, traits: Traits): Graphics {
   const lit = new Graphics()
   if (traits.glow <= 0) {
     return lit
   }
-
-  const rows = Math.max(1, decks)
-  /*
-   * Three to a row and not four.
-   *
-   * Four filled the house wall to its edges, so the deckhouse read as a grid of windows rather
-   * than as a house with windows in it — and on a long hull the row ran into the hatch beyond.
-   */
-  for (let deck = 0; deck < rows; deck += 1) {
-    for (let index = 0; index < 3; index += 1) {
+  const block = bridgeOf(ship, hull)
+  const alpha = 0.18 + traits.glow * 0.72
+  // One lamp at each corner of the roof, which is where a ship carries them.
+  for (const along of [-0.34, 0.34]) {
+    for (const across of [-0.3, 0.3]) {
       const at = project({
-        x: hull.length * (0.06 + index * 0.035),
-        y: (deck - (rows - 1) / 2) * hull.beam * 0.2,
+        x: block.spot.x + along * block.along,
+        y: block.spot.y + across * block.across,
       })
-      lit.rect(at.x, at.y - 0.28 * UNIT, 0.8 * UNIT, 0.56 * UNIT)
+      lit.circle(at.x, at.y, 0.42 * UNIT).fill({ color: hex(SCENE.lamp), alpha })
+      // A pool of light under each, so brightness reads as light and not as a bigger lamp.
+      lit.circle(at.x, at.y, 1.5 * UNIT).fill({ color: hex(SCENE.lamp), alpha: alpha * 0.16 })
     }
   }
-  lit.fill({ color: hex(SCENE.lamp), alpha: 0.2 + traits.glow * 0.75 })
   return lit
 }
 
@@ -1021,7 +1022,7 @@ function drawVessel(
    * is work here" without counting anything, because the eye finds a line between two shapes
    * before it finds a crate among crates.
    */
-  if (pierMarks(ship, hull).length > 0) {
+  if (hasGangway(ship)) {
     const plank = gangwayOf(hull, offset, reach)
     const from = project(plank.from)
     const to = project(plank.to)
@@ -1084,7 +1085,7 @@ function drawVessel(
   into.addChild(rig(ship, hull, traits))
   into.addChild(bridge(ship, hull))
   into.addChild(tiers(ship, hull, traits))
-  into.addChild(windows(hull, traits, traits.tiers))
+  into.addChild(floodlights(ship, hull, traits))
   /*
    * Counter-mirrored, so it flies up the page for every ship.
    *
@@ -1355,10 +1356,27 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
           return
         }
 
+        /*
+         * The heaps, hit-tested against the same boxes they were drawn from.
+         *
+         * After the marks because they share the apron and a crate is the more specific thing: a
+         * click that could be either should answer the one with the smaller meaning.
+         */
+        const said = statsOf(ship)
+        const heap = boxAt(
+          forgeLoad(hull, said?.issues ?? 0, said?.pulls ?? 0).map((box) => ({
+            ...box,
+            kind: box.kind,
+          })),
+          onPier,
+        )
+        if (heap !== null) {
+          selected(ship, { kind: 'forge', open: heap.kind })
+          return
+        }
+
         // Last, because it is the widest target and stands for the least specific thing.
-        const plank =
-          pierMarks(ship, hull).length > 0 &&
-          boxAt([gangwayBox(hull, offset, reach)], onDeck) !== null
+        const plank = hasGangway(ship) && boxAt([gangwayBox(hull, offset, reach)], onDeck) !== null
         selected(ship, plank ? PIER : null)
       }
 
@@ -1488,7 +1506,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       })
       const field = fieldOf(onApron, apronOf(onApron, -reach))
       walkable.set(berth.node, [
-        { ...ringAs(promenadeOf(hull).map((spot) => toHarbour(spot, true))), gate: 0 },
+        /*
+         * Her deck, and only where there is a gangway to reach it by.
+         *
+         * A ship nobody can reach from anywhere else is a ship nobody walks aboard — the ring is
+         * simply absent, rather than connected to a plank that is not drawn.
+         */
+        ...(hasGangway(berth.ship)
+          ? [{ ...ringAs(promenadeOf(hull).map((spot) => toHarbour(spot, true))), gate: 0 }]
+          : []),
         ...(field === null
           ? []
           : [
@@ -2062,6 +2088,25 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
             .moveTo(from.x, from.y)
             .lineTo(to.x, to.y)
             .stroke({ width: 4, color: accent, alpha: 0.95 })
+          continue
+        }
+
+        /*
+         * A heap: every crate of that kind at once, the same way the pier lights all of its boxes.
+         * Twelve open issues are one heap, so ringing one crate of it would answer a question
+         * nobody asked.
+         */
+        if (chosen.kind === 'forge') {
+          const said = statsOf(entry.ship)
+          for (const box of forgeLoad(entry.hull, said?.issues ?? 0, said?.pulls ?? 0).filter(
+            (one) => one.kind === chosen.open,
+          )) {
+            slab(entry.ashore, box.spot, box.along + 0.4, box.across + 0.4).stroke({
+              width: 2,
+              color: accent,
+              alpha: 0.95,
+            })
+          }
           continue
         }
 
