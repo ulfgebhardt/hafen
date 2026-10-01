@@ -344,18 +344,38 @@
         until they look important. A term worth nothing is left out rather than written as zero.
       -->
       <!--
-        The bill. Three columns, because three different things stand in them: how many were
-        counted, what one of them is worth, and what that comes to. "Autoren 2.200" used to stand
-        alone under "110 Autoren" and read as a second, wrong author count.
+        The bill, in two columns of figures: what the repository counted, and what of it is yours.
+        "Autoren 2.200" used to stand alone under "110 Autoren" and read as a second, wrong author
+        count; then the footer said "davon deine" under a sum three of whose terms nobody can hold
+        a share of, which suggested the rest was merely outstanding. A dash says "nobody's" where
+        a nought would say "none of yours yet".
       -->
       <p class="mt-1.5 text-[10px] tracking-wide text-slate-600 uppercase">Punkteabrechnung</p>
       <table class="mt-0.5 w-full font-mono text-[11px]">
+        <thead>
+          <tr class="text-[10px] text-slate-700">
+            <th class="text-left font-normal" colspan="3">das Repo</th>
+            <th class="text-right font-normal">Punkte</th>
+            <th class="pl-2 text-right font-normal text-emerald-900">deine</th>
+          </tr>
+        </thead>
         <tbody>
           <tr v-for="line in bill" :key="line.name">
             <td class="text-slate-600">{{ line.name }}</td>
             <td class="text-right text-slate-500">{{ line.count.toLocaleString('de-DE') }}</td>
             <td class="text-right text-slate-700">× {{ line.rate }}</td>
             <td class="text-right text-slate-400">{{ line.points.toLocaleString('de-DE') }}</td>
+            <td
+              class="pl-2 text-right"
+              :class="line.own === null ? 'text-slate-700' : 'text-emerald-300/80'"
+              :title="
+                line.own === null
+                  ? `${line.name} gehört dem Repository — daran hat niemand einen Anteil`
+                  : `${line.own.count.toLocaleString('de-DE')} davon von dir`
+              "
+            >
+              {{ line.own === null ? '—' : line.own.points.toLocaleString('de-DE') }}
+            </td>
           </tr>
         </tbody>
         <tfoot>
@@ -364,14 +384,23 @@
             <td class="text-right text-sky-300">
               {{ points.project.toLocaleString('de-DE') }}
             </td>
-          </tr>
-          <!-- And what of it is the reader's: commits and pull requests alone, never the rest. -->
-          <tr v-if="points.own > 0">
-            <td class="text-slate-600" colspan="3">davon deine</td>
-            <td class="text-right text-emerald-300">{{ points.own.toLocaleString('de-DE') }}</td>
+            <td class="pl-2 text-right text-emerald-300">
+              {{ points.own.toLocaleString('de-DE') }}
+            </td>
           </tr>
         </tfoot>
       </table>
+      <!--
+        And the half of the reader's score that no ship can show.
+        Breadth, tidiness and met demands are properties of *keeping a fleet*: they are counted
+        once over all of it and belong to no single repository. Without this sentence the column
+        above reads as the whole of what a person is worth, and it is not even its own total.
+      -->
+      <p class="mt-1 text-[11px] text-slate-600">
+        Deine Punkte sind nur Commits und PRs. Autoren, Prüfungen und CI gehören dem Repository —
+        daran hat niemand einen Anteil. Breite, Ordnung und erfüllte Forderungen zählen über die
+        ganze Flotte und stehen in keinem einzelnen Schiff.
+      </p>
     </section>
 
     <!--

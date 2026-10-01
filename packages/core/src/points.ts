@@ -162,6 +162,17 @@ export interface PointLine {
   count: number
   rate: number
   points: number
+  /**
+   * The reader's share of this line, where there can be one.
+   *
+   * `null` means **nobody's**, not zero: the authors, the checks and the CI belong to the
+   * repository and no person can hold a share of them. Printing a nought there would say the
+   * reader had earned none of something that is not the kind of thing anybody earns — and that
+   * was the whole confusion the footer "davon deine" created. Three of the four terms in a
+   * project score can never be yours, so a bill that does not say which is a bill that implies
+   * the rest is simply outstanding.
+   */
+  own: { count: number; points: number } | null
 }
 
 /**
@@ -178,12 +189,19 @@ export interface PointLine {
  */
 export function pointLines(ship: Ship): readonly PointLine[] {
   const work = ship.ledger.total
+  const mine = ship.ledger.own
+  const share = (count: number, rate: number): { count: number; points: number } => ({
+    count,
+    points: count * rate,
+  })
+
   const lines: PointLine[] = COMMIT_KINDS.filter((kind) => (work.byKind[kind] ?? 0) > 0).map(
     (kind) => ({
       name: kind,
       count: work.byKind[kind] ?? 0,
       rate: KIND_POINTS[kind],
       points: (work.byKind[kind] ?? 0) * KIND_POINTS[kind],
+      own: share(mine.byKind[kind] ?? 0, KIND_POINTS[kind]),
     }),
   )
   const rest: readonly PointLine[] = [
@@ -192,25 +210,35 @@ export function pointLines(ship: Ship): readonly PointLine[] {
       count: work.unscored,
       rate: UNSCORED_POINTS,
       points: work.unscored * UNSCORED_POINTS,
+      own: share(mine.unscored, UNSCORED_POINTS),
     },
-    { name: 'PRs', count: work.pulls, rate: PULL_POINTS, points: work.pulls * PULL_POINTS },
+    {
+      name: 'PRs',
+      count: work.pulls,
+      rate: PULL_POINTS,
+      points: work.pulls * PULL_POINTS,
+      own: share(mine.pulls, PULL_POINTS),
+    },
     {
       name: 'Autoren',
       count: work.authors,
       rate: AUTHOR_POINTS,
       points: work.authors * AUTHOR_POINTS,
+      own: null,
     },
     {
       name: 'Prüfungen',
       count: coveredChecks(ship),
       rate: CHECK_POINTS,
       points: coveredChecks(ship) * CHECK_POINTS,
+      own: null,
     },
     {
       name: 'in CI',
       count: ship.contract.inCi.length,
       rate: CI_POINTS,
       points: ship.contract.inCi.length * CI_POINTS,
+      own: null,
     },
   ]
   return [...lines, ...rest].filter((line) => line.count > 0)

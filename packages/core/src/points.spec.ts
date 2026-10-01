@@ -446,6 +446,7 @@ describe(pointLines, () => {
       count: 10,
       rate: KIND_POINTS.feat,
       points: 10 * KIND_POINTS.feat,
+      own: { count: 0, points: 0 },
     })
     expect(lines.find((line) => line.name === 'ohne Convention')?.points).toBe(100)
   })
@@ -466,5 +467,46 @@ describe(pointLines, () => {
   /** Nothing counted is no line: a column of zeroes says nothing and costs a reader a line each. */
   it('leaves out what there is none of', () => {
     expect(billed().every((line) => line.count > 0)).toBe(true)
+  })
+
+  /**
+   * Which lines a person can hold a share of, and which belong to the repository.
+   *
+   * The sheet said "davon deine" under a sum whose three largest terms nobody can earn — so the
+   * difference read as work still outstanding rather than as a different kind of thing. `null`
+   * is nobody's; a nought would be "none of yours yet", and those are not the same sentence.
+   */
+  it('says which lines nobody can hold a share of', () => {
+    const lines = billed({
+      ledger: {
+        total: { ...NO_WORK, byKind: { feat: 10 }, pulls: 4, authors: 3 },
+        own: { ...NO_WORK, byKind: { feat: 4 }, pulls: 1 },
+      },
+      contract: mockContract({
+        scripts: { lint: true, typecheck: false, unit: false, e2e: false },
+        inCi: ['lint'],
+      }),
+    })
+    const line = (name: string) => lines.find((one) => one.name === name)
+
+    expect(line('feat')?.own).toStrictEqual({ count: 4, points: 4 * KIND_POINTS.feat })
+    expect(line('PRs')?.own).toStrictEqual({ count: 1, points: PULL_POINTS })
+
+    for (const name of ['Autoren', 'Prüfungen', 'in CI']) {
+      expect(line(name)?.own).toBeNull()
+    }
+  })
+
+  /** And what can be held adds up to the figure the sheet prints beside the project's. */
+  it("adds what can be held up to the reader's score", () => {
+    const subject = ship({
+      ledger: {
+        total: { ...NO_WORK, byKind: { feat: 9, fix: 2 }, unscored: 30, pulls: 6, authors: 5 },
+        own: { ...NO_WORK, byKind: { feat: 3, fix: 1 }, unscored: 7, pulls: 2 },
+      },
+    })
+    const mine = pointLines(subject).reduce((sum, line) => sum + (line.own?.points ?? 0), 0)
+
+    expect(mine).toBe(shipPoints(subject).own)
   })
 })
