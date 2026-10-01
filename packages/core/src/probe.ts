@@ -77,6 +77,49 @@ export interface QuestFacts {
   workflows: readonly string[]
 }
 
+/**
+ * The path a workflow names under a key, where one does.
+ *
+ * `release-please` is the case that forced it, and it is the same argument `ci-nennt` was built
+ * on, one step further: the action takes `config-file: .github/release-please/config.json`, and a
+ * quest naming a fixed path told two repositories on this fleet that their configuration was
+ * missing while the workflow beside it said exactly where it is. The path is *measured* out of
+ * the workflow rather than guessed from a list of places people usually put it.
+ *
+ * Refuses anything that climbs out of the ship or starts at the root, the same way `wantedFiles`
+ * does: a workflow is a file in somebody else's repository, and it must not be able to make the
+ * survey read `../../.ssh/id_ed25519`.
+ */
+export function namedInCi(workflows: readonly string[], key: string): string | null {
+  if (key === '') {
+    return null
+  }
+  for (const body of workflows) {
+    for (const line of body.split('\n')) {
+      const at = line.indexOf(`${key}:`)
+      if (at === -1) {
+        continue
+      }
+      const value = line
+        .slice(at + key.length + 1)
+        .trim()
+        .replace(/^['"]|['"]$/gu, '')
+        .split('#')[0]
+        ?.trim()
+      if (
+        value === undefined ||
+        value === '' ||
+        value.startsWith('/') ||
+        value.split('/').includes('..')
+      ) {
+        continue
+      }
+      return value
+    }
+  }
+  return null
+}
+
 function role(check: QuestCheck): CheckRole | null {
   const named = check.args['rolle'] ?? ''
   return named === 'lint' || named === 'typecheck' || named === 'unit' || named === 'e2e'
@@ -275,6 +318,35 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       )
     }
 
+    /**
+     * A file the CI itself names — and the default where it names none.
+     *
+     * Two repositories here run release-please with `config-file:` pointing into
+     * `.github/release-please/`, and a quest naming the default path alone reported a gap in both.
+     * That is the failure `ci-nennt` exists to prevent, one directory over: the drawing of a
+     * demand must not depend on where a tool's documentation happens to put a file by default.
+     *
+     * `sonst` is the tool's own default and not a list of places people like: a default is a fact
+     * about the tool, a list would be a guess about this fleet — and the one thing this survey
+     * never does is keep a guess list.
+     */
+    case 'datei-aus-ci': {
+      const key = check.args['schluessel'] ?? ''
+      const fallback = check.args['sonst'] ?? ''
+      const named = namedInCi(facts.workflows, key)
+      const path = named ?? fallback
+      if (path === '') {
+        return say(`eine Datei, die ${key} nennt`, 'nirgends', 'keine Datei genannt', null)
+      }
+      const seen = shipFile(facts, path)
+      return say(
+        `${path} liegt im Schiff`,
+        named === null ? `${path} (Vorgabe)` : `${path} (aus .github/workflows)`,
+        seen.found,
+        seen.ok,
+      )
+    }
+
     case 'datei-enthaelt': {
       const path = check.args['datei'] ?? ''
       const text = check.args['text'] ?? ''
@@ -352,8 +424,13 @@ function wantedFiles(catalog: readonly Quest[]): readonly string[] {
   const paths = new Set<string>()
   for (const quest of catalog) {
     for (const check of quest.checks) {
-      // `datei` names one, `dateien` names several — both end up in the same read.
-      const named = [check.args['datei'], ...(check.args['dateien'] ?? '').split(',')]
+      // `datei` names one, `dateien` several, `sonst` the default a `datei-aus-ci` falls back
+      // to — all of them end up in the same read.
+      const named = [
+        check.args['datei'],
+        check.args['sonst'],
+        ...(check.args['dateien'] ?? '').split(','),
+      ]
       for (const entry of named) {
         const path = entry?.trim()
         if (
@@ -453,5 +530,32 @@ export async function measureQuests(
     readTraits(ports, shipPath, contract),
   ])
 
-  return { contract, traits, files: new Map(files), dependencies, workflows }
+  /*
+   * And the files the workflows themselves name — a second pass, because their paths are not
+   * known until the workflows have been read.
+   *
+   * Only for the keys a quest asks about, so a fleet whose catalog has no `datei-aus-ci` check
+   * pays nothing for this, exactly as it pays nothing for a quest that names no file.
+   */
+  const keys = new Set(
+    catalog.flatMap((quest) =>
+      quest.checks
+        .filter((check) => check.probe === 'datei-aus-ci')
+        .map((check) => check.args['schluessel'] ?? ''),
+    ),
+  )
+  const fromCi = await Promise.all(
+    [...keys]
+      .map((key) => namedInCi(workflows, key))
+      .filter((path): path is string => path !== null && !paths.includes(path))
+      .map(async (path) => [path, await ports.fs.readFile(`${shipPath}/${path}`)] as const),
+  )
+
+  return {
+    contract,
+    traits,
+    files: new Map([...files, ...fromCi]),
+    dependencies,
+    workflows,
+  }
 }
