@@ -385,8 +385,36 @@ fn terminal() -> Option<String> {
 
 /// Whether a command exists, asked the way a shell asks.
 fn on_path(command: &str) -> bool {
-    std::env::var("PATH")
-        .is_ok_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(command).is_file()))
+    let Ok(paths) = std::env::var("PATH") else {
+        return false;
+    };
+    let names = executables(command, cfg!(windows), std::env::var("PATHEXT").ok());
+    std::env::split_paths(&paths).any(|dir| names.iter().any(|name| dir.join(name).is_file()))
+}
+
+/// What one command may be called on disk.
+///
+/// On Windows an executable carries its extension and `PATH` does not: `git` is `git.exe` there,
+/// so looking for the bare name found nothing and the window offered no tools at all — which is
+/// how the Windows runner first noticed. `PATHEXT` is the list the shell itself uses, and the
+/// bare name stays first because a file without an extension is still a file.
+///
+/// Takes the platform and the variable rather than reading them, so the Windows case can be
+/// tested on any machine. A `cfg!` inside would be a branch that only one runner ever enters.
+fn executables(command: &str, windows: bool, pathext: Option<String>) -> Vec<String> {
+    let mut names = vec![command.to_owned()];
+    if !windows {
+        return names;
+    }
+    let listed = pathext.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned());
+    names.extend(
+        listed
+            .split(';')
+            .map(str::trim)
+            .filter(|one| !one.is_empty())
+            .map(|one| format!("{command}{}", one.to_lowercase())),
+    );
+    names
 }
 
 /// What a tool is: a program, and whether it needs a terminal around it.
@@ -839,6 +867,23 @@ mod tests {
 
         // Nothing in the whole file may reach for the destructive one.
         assert!(!include_str!("lib.rs").contains("\"-D\""));
+    }
+
+    /// `git` is `git.exe` on Windows, and `PATH` says nothing about that.
+    #[test]
+    fn knows_what_a_command_is_called_on_disk() {
+        assert_eq!(executables("git", false, None), vec!["git".to_owned()]);
+        assert_eq!(
+            executables("git", true, Some(".COM;.EXE;.BAT".to_owned())),
+            vec![
+                "git".to_owned(),
+                "git.com".to_owned(),
+                "git.exe".to_owned(),
+                "git.bat".to_owned(),
+            ]
+        );
+        // Without the variable the usual four are assumed rather than nothing being found.
+        assert!(executables("git", true, None).contains(&"git.exe".to_owned()));
     }
 
     /// Only what this machine can actually run — a button that fails in the click is worse than
