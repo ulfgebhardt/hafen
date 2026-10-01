@@ -12,6 +12,7 @@
     forge = new Map(),
     layout = 'lanes',
     centre = null,
+    hold = null,
   } = defineProps<{
     ships: readonly Ship[]
     /**
@@ -21,6 +22,13 @@
      * builds a new drawing, and the ship they were reading about would be somewhere in it.
      */
     centre?: Ship | null
+    /**
+     * Where that ship stood on the page before, in pixels.
+     *
+     * Handed in because this component is keyed on the page: the drawing she was in is gone by
+     * the time this one is built, so the place she occupied has to survive outside both.
+     */
+    hold?: { x: number; y: number } | null
     /** Which harbour to draw: docks in lanes, or the fan that can branch. */
     layout?: 'lanes' | 'fan'
     /**
@@ -69,7 +77,7 @@
     })
     scene.draw(ships, forge, layout)
     scene.highlight(picked.value, demand.value)
-    scene.focus(centre)
+    scene.focus(centre, hold)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
@@ -79,7 +87,7 @@
     ([next, stats, kind]) => {
       scene?.draw(next, stats, kind)
       scene?.highlight(picked.value, demand.value)
-      scene?.focus(centre)
+      scene?.focus(centre, hold)
     },
   )
 
@@ -89,6 +97,11 @@
   // the same breath — a watcher each would light the hull one tick before the box.
   watch([picked, demand], ([ship, quest]) => {
     scene?.highlight(ship, quest)
+  })
+
+  /** Where a ship stands right now — asked by the page before it swaps the drawing out. */
+  defineExpose({
+    where: (ship: Ship | null): { x: number; y: number } | null => scene?.where(ship) ?? null,
   })
 
   onBeforeUnmount(() => {

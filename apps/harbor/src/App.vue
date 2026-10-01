@@ -83,7 +83,15 @@
    * drawing centres on her once it is built — see `centre` on the scene.
    */
   const view = ref<View>('dock')
+  /** The drawing, so the place a ship holds on screen can be asked before it is swapped out. */
+  const harbour = ref<{ where: (ship: Ship | null) => { x: number; y: number } | null } | null>(
+    null,
+  )
+  const hold = ref<{ x: number; y: number } | null>(null)
+
   const showView = (next: View): void => {
+    // Asked before the page changes, because the drawing she is in is gone a tick later.
+    hold.value = harbour.value?.where(picked.value) ?? null
     view.value = next
     if (next === 'fleet') {
       page.value = FLEET
@@ -523,6 +531,7 @@
           <!-- Keyed on the page: a new page is a new drawing, not the old one panned. -->
           <HarborScene
             v-else-if="draws(page)"
+            ref="harbour"
             :key="`${page}:${query}:${contract?.id ?? ''}:${contract?.verdict ?? ''}`"
             v-model:picked="picked"
             v-model:hovered="hovered"
@@ -531,6 +540,7 @@
             :layout="layout"
             :ships="shown"
             :centre="picked"
+            :hold="hold"
           />
         </main>
 
