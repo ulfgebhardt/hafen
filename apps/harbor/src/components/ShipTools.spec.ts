@@ -70,7 +70,7 @@ describe('shipTools', () => {
 
     await tools
       .findAll('button')
-      .find((one) => one.text() === 'ausführen')
+      .find((one) => one.text() === 'löschen')
       ?.trigger('click')
 
     expect(tools.emitted('prune')).toStrictEqual([['feat/gone']])

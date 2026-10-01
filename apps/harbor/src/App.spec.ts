@@ -281,6 +281,56 @@ describe('the register, from the window', () => {
 
     expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toBe('lint')
   })
+
+  /**
+   * Choosing the same thing twice lets go of it.
+   *
+   * Decided here and not in either of the two that offer the gesture: the drawing and the sheet
+   * both hand a choice up, and a toggle built into one of them is a toggle the other does not do.
+   */
+  it('drops a choice that is made a second time', async () => {
+    bridge({ snapshot: read })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    scene.$emit('update:quest', { kind: 'quest', id: 'lint' })
+    await flushPromises()
+
+    expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toStrictEqual({
+      kind: 'quest',
+      id: 'lint',
+    })
+
+    // A fresh object with the same contents, which is what a second click actually hands up.
+    scene.$emit('update:quest', { kind: 'quest', id: 'lint' })
+    await flushPromises()
+
+    expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toBeNull()
+  })
+
+  /** And a different one replaces rather than clears: two clicks on two boxes mark the second. */
+  it('keeps a choice that is made on something else', async () => {
+    bridge({ snapshot: read })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    scene.$emit('update:quest', { kind: 'quest', id: 'lint' })
+    scene.$emit('update:quest', { kind: 'forge', open: 'pull' })
+    await flushPromises()
+
+    expect(page.findComponent({ name: 'ShipSheet' }).props('quest')).toStrictEqual({
+      kind: 'forge',
+      open: 'pull',
+    })
+  })
 })
 
 describe('the tools, from the window', () => {
@@ -610,7 +660,7 @@ describe('deleting one branch, from the window', () => {
     const page = mount(App, { global: { stubs } })
     await flushPromises()
     await pick(page, stale.ships[0])
-    await clicking(page, 'ausführen')
+    await clicking(page, 'löschen')
 
     expect(invoke).toHaveBeenCalledWith('branch_delete', {
       path: stale.ships[0]?.path,
@@ -634,7 +684,7 @@ describe('deleting one branch, from the window', () => {
     const page = mount(App, { global: { stubs } })
     await flushPromises()
     await pick(page, stale.ships[0])
-    await clicking(page, 'ausführen')
+    await clicking(page, 'löschen')
 
     expect(page.text()).toContain('not fully merged')
     expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())

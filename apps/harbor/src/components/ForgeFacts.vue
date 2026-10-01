@@ -12,9 +12,10 @@
    */
 
   import { forgeLinks } from '@hafen/core'
-  import { computed } from 'vue'
+  import { computed, ref } from 'vue'
 
   import { isForge } from './chosen'
+  import { revealChosen } from './revealing'
   import { SCENE } from './theme'
 
   import type { Chosen } from './chosen'
@@ -49,6 +50,27 @@
   ])
 
   const asked = computed(() => (at === '' ? null : new Date(at).toLocaleString('de-DE')))
+
+  /**
+   * A heap clicked on the drawing brings its row here.
+   *
+   * It was the one chosen thing in the sheet that only *marked* its row: the ring went on
+   * somewhere below the fold and the reader had to go looking for what they had just clicked.
+   * The same gesture the quests and the marks make, from the same place.
+   */
+  const rows = ref<Record<string, HTMLElement | null>>({})
+
+  revealChosen(
+    () => chosen,
+    (pick) => (pick.kind === 'forge' ? rows.value[pick.open] : null),
+  )
+
+  /** Vue hands a `ref` function the component instance too; only an element is of use here. */
+  const hold =
+    (kind: 'issue' | 'pull') =>
+    (element: unknown): void => {
+      rows.value[kind] = element instanceof HTMLElement ? element : null
+    }
 
   /**
    * How many marks one row may carry. The number beside it is always the true one.
@@ -128,7 +150,7 @@
       which is the same promise the crates on a hull make.
     -->
     <ul class="mt-1.5 space-y-1">
-      <li v-for="row in open" :key="row.name">
+      <li v-for="row in open" :key="row.name" :ref="hold(row.kind)" data-row>
         <button
           class="group flex w-full items-center gap-2"
           :class="isForge(chosen, row.kind) ? 'ring-1 ring-orange-400/70' : ''"

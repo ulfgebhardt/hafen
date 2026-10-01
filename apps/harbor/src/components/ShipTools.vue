@@ -105,13 +105,18 @@
             <span class="min-w-0 flex-1 font-mono text-xs break-all text-slate-300">{{
               branch.name
             }}</span>
+            <!--
+              The verb is the one that happens: `ausführen` named the mechanism and not the act,
+              so the one button in this window that deletes a branch read like a play button on a
+              measurement. A label a reader has to look up what it does is a label that does not.
+            -->
             <button
               class="shrink-0 font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
               :disabled="busy"
-              :title="`Nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
+              :title="`Löscht nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
               @click="emit('prune', branch.name)"
             >
-              ausführen
+              löschen
             </button>
           </span>
           <span class="block text-[11px] text-slate-600">{{

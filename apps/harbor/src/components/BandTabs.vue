@@ -70,6 +70,29 @@
 
   /** What the fleet page is worth: every ship on it, because that page has no band to split by. */
   const whole = computed(() => bandPoints(ships))
+
+  /**
+   * Which band the dock switch would land on — the one open, or the first.
+   *
+   * The parent decides where a press actually goes, so this is the same guess made here: whatever
+   * band is being read stays, and from the fleet page the switch opens the first one.
+   */
+  const band = computed(() => (isBand(page.value) ? page.value : BANDS[0]))
+
+  /**
+   * How many ships each switch stands for.
+   *
+   * It carried no figures at first, on the reasoning that a count on a *view* would be a third
+   * number for a thing that is not a page. The catalog had one anyway, which made the omission
+   * look like an oversight rather than a rule — and the number a reader wants before pressing is
+   * exactly this one: how big is the fleet, how full is the dock I would land in. The counts move
+   * with the search, like every other count on this bar.
+   */
+  const counted = computed<Record<View, number>>(() => ({
+    fleet: ships.length,
+    dock: grouped.value[band.value].length,
+    contracts: demands.value,
+  }))
 </script>
 
 <template>
@@ -93,7 +116,7 @@
         class="flex items-center px-2 py-1"
         :class="view === name ? 'text-slate-100' : 'text-slate-600 hover:text-slate-400'"
         :aria-pressed="view === name"
-        :title="`${VIEW_LABEL[name]} — ${VIEW_MEANING[name]}`"
+        :title="`${VIEW_LABEL[name]} ${counted[name]} — ${VIEW_MEANING[name]}`"
         @click="emit('view', name)"
       >
         <svg
@@ -129,13 +152,11 @@
         </svg>
         <span class="sr-only">{{ VIEW_LABEL[name] }}</span>
         <!--
-          The one figure that survives the move to a button: how many demands the catalog holds.
-          A count on "Dock" or "Flotte" would be a third number for a thing that is not a page,
-          but the catalog's unit is the demand, and that number is the page's whole subject.
+          What each switch stands for, in its own unit: ships for the two that draw ships, demands
+          for the one whose unit is not a hull. Three numbers in the same place that mean three
+          different things would be the trap here — the title says which is which.
         -->
-        <span v-if="name === 'contracts'" class="ml-1 font-mono text-[10px] text-slate-600">{{
-          demands
-        }}</span>
+        <span class="ml-1 font-mono text-[10px] text-slate-600">{{ counted[name] }}</span>
       </button>
     </span>
 
