@@ -37,7 +37,7 @@
     stopMeasuring,
   } from './snapshot'
 
-  import type { Page, View } from './components/band'
+  import type { Layout, Page, View } from './components/band'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
@@ -189,20 +189,14 @@
   const narrowed = computed(() => filterByContract(fleet.value, contract.value))
 
   /**
-   * One harbour, packed, on every page that draws ships.
+   * Which arrangement is drawn, and it follows the page rather than a switch.
    *
-   * The fleet page had the fan, on the argument that it is about *who owns what* and a fan can
-   * branch. What that cost was the thing the page is for: ninety-two ships spread over a picture
-   * nobody could take in, each organisation a thin wedge radiating from one point. Measured on
-   * this fleet, the same 92 berths come out **586 × 335 packed against 1164 × 556 fanned** — a
-   * third of the area, and the difference is all water nobody was looking at.
-   *
-   * The reason to keep the fan went away with `kindredOf`. Grouping was the fan's argument — it
-   * could give each organisation its own limb — and the related organisations now stand next to
-   * each other in the *order* the groups are laid out in, which a packed harbour carries just as
-   * well. Proximity says the same thing a wedge said, in a quarter of the space.
+   * The band pages ask *what is on this page* and get the packed one. The fleet page asks *what
+   * belongs with what*, and since `kin.ts` can answer that it gets one ring per project — the fan
+   * it used to get spent four times the area and grouped by the directory an organisation happens
+   * to be filed under, which is a filing decision rather than a fact about the code.
    */
-  const layout = computed<'lanes' | 'fan'>(() => 'lanes')
+  const layout = computed<Layout>(() => (page.value === FLEET ? 'basins' : 'lanes'))
 
   /**
    * The forge reading keyed by ship, for the drawing.
