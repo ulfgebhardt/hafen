@@ -146,7 +146,29 @@ export interface Traits {
    * and a harbour that drew admirers as dockers would be saying something it cannot know.
    */
   crew: number
+  /**
+   * A crane on her apron, and whether anybody is working it.
+   *
+   * Two readings and not one, because they answer different questions. A berth has a crane where
+   * there is something to lift — a stack of open demands — so a repository that owes nothing has
+   * a bare apron, which is the right picture. Somebody is *at* the crane only where the work is
+   * current: measured as touched within the week, which is the sharper end of `active` (thirty
+   * days) and the only honest reading of "die aktivsten".
+   *
+   * It is deliberately not tied to size or to score: a small repository that was worked on
+   * yesterday is being worked on, and a big one nobody has opened in a month is not.
+   */
+  crane: boolean
+  operator: boolean
 }
+
+/**
+ * How recently a repository has to have been touched for somebody to be at its crane.
+ *
+ * A week, which is the sharper end of `active`: that band is thirty days, and a month-old
+ * repository with a crane running on it would say somebody is at work there today.
+ */
+export const OPERATOR_DAYS = 7
 
 /** Where rust is total. Two years, the same scale `rustLevel` bands on. */
 export const RUST_CEILING = 730
@@ -217,6 +239,11 @@ export function traitsOf(readings: Readings): Traits {
      * with everything violated should look busy and wrong at the same time.
      */
     bustle: reach,
+    crane: readings.binding - readings.met > 0,
+    operator:
+      readings.binding - readings.met > 0 &&
+      readings.rustDays !== null &&
+      readings.rustDays <= OPERATOR_DAYS,
   }
 }
 

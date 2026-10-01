@@ -233,8 +233,15 @@ export const LANDED = {
   across: 1.2,
   /** Between two boxes along the pier. */
   gap: 0.5,
-  /** Between two rows across it. */
-  pitch: 1.9,
+  /**
+   * Between two rows across it.
+   *
+   * Widened from 1.9 when the apron became something to walk on: a box is 1.2 across, so 1.9 left
+   * an aisle of 0.7 and a figure is 0.84 wide — somebody walking between the rows would have been
+   * walking through them. At 2.2 the aisle is a unit, and `PIER_ROWS` still comes out at three,
+   * so nothing the stack can hold was given up for it.
+   */
+  pitch: 2.2,
   /** Clear of the outer edge of this ship's half, so a box never sits on the planking's line. */
   first: 1.1,
 } as const
@@ -311,6 +318,117 @@ export const LANDED_CAP = LANDED_PER_ROW * MARK_ROW
 /** Where the stack begins, ahead of this ship's stem. */
 export function apronX(hull: Hull): number {
   return hull.length + APRON.ahead
+}
+
+/**
+ * The apron a stack stands on: a platform, not a patch of water.
+ *
+ * What waits for a ship has to wait *somewhere*, and until now it floated. Drawn one `APRON_EDGE`
+ * wider than what stands on it, on every side — which is also exactly the room the walk round it
+ * needs, so the platform and the path are one measurement rather than two that can drift apart.
+ */
+export const APRON_EDGE = 1.3
+
+/** Anything that stands on the apron: a demand still owed, a crate of untidiness, a boat. */
+export interface Box {
+  /** The centre. */
+  spot: Spot
+  along: number
+  across: number
+}
+
+/**
+ * The platform under everything standing at this berth, in the hull's own coordinates.
+ *
+ * Measured off what is actually there rather than from a row count, because two different pieces
+ * of code put things on this apron — the demands still owed and the repository's own untidiness —
+ * and a platform derived from one of them left the other standing on open water. `null` where
+ * nothing waits: an empty platform would say "something stood here".
+ */
+export function apronOf(items: readonly Box[]): Box | null {
+  if (items.length === 0) {
+    return null
+  }
+  const left = Math.min(...items.map((one) => one.spot.x - one.along / 2)) - APRON_EDGE
+  const right = Math.max(...items.map((one) => one.spot.x + one.along / 2)) + APRON_EDGE
+  const top = Math.min(...items.map((one) => one.spot.y - one.across / 2)) - APRON_EDGE
+  const bottom = Math.max(...items.map((one) => one.spot.y + one.across / 2)) + APRON_EDGE
+  return {
+    along: right - left,
+    across: bottom - top,
+    spot: { x: (left + right) / 2, y: (top + bottom) / 2 },
+  }
+}
+
+/** The rows things stand in on the apron, as the band each one occupies across the berth. */
+function rowsOf(items: readonly Box[]): readonly { from: number; to: number }[] {
+  const rows: { from: number; to: number }[] = []
+  for (const item of items) {
+    const from = item.spot.y - item.across / 2
+    const to = item.spot.y + item.across / 2
+    const same = rows.find((row) => from < row.to && to > row.from)
+    if (same === undefined) {
+      rows.push({ from, to })
+      continue
+    }
+    same.from = Math.min(same.from, from)
+    same.to = Math.max(same.to, to)
+  }
+  return [...rows].sort((one, other) => one.from - other.from)
+}
+
+/**
+ * Where somebody may walk on the apron: **between** the rows and round the ends.
+ *
+ * A boustrophedon loop — along the aisle above the first row to the far end, down into the next
+ * aisle, back, and so on. Every leg runs either in an aisle or past an end, so a figure never
+ * walks over a package; and because it closes on itself, the walk network carries it exactly as
+ * it carries a ship's deck.
+ *
+ * The aisle between two rows is where it is because `LANDED.pitch` was widened to 2.2 for it: a
+ * box is 1.2 across and a figure 0.84 wide, so the old 1.9 left somebody walking through the
+ * boxes rather than between them.
+ */
+export function apronWalk(items: readonly Box[]): readonly Spot[] {
+  const apron = apronOf(items)
+  if (apron === null) {
+    return []
+  }
+  const rows = rowsOf(items)
+  const left = apron.spot.x - apron.along / 2 + APRON_EDGE / 2
+  const right = apron.spot.x + apron.along / 2 - APRON_EDGE / 2
+  const aisles = [
+    (rows[0]?.from ?? 0) - APRON_EDGE / 2,
+    ...rows.slice(1).map((row, index) => ((rows[index]?.to ?? 0) + row.from) / 2),
+    (rows.at(-1)?.to ?? 0) + APRON_EDGE / 2,
+  ]
+  const snake = aisles.flatMap((y, index) =>
+    // Alternating, so the ring snakes through the aisles instead of crossing the stack to get
+    // back to the side it started on.
+    index % 2 === 0
+      ? [
+          { x: left, y },
+          { x: right, y },
+        ]
+      : [
+          { x: right, y },
+          { x: left, y },
+        ],
+  )
+  /*
+   * And one corner where the snake ends on the far side.
+   *
+   * With an odd number of aisles the last leg finishes at `right`, and closing the ring from
+   * there to the first point would draw a diagonal straight across the stack — a figure walking
+   * over every package on her way back. The corner sends her up the end of the stack instead,
+   * which is clear ground by construction: `left` and `right` lie outside the boxes.
+   */
+  const last = snake.at(-1)
+  const first = snake[0]
+  if (last !== undefined && first !== undefined && last.x !== first.x) {
+    snake.push({ x: last.x, y: first.y })
+  }
+  return snake
 }
 
 export interface Landed {

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { BERTH } from './plan'
 import { quest, ship } from './testing'
 import {
+  apronOf,
+  apronWalk,
   BERTH_SLACK,
   bridgeOf,
   cargoOf,
@@ -14,20 +16,28 @@ import {
   landedOf,
   LANDED_PER_ROW,
   LENGTH_CEILING,
+  MARK_ROW,
   MAX_YAW,
   mooringOf,
   offsetOf,
   outlineOf,
+  pierRowY,
   promenadeOf,
   pierMarks,
   pierRows,
-  pierRowY,
   questAt,
   SIZE,
   yawOf,
 } from './vessel'
 
+import type { Box } from './vessel'
+import type { QuestResult } from '@hafen/core'
+
 const strewn = { dirty: true, stash: 3, ahead: 2 } as const
+
+/** `count` demands this ship still owes, which is what stands on her apron. */
+const owing = (count: number): QuestResult[] =>
+  Array.from({ length: count }, (_, index) => quest(`q${String(index)}`, 'violated'))
 
 describe(outlineOf, () => {
   /**
@@ -439,5 +449,100 @@ describe(promenadeOf, () => {
     expect(walk.some((spot) => spot.y > 0)).toBe(true)
     expect(walk.some((spot) => spot.y < 0)).toBe(true)
     expect(walk.length).toBeGreaterThan(4)
+  })
+})
+
+describe(apronOf, () => {
+  const hull = hullOf(ship(), 400)
+  const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
+
+  /** Nothing waiting is not an empty platform: an empty platform says something stood here. */
+  it('has no platform where nothing waits', () => {
+    expect(apronOf([])).toBeNull()
+  })
+
+  it('covers everything on it, with a margin all round', () => {
+    const items = stack(5)
+    const apron = apronOf(items)
+
+    for (const item of items) {
+      expect(item.spot.x - item.along / 2).toBeGreaterThan(
+        (apron?.spot.x ?? 0) - (apron?.along ?? 0) / 2,
+      )
+      expect(item.spot.y + item.across / 2).toBeLessThan(
+        (apron?.spot.y ?? 0) + (apron?.across ?? 0) / 2,
+      )
+    }
+  })
+
+  /**
+   * Measured off what stands there, not off a row count: two different pieces of code put things
+   * on this apron, and a platform derived from one left the other standing on open water.
+   */
+  it('reaches round a row that came from somewhere else', () => {
+    const marks = [{ spot: { x: 40, y: pierRowY(MARK_ROW) }, along: 1, across: 0.8 }]
+    const withMarks = apronOf([...stack(2), ...marks])
+    const without = apronOf(stack(2))
+
+    expect(withMarks?.across).toBeGreaterThan(without?.across ?? 0)
+  })
+})
+
+describe(apronWalk, () => {
+  const hull = hullOf(ship(), 400)
+  const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
+
+  it('has nowhere to walk where nothing waits', () => {
+    expect(apronWalk([])).toStrictEqual([])
+  })
+
+  /**
+   * The claim: a figure walks between the packages and round them, never over one. Every leg of
+   * the ring runs in an aisle or past an end, so no point of it lands on a box.
+   */
+  it('never walks over a package', () => {
+    const items = stack(9)
+    const walk = apronWalk(items)
+
+    for (let step = 0; step < walk.length; step += 1) {
+      const from = walk[step] ?? { x: 0, y: 0 }
+      const to = walk[(step + 1) % walk.length] ?? { x: 0, y: 0 }
+      for (let along = 0; along <= 20; along += 1) {
+        const at = {
+          x: from.x + ((to.x - from.x) * along) / 20,
+          y: from.y + ((to.y - from.y) * along) / 20,
+        }
+        const inside = items.some(
+          (box) =>
+            Math.abs(at.x - box.spot.x) < box.along / 2 &&
+            Math.abs(at.y - box.spot.y) < box.across / 2,
+        )
+
+        expect(inside).toBe(false)
+      }
+    }
+  })
+
+  /** Through the aisles and not only round the outside — "zwischen und rund herum". */
+  it('walks the aisle between two rows', () => {
+    const walk = apronWalk(stack(LANDED_PER_ROW + 1))
+    const between = (pierRowY(0) + pierRowY(1)) / 2
+
+    expect(walk.some((spot) => Math.abs(spot.y - between) < 0.001)).toBe(true)
+  })
+
+  /**
+   * A closed ring, so the walk network carries it exactly as it carries a ship's deck — and it
+   * closes along an aisle or along an end, never diagonally across the stack.
+   */
+  it('closes on itself along a straight leg', () => {
+    for (const count of [1, 4, 9, 12]) {
+      const walk = apronWalk(stack(count))
+      const first = walk[0]
+      const last = walk.at(-1)
+      const straight = first?.x === last?.x || first?.y === last?.y
+
+      expect(straight).toBe(true)
+    }
   })
 })

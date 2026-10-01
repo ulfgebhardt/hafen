@@ -324,24 +324,43 @@ describe(networkOf, () => {
       { x: 20, y: 10 },
       { x: 20, y: 20 },
     ]
-    const network = networkOf(harbour, new Map([[node, ring]]))
+    const network = networkOf(harbour, new Map([[node, [ring]]]))
 
-    expect(network.next.get(`q${String(node)}`)).toContain(`d${String(node)}.0`)
-    expect(network.next.get(`d${String(node)}.0`)).toContain(`d${String(node)}.1`)
+    expect(network.next.get(`q${String(node)}`)).toContain(`d${String(node)}.0.0`)
+    expect(network.next.get(`d${String(node)}.0.0`)).toContain(`d${String(node)}.0.1`)
     // Round and not up and down: the last spot leads back to the first.
-    expect(network.next.get(`d${String(node)}.2`)).toContain(`d${String(node)}.0`)
-    expect(network.where.get(`d${String(node)}.1`)).toStrictEqual({ x: 20, y: 10 })
+    expect(network.next.get(`d${String(node)}.0.2`)).toContain(`d${String(node)}.0.0`)
+    expect(network.where.get(`d${String(node)}.0.1`)).toStrictEqual({ x: 20, y: 10 })
   })
 
   it('takes a deck for a berth that does not exist as nothing at all', () => {
-    const network = networkOf(harbour, new Map([[9999, [{ x: 1, y: 1 }]]]))
+    const network = networkOf(harbour, new Map([[9999, [[{ x: 1, y: 1 }]]]]))
 
-    expect(network.where.has('d9999.0')).toBe(false)
+    expect(network.where.has('d9999.0.0')).toBe(false)
+  })
+
+  /** Two pieces of ground at one berth: her deck, and the apron her load waits on. */
+  it('hangs every ring it is given off the same plank', () => {
+    const node = harbour.moorings[0]?.node ?? 0
+    const deck = [
+      { x: 1, y: 1 },
+      { x: 2, y: 1 },
+    ]
+    const apron = [
+      { x: 8, y: 1 },
+      { x: 9, y: 1 },
+    ]
+    const network = networkOf(harbour, new Map([[node, [deck, apron]]]))
+    const plank = network.next.get(`q${String(node)}`) ?? []
+
+    expect(plank).toContain(`d${String(node)}.0.0`)
+    expect(plank).toContain(`d${String(node)}.1.0`)
+    expect(network.where.get(`d${String(node)}.1.1`)).toStrictEqual({ x: 9, y: 1 })
   })
 
   it('takes an empty deck as no deck', () => {
     const mooring = harbour.moorings[0]
-    const network = networkOf(harbour, new Map([[mooring?.node ?? 0, []]]))
+    const network = networkOf(harbour, new Map([[mooring?.node ?? 0, [[], []]]]))
 
     expect([...network.where.keys()].some((place) => place.startsWith('d'))).toBe(false)
   })
