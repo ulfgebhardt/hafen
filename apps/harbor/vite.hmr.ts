@@ -4,8 +4,9 @@
  * Vite replaces a changed module for every *new* importer and leaves anything already built
  * holding the old one. For a component that is harmless — it is rebuilt from its template. For a
  * plain module it is not: `scene.ts` computes `CAPTION_TOP` once, at module level, out of
- * `MAX_DRAUGHT` in `hull.ts`. Add that constant to `hull.ts` while the server is running, and the
- * window ends up with one generation of `scene.ts` and another of `hull.ts` — measured on
+ * `MAX_DRAUGHT` in `hull.ts` — the file the geometry lived in then, `vessel.ts` since. Add that
+ * constant while the server is running, and the window ends up with one generation of
+ * `scene.ts` and another of the module beside it — measured on
  * 30.09.2026 as `MAX_DRAUGHT is not defined` and a white window that stayed white.
  *
  * Nothing was broken in the tree. That is the whole problem: no test, no type and no build sees

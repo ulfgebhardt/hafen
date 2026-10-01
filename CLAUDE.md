@@ -195,9 +195,11 @@ diesem lesbar bleiben.
 - **Der Stil ist eine Risszeichnung, keine Illustration.** Raster, dünne Striche, Spanten,
   Wasserlinien, Beschriftung in Monospace. Keine Wolken, keine Möwen, keine Gischt. Jede Linie
   steht für etwas Gemessenes — dieselbe Zusage wie im Rest des Werkzeugs. Das einzige, was
-  ausdrücklich Deko ist, sind die Spanten, und `hull.ts` sagt das an Ort und Stelle.
+  ausdrücklich Deko ist, sind die Uferböschung und die Boote auf den Bahnen — beide sagen das an
+  Ort und Stelle.
 - **Was gezeichnet wird, entscheidet nicht der Zeichner.** `fleet.ts` (Reihenfolge, Gruppierung)
-  und `hull.ts` (Geometrie, Segmente, Tiefgang) sind reine Funktionen und zu 100 % gemessen;
+  und `vessel.ts` (Geometrie, Segmente, Tiefgang) sind reine Funktionen und nahezu vollständig
+  gemessen;
   `scene.ts` setzt sie in Striche um und besitzt keine Regel. Nur durch diesen Schnitt ist
   überhaupt etwas zusicherbar, denn über einen Canvas lässt sich nichts behaupten. `scene.ts` und
   `HarborScene.vue` stehen deshalb **namentlich** in der Coverage-Ausnahme, statt stillschweigend

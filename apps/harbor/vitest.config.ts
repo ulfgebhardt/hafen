@@ -14,7 +14,7 @@ export default defineConfig({
        * `scene.ts` and `HarborScene.vue` draw into a WebGL canvas: there is no assertion to make
        * about pixels that would not be a screenshot, and a committed screenshot goes red on the
        * next font or driver without anything being broken. What they *decide* was decided in
-       * `fleet.ts` and `hull.ts`, and those are measured to the line — which is exactly why the
+       * `fleet.ts` and `vessel.ts`, and those are measured to the line — which is exactly why the
        * split exists. `main.ts` mounts and nothing else. `testing.ts` is the fixtures.
        *
        * The blind spot is therefore small and stated, the same way the quest catalog states a

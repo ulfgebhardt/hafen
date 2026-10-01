@@ -5,7 +5,7 @@
  * staged, unpushed, stashed, or stuck in a conflict. Two different questions, so two different
  * places on the ship: the contract is the deck, the local state is cargo, flags and damage.
  *
- * Worked out here rather than in the renderer for the same reason as `hull.ts`: which marks a
+ * Worked out here rather than in the renderer for the same reason as `vessel.ts`: which marks a
  * ship carries is a reading of a measurement, and a reading belongs somewhere a test can point
  * at. The renderer only places what this returns.
  */
