@@ -26,12 +26,13 @@
  * two cells are a pitch apart.
  */
 
+import { familiesOf, shipPoints } from '@hafen/core'
+
 import { NO_ORG } from './flags'
 import { GAP, TRUNK_X } from './lanes'
 import { MARGIN, QUAY, trimmed } from './moorings'
 import { BERTH, BLOCK } from './plan'
 
-import type { Fleetlet } from './flags'
 import type { Dock, Harbour, Mooring, Quay, Rank, Way } from './moorings'
 import type { Side, Spot } from './plan'
 import type { Ship } from '@hafen/core'
@@ -90,24 +91,16 @@ export function ringCells(k: number): readonly Cell[] {
 }
 
 /**
- * Which ring a basin starts on — how big the eye is.
+ * Where a kindred's ships stand: from the middle outward, ring by ring.
  *
- * It was always one, and that is a hole of a single cell: on a kindred of forty-five it came out
- * as a blob with a dent, because four rings round one empty cell is a disc. The eye has to grow
- * with the basin or the shape stops being a ring at the size where a ring is worth drawing.
+ * **The middle is a berth, not a hole.** It was kept clear for the kindred's name at first, and
+ * the eye grew with the basin so the shape stayed a ring — which made every basin a wide donut
+ * with its ships pushed to the rim. That is the opposite of what the middle of a project looks
+ * like: the heart of one is where the work is, and it is crowded. The name moved above the basin,
+ * where every other dock in this window carries its own.
  *
- * Half the root of the count: it leaves roughly as much open water in the middle as there is
- * occupied ring round it, at every size. Measured on this fleet — 45 ships start on ring 3 and
- * fill three rings, 15 start on 2, 9 on 2, 3 on 1, and a kindred of one is one ship beside a name.
- */
-export function eyeFor(count: number): number {
-  // A ring of one or two is not a ring. They stand in the middle, and their name goes above them
-  // like any other dock's — an eye kept clear for two ships would be a hole with nothing round it.
-  return count <= 2 ? 0 : Math.max(1, Math.round(Math.sqrt(count) / 2))
-}
-
-/**
- * Where a kindred's ships stand: outward, ring by ring, leaving the eye clear.
+ * Which ship lands where is `kindredsOf`: nearest the middle is the one somebody touched last. So
+ * the radius is a reading rather than the order the repositories happened to be filed in.
  *
  * A part-filled outer ring is left part-filled rather than spread over two: a ring that is
  * obviously the newest is a reading — this project grew last — and a ring thinned out to look
@@ -117,12 +110,11 @@ export function cellsFor(count: number): readonly Cell[] {
   if (count <= 0) {
     return []
   }
-  const eye = eyeFor(count)
-  const cells: Cell[] = eye === 0 ? [{ q: 0, r: 0 }] : []
-  for (let ring = Math.max(1, eye); cells.length < count; ring += 1) {
+  const cells: Cell[] = [{ q: 0, r: 0 }]
+  for (let ring = 1; cells.length < count; ring += 1) {
     cells.push(...ringCells(ring).slice(0, count - cells.length))
   }
-  return cells
+  return cells.slice(0, count)
 }
 
 /**
@@ -165,8 +157,9 @@ export interface Basin {
   /**
    * Where the name goes, as the same kind of offset.
    *
-   * In the eye where there is one, and above the box where there is not — a basin of one or two
-   * has no middle to keep clear, and a name written over its only ship is a name nobody can read.
+   * Above the basin, because the middle is a berth: it held the name while the eye was kept
+   * clear, and keeping an eye clear is exactly what stopped the heart of a project from looking
+   * like one.
    */
   label: Spot
 }
@@ -188,28 +181,97 @@ export function basinOf(count: number): Basin {
     width: right - left,
     height: foot - top,
     middle,
-    label: eyeFor(count) === 0 ? { x: middle.x, y: -6 } : middle,
+    label: { x: middle.x, y: -6 },
   }
 }
 
 /**
- * The kindreds of this fleet, each with every ship that belongs to it.
+ * How long a ship has lain, for sorting — and never having sailed at all is the far end.
  *
- * Groups arrive already ordered kindred-first from `fleetlets`, so collecting them in arrival
- * order keeps an organisation's ships together on the ring: the basin is the project, and the
- * owners are still readable as runs round it.
+ * `null` is a repository with no commit to date: it has no age, and the one thing it certainly is
+ * not is the liveliest thing in its project.
  */
-export function kindredsOf(groups: readonly Fleetlet[]): readonly Kindred[] {
-  const byName = new Map<string, Kindred>()
-  for (const group of groups) {
-    const held = byName.get(group.kindred)
-    byName.set(group.kindred, {
-      name: group.kindred,
-      orgs: [...(held?.orgs ?? []), group.org],
-      ships: [...(held?.ships ?? []), ...group.ships],
+export function laidUp(ship: Ship): number {
+  return ship.rustDays ?? Number.POSITIVE_INFINITY
+}
+
+/** The organisation a repository is filed under, with the unfiled ones given somewhere to be. */
+function orgOf(ship: Ship): string {
+  return ship.org === '' ? NO_ORG : ship.org
+}
+
+/**
+ * What a family is called: **the biggest repository in it**.
+ *
+ * Two namings were tried and both named the wrong thing. `familiesOf` takes the alphabetically
+ * first member, which is a tie-break and not a name — on this fleet that made `H-E-L-F-A-Movement`,
+ * *one* repository, the name of a group of fourteen. Naming it after the organisation holding most
+ * of it is a reading, and still not a *name*: three basins came out called `IT4Change`, because an
+ * organisation can hold pieces of several projects and does.
+ *
+ * The largest repository by project score is the one a person would say. The Ocelot cluster comes
+ * out as `Ocelot-Social`, which is what it is called. Ties by path, so two snapshots agree.
+ */
+export function nameFor(ships: readonly Ship[]): string {
+  const biggest = [...ships].sort(
+    (a, b) => shipPoints(b).project - shipPoints(a).project || a.path.localeCompare(b.path),
+  )[0]
+  return biggest?.name ?? NO_ORG
+}
+
+/**
+ * What shares a basin: the measured **family** where there is one, and the organisation otherwise.
+ *
+ * Both ends alone are wrong, and both were tried.
+ *
+ * Lifting families to whole *organisations* over-merges badly: one tie between two repositories
+ * drags both their organisations in entire, so a single accidental edge made a basin of 45 out of
+ * a project of 14. The accident is worth naming — `IT4Change/InfCloud` holds exactly one commit,
+ * and that commit is also the root of `webcraftmedia/jahrweiser`, because two repositories
+ * initialised from the same scaffold at the same moment get the same hash. Fifteen ships joined a
+ * project over an empty repository.
+ *
+ * Taking families alone under-groups just as badly: 65 of the 72 families on this fleet are a
+ * single repository, and a harbour of 65 lone boats has thrown away the one thing anybody could
+ * read off it.
+ *
+ * Family first, organisation for the rest: 23 basins, the largest 15, nine of them alone. The
+ * Ocelot cluster stands as its own fourteen, and `IT4Change` and `webcraftmedia` stand beside it
+ * as their own docks instead of being swallowed by it.
+ */
+export function kindredsOf(ships: readonly Ship[]): readonly Kindred[] {
+  const sorted = (mine: readonly Ship[]): readonly Ship[] =>
+    [...mine].sort((a, b) => laidUp(a) - laidUp(b) || a.path.localeCompare(b.path))
+
+  const held = new Set<string>()
+  const out: Kindred[] = []
+  for (const family of familiesOf(ships)) {
+    // A family of one is not a family: it is a repository nothing ties to anything, and it belongs
+    // with the others of its organisation rather than alone in a basin of its own.
+    if (family.ships.length < 2) {
+      continue
+    }
+    for (const ship of family.ships) {
+      held.add(ship.path)
+    }
+    out.push({
+      name: nameFor(family.ships),
+      orgs: [...new Set(family.ships.map((ship) => orgOf(ship)))].sort(),
+      ships: sorted(family.ships),
     })
   }
-  return [...byName.values()]
+
+  const byOrg = new Map<string, Ship[]>()
+  for (const ship of ships) {
+    if (!held.has(ship.path)) {
+      byOrg.set(orgOf(ship), [...(byOrg.get(orgOf(ship)) ?? []), ship])
+    }
+  }
+  for (const [org, mine] of byOrg) {
+    out.push({ name: org, orgs: [org], ships: sorted(mine) })
+  }
+
+  return out.sort((a, b) => b.ships.length - a.ships.length || a.name.localeCompare(b.name))
 }
 
 /** One project's worth of repositories, however many organisations they are filed under. */
@@ -360,8 +422,6 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
       width: basin.width,
       height: basin.height,
       angle: 0,
-      // In the eye, which is what the eye is kept clear for: the ring is the project, the name
-      // is its. A basin too small to have an eye says so and puts its name above itself.
       label: { x: west + basin.label.x, y: top + basin.label.y },
     })
 
@@ -387,8 +447,8 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
  * The same contract the other arrangements meet — quays, ways, moorings, blocks — so everything
  * downstream of the layout is written once and knows nothing about which of them drew it.
  */
-export function harbourOf(groups: readonly Fleetlet[], aspect = 16 / 9): Harbour {
-  const kindreds = kindredsOf(groups)
+export function harbourOf(ships: readonly Ship[], aspect = 16 / 9): Harbour {
+  const kindreds = kindredsOf(ships)
   const basins = kindreds.map((kindred) => basinOf(kindred.ships.length))
   if (basins.length === 0) {
     return lay([], [], 1)

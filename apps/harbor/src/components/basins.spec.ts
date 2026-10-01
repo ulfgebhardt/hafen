@@ -1,9 +1,11 @@
+import { NO_WORK } from '@hafen/core'
 import { describe, expect, it } from 'vitest'
 
 import {
   basinOf,
   cellsFor,
-  eyeFor,
+  laidUp,
+  nameFor,
   harbourOf,
   kindredsOf,
   LATTICE,
@@ -12,7 +14,7 @@ import {
   spotOf,
   STEPS,
 } from './basins'
-import { fleetlets } from './flags'
+import { NO_ORG } from './flags'
 import { reachesShore } from './moorings'
 import { ship } from './testing'
 
@@ -68,34 +70,32 @@ describe(cellsFor, () => {
     expect(new Set(cells.map((cell) => `${String(cell.q)}.${String(cell.r)}`)).size).toBe(count)
   })
 
-  /** Outward, so the eye stays clear and the newest work is the outermost ring. */
-  it('fills inner rings before outer ones', () => {
+  /**
+   * From the middle outward, and the middle is a **berth**.
+   *
+   * It was kept clear for the kindred's name, with an eye that grew with the basin — which made
+   * every basin a wide donut with its ships pushed to the rim. The heart of a project is where the
+   * work is, and it is crowded.
+   */
+  it('fills from the middle outward', () => {
     const rings = cellsFor(20).map((cell) => ringOf(cell))
 
-    expect(Math.min(...rings)).toBe(eyeFor(20))
+    expect(rings[0]).toBe(0)
     expect(rings).toStrictEqual([...rings].sort((a, b) => a - b))
   })
 
-  /**
-   * The eye grows with the basin, or the shape stops being a ring at the size where a ring is
-   * worth drawing: four rings round one empty cell is a disc with a dent in it.
-   */
-  it('keeps the eye in proportion', () => {
-    expect(eyeFor(45)).toBeGreaterThan(eyeFor(9))
-    expect(eyeFor(9)).toBeGreaterThan(eyeFor(3))
-    expect(Math.min(...cellsFor(45).map((cell) => ringOf(cell)))).toBe(eyeFor(45))
+  it('puts a kindred of one in the middle and nowhere else', () => {
+    expect(cellsFor(1)).toStrictEqual([{ q: 0, r: 0 }])
   })
 
-  /**
-   * A ring of one or two is not a ring. They stand in the middle and their name goes above them,
-   * because an eye kept clear for two ships is a hole with nothing round it.
-   */
-  it('gives the smallest kindreds no eye at all', () => {
-    expect(eyeFor(1)).toBe(0)
-    expect(eyeFor(2)).toBe(0)
-    expect(cellsFor(1)).toStrictEqual([{ q: 0, r: 0 }])
-    expect(cellsFor(2)).toHaveLength(2)
-    expect(cellsFor(2)[0]).toStrictEqual({ q: 0, r: 0 })
+  /** Every inner ring is full before an outer one is started — that is what crowding is. */
+  it.each([7, 19, 37])('fills each ring before the next at %i', (count) => {
+    const rings = cellsFor(count).map((cell) => ringOf(cell))
+    const outer = Math.max(...rings)
+
+    for (let ring = 0; ring < outer; ring += 1) {
+      expect(rings.filter((one) => one === ring)).toHaveLength(ring === 0 ? 1 : 6 * ring)
+    }
   })
 
   /**
@@ -104,7 +104,7 @@ describe(cellsFor, () => {
    * arranging the measurement.
    */
   it('leaves the outermost ring part filled', () => {
-    const rings = cellsFor(8).map((cell) => ringOf(cell))
+    const rings = cellsFor(10).map((cell) => ringOf(cell))
     const outer = Math.max(...rings)
 
     expect(rings.filter((ring) => ring === outer).length).toBeLessThan(6 * outer)
@@ -140,16 +140,16 @@ describe(spotOf, () => {
 })
 
 describe(basinOf, () => {
-  it('holds every ship and keeps its middle clear', () => {
+  it('holds every ship and starts at its own middle', () => {
     const basin = basinOf(45)
 
     expect(basin.cells).toHaveLength(45)
-    expect(basin.cells.every((cell) => ringOf(cell) > 0)).toBe(true)
+    expect(basin.cells[0]).toStrictEqual({ q: 0, r: 0 })
     expect(basin.width).toBeGreaterThan(0)
     expect(basin.height).toBeGreaterThan(0)
   })
 
-  /** The middle is inside the box, because that is where the name is drawn. */
+  /** The middle is inside the box, because the liveliest ship of the project stands there. */
   it('knows where its middle is inside its own box', () => {
     const basin = basinOf(14)
 
@@ -164,18 +164,100 @@ describe(basinOf, () => {
   })
 })
 
+describe(nameFor, () => {
+  const sized = (name: string, commits: number) =>
+    ship({
+      name,
+      path: `/repos/${name}`,
+      ledger: { total: { ...NO_WORK, commits, unscored: commits }, own: NO_WORK },
+    })
+
+  /**
+   * Two namings were tried and both named the wrong thing: the alphabetically first member made
+   * `H-E-L-F-A-Movement` — one repository — the name of a group of fourteen, and the organisation
+   * holding most of it made three different basins called `IT4Change`.
+   */
+  it('names a family after the biggest repository in it', () => {
+    expect(nameFor([sized('rebranding', 4), sized('ocelot-social', 9000)])).toBe('ocelot-social')
+  })
+
+  it('breaks a tie by path, so two snapshots agree', () => {
+    expect(nameFor([sized('zeta', 7), sized('alpha', 7)])).toBe('alpha')
+  })
+
+  it('names nothing for nothing', () => {
+    expect(nameFor([])).toBe(NO_ORG)
+  })
+})
+
 describe(kindredsOf, () => {
-  /** An organisation's ships stay together, so the owners are readable as runs round the ring. */
-  it('gathers the organisations of one project into one kindred', () => {
+  const kin = (name: string, org: string, roots: readonly string[] = [], rustDays = 10) =>
+    ship({ name, org, path: `/repos/${org}/${name}`, roots, rustDays })
+
+  /**
+   * A measured family wins over the directory a repository happens to be filed under — that is the
+   * whole reason `kin.ts` exists.
+   */
+  it('puts a family in its own basin', () => {
     const kindreds = kindredsOf([
-      { org: 'IT4Change', kindred: 'H-E-L-F-A', ships: [ship({ name: 'a' })] },
-      { org: 'wir-social', kindred: 'H-E-L-F-A', ships: [ship({ name: 'b' })] },
-      { org: 'ulfgebhardt', kindred: 'ulfgebhardt', ships: [ship({ name: 'c' })] },
+      kin('ocelot', 'Ocelot', ['1111']),
+      kin('wir', 'wir-social', ['1111']),
+      kin('other', 'Ocelot'),
     ])
 
-    expect(kindreds).toHaveLength(2)
-    expect(kindreds[0]?.orgs).toStrictEqual(['IT4Change', 'wir-social'])
-    expect(kindreds[0]?.ships.map((one) => one.name)).toStrictEqual(['a', 'b'])
+    // The family is named after the biggest repository in it; the leftover basin after its org.
+    expect(kindreds.map((one) => [one.name, one.ships.length])).toStrictEqual([
+      ['ocelot', 2],
+      ['Ocelot', 1],
+    ])
+    expect(kindreds[0]?.orgs).toStrictEqual(['Ocelot', 'wir-social'])
+  })
+
+  /**
+   * And a family of one is not a family: 65 of the 72 families on this fleet are a single
+   * repository, and a harbour of 65 lone boats has thrown away what anybody could read off it.
+   */
+  it('leaves an untied ship with the others of its organisation', () => {
+    const kindreds = kindredsOf([kin('a', 'org'), kin('b', 'org'), kin('c', 'other')])
+
+    expect(kindreds.map((one) => [one.name, one.ships.length])).toStrictEqual([
+      ['org', 2],
+      ['other', 1],
+    ])
+  })
+
+  /**
+   * Freshest first, because that order **is** what the radius means: dealt outward, the ship
+   * nearest the middle of a basin is the one somebody touched last.
+   */
+  it('orders a basin by how long each ship has lain', () => {
+    const kindreds = kindredsOf([
+      kin('old', 'o', [], 900),
+      kin('fresh', 'o', [], 2),
+      kin('middling', 'o', [], 200),
+    ])
+
+    expect(kindreds[0]?.ships.map((one) => one.name)).toStrictEqual(['fresh', 'middling', 'old'])
+  })
+
+  /** A repository with no commit at all has no age, and is certainly not the liveliest. */
+  it('puts a ship that never sailed at the rim', () => {
+    expect(laidUp(ship({ rustDays: null }))).toBe(Number.POSITIVE_INFINITY)
+    expect(laidUp(ship({ rustDays: 4 }))).toBe(4)
+  })
+
+  /** Ties by path, so two snapshots of one fleet draw the same harbour. */
+  it('breaks a tie the same way twice', () => {
+    const kindreds = kindredsOf([
+      ship({ name: 'b', org: 'o', path: '/b', rustDays: 5 }),
+      ship({ name: 'a', org: 'o', path: '/a', rustDays: 5 }),
+    ])
+
+    expect(kindreds[0]?.ships.map((one) => one.path)).toStrictEqual(['/a', '/b'])
+  })
+
+  it('takes an empty fleet as no basins at all', () => {
+    expect(kindredsOf([])).toStrictEqual([])
   })
 })
 
@@ -186,7 +268,7 @@ describe(harbourOf, () => {
         ship({ org, name: `${org}-${String(index)}`, path: `/repos/${org}/${String(index)}` }),
       ),
     )
-  const harbour = harbourOf(fleetlets(fleetOf({ big: 14, mid: 5, one: 1, two: 2 })))
+  const harbour = harbourOf(fleetOf({ big: 14, mid: 5, one: 1, two: 2 }))
 
   /** Every ship gets a berth, once. A layout that loses one says the fleet is smaller. */
   it('moors every ship exactly once', () => {
@@ -247,7 +329,7 @@ describe(harbourOf, () => {
 
   /** The same fleet twice is the same harbour: a drawing that moved would say what it never measured. */
   it('draws the same harbour twice', () => {
-    const again = harbourOf(fleetlets(fleetOf({ big: 14, mid: 5, one: 1, two: 2 })))
+    const again = harbourOf(fleetOf({ big: 14, mid: 5, one: 1, two: 2 }))
 
     expect(again.moorings.map((one) => one.spot)).toStrictEqual(
       harbour.moorings.map((one) => one.spot),
