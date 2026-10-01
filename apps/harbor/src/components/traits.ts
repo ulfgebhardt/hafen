@@ -50,6 +50,8 @@ export interface Readings {
   binding: number
   stars: number
   issues: number
+  /** Pull requests waiting. Beside the issues because the two are different work. */
+  pulls: number
   /** How many addresses have committed here. The only number in the tool that counts people. */
   authors: number
   /** Whether the forge was asked about this ship at all. */
@@ -67,6 +69,7 @@ export function readingsOf(ship: Ship, stats: ForgeStats | null): Readings {
     binding: binding.length,
     stars: stats?.stars ?? 0,
     issues: stats?.issues ?? 0,
+    pulls: stats?.pulls ?? 0,
     authors: ship.ledger.total.authors,
     asked: stats !== null,
     rustDays: ship.rustDays,
@@ -150,10 +153,11 @@ export interface Traits {
    * A crane on her apron, and whether anybody is working it.
    *
    * Two readings and not one, because they answer different questions. A berth has a crane where
-   * there is something to lift — a stack of open demands — so a repository that owes nothing has
-   * a bare apron, which is the right picture. Somebody is *at* the crane only where the work is
-   * current: measured as touched within the week, which is the sharper end of `active` (thirty
-   * days) and the only honest reading of "die aktivsten".
+   * there is something to lift — open demands, open issues, open pull requests, whatever is
+   * waiting — so a repository with nothing outstanding has a bare apron, which is the right
+   * picture. Somebody is *at* the crane only where the work is current: measured as touched
+   * within the week, which is the sharper end of `active` (thirty days) and the only honest
+   * reading of "die aktivsten".
    *
    * It is deliberately not tied to size or to score: a small repository that was worked on
    * yesterday is being worked on, and a big one nobody has opened in a month is not.
@@ -189,6 +193,11 @@ export const STAR_CEILING = 1800
  */
 export const CREW_CEILING = 500
 export const CREW_MOST = 4
+
+/** Everything outstanding at this berth: what the fleet demands and what the forge has open. */
+export function waiting(readings: Readings): number {
+  return Math.max(0, readings.binding - readings.met) + readings.issues + readings.pulls
+}
 
 export function traitsOf(readings: Readings): Traits {
   const standing = standingOf(readings)
@@ -239,11 +248,9 @@ export function traitsOf(readings: Readings): Traits {
      * with everything violated should look busy and wrong at the same time.
      */
     bustle: reach,
-    crane: readings.binding - readings.met > 0,
+    crane: waiting(readings) > 0,
     operator:
-      readings.binding - readings.met > 0 &&
-      readings.rustDays !== null &&
-      readings.rustDays <= OPERATOR_DAYS,
+      waiting(readings) > 0 && readings.rustDays !== null && readings.rustDays <= OPERATOR_DAYS,
   }
 }
 

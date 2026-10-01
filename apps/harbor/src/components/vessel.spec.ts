@@ -10,6 +10,8 @@ import {
   cargoOf,
   DECK,
   fieldOf,
+  FORGE_MOST,
+  forgeLoad,
   gangwayOf,
   hasPlume,
   hullMarks,
@@ -638,5 +640,39 @@ describe(apronOf, () => {
     const items = landedOf(ship({ quests: owing(3) }), hull)
 
     expect(apronOf(items, 0)?.across).toBe(apronOf(items)?.across)
+  })
+})
+
+describe(forgeLoad, () => {
+  const hull = hullOf(ship(), 400)
+
+  /** Nothing open is nothing on the apron — an empty row would say "asked and found none". */
+  it('puts nothing on the apron where nothing is open', () => {
+    expect(forgeLoad(hull, 0, 0)).toStrictEqual([])
+  })
+
+  /** A question and a request for code: two kinds, and the row says which is which. */
+  it('stands issues and pull requests apart', () => {
+    const boxes = forgeLoad(hull, 2, 1)
+
+    expect(boxes.map((box) => box.kind)).toStrictEqual(['issue', 'issue', 'pull'])
+  })
+
+  /** Capped like every other row, and the box says it was cut rather than claiming six. */
+  it('caps a long row and says that it did', () => {
+    const boxes = forgeLoad(hull, 40, 0)
+
+    expect(boxes).toHaveLength(FORGE_MOST)
+    expect(boxes.every((box) => box.capped)).toBe(true)
+  })
+
+  /**
+   * Beyond the other rows, because these are what other people left open here — and because the
+   * side that merges with the walkway has to stay the side a person walks on.
+   */
+  it('stands beyond the rows that belong to the repository itself', () => {
+    const boxes = forgeLoad(hull, 1, 0)
+
+    expect(boxes[0]?.spot.y).toBeGreaterThan(pierRowY(MARK_ROW))
   })
 })

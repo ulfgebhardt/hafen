@@ -717,6 +717,56 @@ export interface MarkBox extends Placed {
 /** A box for the repository's own untidiness. Smaller than a demand, because it is a smaller thing. */
 export const MARK = { along: 1.5, gap: 0.4, across: LANDED.across * 0.8 } as const
 
+/** What the forge says is open, as something standing on the apron. */
+export interface ForgeBox extends Box {
+  kind: 'issue' | 'pull'
+  /** Whether the count was cut, so the drawing can say `4+` rather than claim four. */
+  capped: boolean
+}
+
+/** How many of each kind stand on the apron before the row would stop being countable. */
+export const FORGE_MOST = 6
+
+/**
+ * What is open on the forge, waiting on the apron like everything else that is not done.
+ *
+ * Issues and pull requests are the two forge figures that are *work in flight* — the others
+ * describe attention — so they belong where the rest of the outstanding work stands rather than
+ * only in the datasheet. An outline for an issue, which is a question; a filled box for a pull
+ * request, which carries code. The same pair of shapes the panel uses, one place over.
+ *
+ * Their own row, **beyond** the demands and the untidiness: those two are about this repository,
+ * this is about what other people have left open in it. And beyond rather than between, so the
+ * side that merges with the walkway keeps the rows a person walks between.
+ */
+export function forgeLoad(hull: Hull, issues: number, pulls: number): readonly ForgeBox[] {
+  const y = pierRowY(MARK_ROW) + LANDED.pitch
+  const out: ForgeBox[] = []
+  let at = apronX(hull)
+  for (const [kind, count] of [
+    ['issue', issues],
+    ['pull', pulls],
+  ] as const) {
+    const shown = Math.min(Math.max(count, 0), FORGE_MOST)
+    for (let index = 0; index < shown; index += 1) {
+      out.push({
+        kind,
+        capped: count > FORGE_MOST,
+        spot: { x: at + MARK.along / 2, y },
+        along: MARK.along,
+        across: MARK.across,
+      })
+      at += MARK.along + MARK.gap
+    }
+    if (count > FORGE_MOST) {
+      at += 1.2
+    }
+    // A gap between the two kinds, so the row reads as two groups and not as one long stack.
+    at += shown > 0 ? 0.9 : 0
+  }
+  return out
+}
+
 /**
  * The kinds that wait on the planking: everything there is to tidy up.
  *
