@@ -37,6 +37,7 @@ import { harbourOf as laneHarbour } from './lanes'
 import { harbourOf as fanHarbour, MARGIN, QUAY, walksOf, waysAt } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
+import { carriageOf, lanesOf, PACE, routesOf } from './traffic'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
 import {
   boxAt,
@@ -78,7 +79,13 @@ import type { FederatedPointerEvent } from 'pixi.js'
  *
  * The whole point of the change: a plank is a plank whether it carries the fleet or one ship.
  */
-const PLANK = 3.4
+const PLANK = 4.6
+
+/** How many boats run one lane. Two, so a lane is traffic and not one boat going back and forth. */
+const PER_LANE = 2
+
+/** The travel lift's pace, in world units per second, before its berth's bustle scales it. */
+const LIFT_PACE = 1.6
 
 const LABEL = new TextStyle({
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -287,7 +294,7 @@ function ground(harbour: Harbour, extent: Extent): Container {
       extra.lineTo(from.x + (to.x - from.x) * b, from.y + (to.y - from.y) * b)
     }
   }
-  extra.stroke({ width: 1.6, color: hex(SCENE.walk), alpha: 0.55 })
+  extra.stroke({ width: 2.2, color: hex(SCENE.walk), alpha: 0.55 })
   group.addChild(extra)
 
   return group
@@ -356,9 +363,20 @@ function lift(): Container {
   return group
 }
 
-/** A launch crossing the fairway: the harbour's traffic, and the one thing going anywhere. */
-function launch(): Container {
+/**
+ * A launch crossing the fairway: the harbour's traffic, and the one thing going anywhere.
+ *
+ * Built at its own origin pointing along +x, and **turned** by the scene rather than mirrored. It
+ * used to be flipped on the x axis only, which is enough on an east–west way and nonsense on a
+ * north–south one: the boat crabbed sideways up the water between two docks.
+ *
+ * `size` is decoration and says so: a second, smaller boat on a long stretch is there to keep the
+ * water from reading as a single ferry shuttling for ever, the same way the frames in `hull.ts`
+ * are there and are labelled as the one thing in the drawing that measures nothing.
+ */
+function launch(size = 1): Container {
   const group = new Container()
+  group.scale.set(size)
   const shape = new Graphics()
   poly(shape, [
     { x: 0, y: -0.55 },
@@ -969,8 +987,19 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     node: Container
     a: { x: number; y: number }
     b: { x: number; y: number }
-    speed: number
+    /**
+     * World units per second, and **not** a fraction of the route per second.
+     *
+     * The old number meant a different speed on every way it was used on: a 52-unit plank and a
+     * 6-unit stub were walked in the same time, so one crawled while the other hurried. The
+     * ticker divides by the length this particular route happens to have.
+     */
+    pace: number
     offset: number
+    /** Which way the route runs, for anything that points where it is going rather than mirroring. */
+    heading: number
+    /** A boat turns onto its course; a figure seen from above is a dot and only ever faces about. */
+    turns: boolean
   }[] = []
   let extent: Extent = { width: 0, height: 0 }
   let pan: Pan = { x: 0, y: 0 }
@@ -1168,6 +1197,58 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     const spots = new Map(harbour.quays.map((quay) => [quay.id, quay.spot]))
     const quayAt = (id: number): Spot => spots.get(id) ?? { x: 0, y: 0 }
 
+    /*
+     * Somebody on **every** walkway, and `traffic.ts` says which ways those are.
+     *
+     * The rule it carries: a way that nothing is ever seen taking is a line and not a route.
+     * Traffic used to go where it was convenient — authors at their own berth, a boat per way
+     * round, one walker per dock along its limb — and most of the planking in a ninety-ship
+     * harbour therefore stood empty, which reads as decoration. It also replaces the walker that
+     * paced each dock's limb: a limb is made of tree ways, so it is covered by construction.
+     */
+    for (const [index, route] of routesOf(harbour).entries()) {
+      const a = project(route.from)
+      const b = project(route.to)
+      const figure = walker()
+      moving.addChild(figure)
+      traffic.push({
+        node: figure,
+        a,
+        b,
+        // Each at their own pace, so a harbour does not march in step.
+        pace: PACE.foot * (0.85 + (index % 5) * 0.08),
+        offset: route.offset,
+        heading: Math.atan2(b.y - a.y, b.x - a.x),
+        turns: false,
+      })
+    }
+
+    /*
+     * And the launches, which are **decoration and nothing else**.
+     *
+     * Off the network entirely: they run the open water from one side of the picture to the other
+     * (`lanesOf`), and no line is drawn under them. A boat put on a way — even beside it — reads
+     * as driving along something somebody drew, and what somebody drew here is a walkway.
+     */
+    for (const [index, lane] of lanesOf(harbour).entries()) {
+      const a = project(lane.from)
+      const b = project(lane.to)
+      const heading = Math.atan2(b.y - a.y, b.x - a.x)
+      for (let boat = 0; boat < PER_LANE; boat += 1) {
+        const hull = launch(0.6 + ((index + boat) % 3) * 0.2)
+        moving.addChild(hull)
+        traffic.push({
+          node: hull,
+          a,
+          b,
+          pace: PACE.water * (0.7 + ((index + boat) % 4) * 0.15),
+          offset: (((index * 0.37 + boat * 0.5) % 1) + 1) % 1,
+          heading,
+          turns: true,
+        })
+      }
+    }
+
     for (const [index, berth] of order.entries()) {
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
       const plankY = (berth.spot.y - berth.side * BERTH.laneCentre) * UNIT
@@ -1181,8 +1262,10 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         node,
         a: { x: from + 2 * UNIT, y: plankY },
         b: { x: to - 2 * UNIT, y: plankY },
-        speed: 0.004 + traits.bustle * 0.009,
+        pace: LIFT_PACE * (0.6 + traits.bustle),
         offset: (index * 0.37) % 1,
+        heading: 0,
+        turns: false,
       })
 
       /*
@@ -1196,7 +1279,11 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
        * Deterministic by index, like everything else that is read repeatedly: the same fleet must
        * draw the same harbour twice, and a random walker would make every other figure suspect.
        */
-      const nearby = waysAt(harbour, berth.node)
+      const nearby = waysAt(harbour, berth.node).filter(
+        // Boards only. `waysAt` hands back the ways round as well, and those are open water by
+        // construction — an author sent along one was a figure strolling across the fairway.
+        (way) => carriageOf(way.kind) === 'foot',
+      )
       for (let hand = 0; hand < traits.crew; hand += 1) {
         const way = nearby[hand % Math.max(nearby.length, 1)]
         const ends =
@@ -1214,56 +1301,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
           a: ends[0] ?? { x: from, y: plankY },
           b: ends[1] ?? { x: to, y: plankY },
           // Each at their own pace and their own place, so a berth does not march in step.
-          speed: 0.02 + ((index + hand) % 5) * 0.004,
+          pace: PACE.foot * (0.8 + ((index + hand) % 5) * 0.1),
           offset: (index * 0.31 + hand * 0.41) % 1,
+          heading: Math.atan2(
+            (ends[1]?.y ?? plankY) - (ends[0]?.y ?? plankY),
+            (ends[1]?.x ?? to) - (ends[0]?.x ?? from),
+          ),
+          turns: false,
         })
       }
-    }
-
-    /*
-     * And a launch on every way round, out in the open water between two docks.
-     *
-     * The crossings are the one part of the network that is not a walkway — a boat is what uses
-     * water, so a boat is what moves along them. It also means a path that exists is a path
-     * something is seen taking, which is the difference between a line and a route.
-     */
-    for (const [index, cross] of walksOf(harbour)
-      .filter((one) => one.kind === 'round')
-      .entries()) {
-      const boat = launch()
-      moving.addChild(boat)
-      traffic.push({
-        node: boat,
-        a: project(cross.from),
-        b: project(cross.to),
-        speed: 0.005 + (index % 3) * 0.0018,
-        offset: (index * 0.41) % 1,
-      })
-    }
-
-    /*
-     * And people on the limbs themselves, walking out to the docks and back.
-     *
-     * One per dock, along its own limb — which is the piece of this drawing that only works now
-     * that a mover follows a segment. It is the thing that makes the walkways read as walkways
-     * rather than as lines: somebody is using them.
-     */
-    for (const [index, dock] of harbour.blocks.entries()) {
-      const limbs = harbour.quays.filter((one) => one.org === dock.org && one.rank === 'limb')
-      const tip = limbs.at(-1)
-      const foot = limbs[0]
-      if (tip === undefined || foot === undefined) {
-        continue
-      }
-      const figure = walker()
-      moving.addChild(figure)
-      traffic.push({
-        node: figure,
-        a: project(foot.spot),
-        b: project(tip.spot),
-        speed: 0.006 + (index % 4) * 0.0015,
-        offset: (index * 0.23) % 1,
-      })
     }
 
     pan = { x: 0, y: 0 }
@@ -1285,15 +1331,28 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
        * "Je aktiver das Dock, desto mehr Bewegung." Read off the ships on the page rather than
        * handed down as a prop: the page a reader is on *is* a set of ships, and the dormant tab is
        * dormant by definition. Never zero — a still picture reads as a broken one.
+       *
+       * The pace is in world units and the route has a length, so the division is where the two
+       * meet. One route of no length would divide by zero; it gets one pixel and stands still.
        */
-      const t = (mover.offset + now * mover.speed * lively) % 2
+      const span = Math.hypot(mover.b.x - mover.a.x, mover.b.y - mover.a.y) || 1
+      const t = (mover.offset + (now * mover.pace * UNIT * lively) / span) % 2
       // There and back, so nothing teleports to the far end of its own walk.
       const along = t < 1 ? t : 2 - t
       mover.node.position.set(
         mover.a.x + (mover.b.x - mover.a.x) * along,
         mover.a.y + (mover.b.y - mover.a.y) * along,
       )
-      mover.node.scale.x = mover.b.x >= mover.a.x === t < 1 ? 1 : -1
+      /*
+       * A boat points where it goes; a figure is a dot from above and only faces about.
+       * Turning was the missing half: mirroring on x is right on an east–west way and nonsense on
+       * a north–south one, where the launch travelled sideways up the water.
+       */
+      if (mover.turns) {
+        mover.node.rotation = t < 1 ? mover.heading : mover.heading + Math.PI
+      } else {
+        mover.node.scale.x = mover.b.x >= mover.a.x === t < 1 ? 1 : -1
+      }
     }
   })
 
