@@ -104,22 +104,25 @@ describe('the fleet page', () => {
 describe(pagesOf, () => {
   /** The question first, the page second: five tabs on one line was a bar nobody could aim at. */
   it('offers the bands in the dock view and the fleet in the other', () => {
-    expect(pagesOf('dock')).toStrictEqual(['active', 'dormant', 'archived', CONTRACTS])
-    expect(pagesOf('fleet')).toStrictEqual([FLEET, CONTRACTS])
+    expect(pagesOf('dock')).toStrictEqual(['active', 'dormant', 'archived'])
+    expect(pagesOf('fleet')).toStrictEqual([FLEET])
   })
 
-  /** The catalog is in both because it is in neither: it counts demands and not hulls. */
-  it('keeps the catalog in both views', () => {
-    for (const view of VIEWS) {
-      expect(pagesOf(view)).toContain(CONTRACTS)
-    }
+  /**
+   * The catalog is not among them: it counts demands and not hulls, so it is a third question
+   * rather than a tab beside pages it has nothing in common with.
+   */
+  it('offers the catalog as a view of its own and never as a tab beside the bands', () => {
+    expect(pagesOf('dock')).not.toContain(CONTRACTS)
+    expect(pagesOf('fleet')).not.toContain(CONTRACTS)
+    expect(pagesOf('contracts')).toStrictEqual([CONTRACTS])
   })
 
-  it('offers every page in exactly one view besides the catalog', () => {
-    const offered = VIEWS.flatMap((view) => pagesOf(view)).filter((page) => page !== CONTRACTS)
+  it('offers every page in exactly one view', () => {
+    const offered = VIEWS.flatMap((view) => pagesOf(view))
 
     expect([...new Set(offered)]).toHaveLength(offered.length)
-    expect(offered).toHaveLength(PAGES.length - 1)
+    expect(offered).toHaveLength(PAGES.length)
   })
 })
 
@@ -131,13 +134,13 @@ describe(viewOf, () => {
       expect(viewOf(band)).toBe('dock')
     }
 
-    expect(viewOf(CONTRACTS)).toBe('dock')
+    expect(viewOf(CONTRACTS)).toBe('contracts')
   })
 
   /** Both ways round: whatever a view offers, it is the view that page says it belongs to. */
   it('agrees with what each view offers', () => {
     for (const view of VIEWS) {
-      for (const page of pagesOf(view).filter((one) => one !== CONTRACTS)) {
+      for (const page of pagesOf(view)) {
         expect(viewOf(page)).toBe(view)
       }
     }

@@ -565,6 +565,44 @@ fn terminal() -> Option<String> {
         .map(|name| (*name).to_owned())
 }
 
+/**
+ * The shell to open where the window is asked for "a terminal here".
+ *
+ * The **login** shell and not `$SHELL`: that variable is only what the process which started this
+ * window happened to carry, and a window started from a desktop file inherits whatever the
+ * session manager had — which is how a machine whose shell is fish ended up with a bash prompt.
+ * `/etc/passwd` is where the system records the answer, so that is what is read. `$HAFEN_SHELL`
+ * overrides it, the same way `$HAFEN_TERMINAL` overrides the terminal.
+ */
+fn user_shell() -> Option<String> {
+    if let Ok(given) = std::env::var("HAFEN_SHELL") {
+        if !given.trim().is_empty() {
+            return Some(given.trim().to_owned());
+        }
+    }
+    let user = std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .ok()?;
+    let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
+    shell_in_passwd(&passwd, &user).or_else(|| {
+        // No passwd on this system — Windows has none — so the variable is what is left.
+        std::env::var("SHELL")
+            .ok()
+            .filter(|one| !one.trim().is_empty())
+    })
+}
+
+/// The seventh field of this user's line. Pure, so the parsing can be tested without a machine.
+fn shell_in_passwd(passwd: &str, user: &str) -> Option<String> {
+    passwd
+        .lines()
+        .find(|line| line.starts_with(&format!("{user}:")))
+        .and_then(|line| line.split(':').nth(6))
+        .map(str::trim)
+        .filter(|shell| !shell.is_empty())
+        .map(str::to_owned)
+}
+
 /// Whether a command exists, asked the way a shell asks.
 fn on_path(command: &str) -> bool {
     let Ok(paths) = std::env::var("PATH") else {
@@ -696,7 +734,18 @@ fn run_tool(name: String, path: String) -> Option<String> {
             );
         };
         let mut started = std::process::Command::new(shell);
-        if !tool.program.is_empty() {
+        if tool.program.is_empty() {
+            /*
+             * The one tool that *is* the shell: say which, rather than leaving it to the terminal.
+             *
+             * A terminal picks its own default, and on this machine that came out as bash while
+             * the system's own answer is fish. Naming it removes the question — and where there
+             * is no answer to name, the terminal's default is still what happens.
+             */
+            if let Some(own) = user_shell() {
+                started.arg("-e").arg(own);
+            }
+        } else {
             // `-e` is the one flag every terminal here spells the same way.
             started.arg("-e").arg(tool.program).args(tool.args);
         }
@@ -1105,6 +1154,27 @@ mod tests {
         }
 
         assert!(measure_cancel().is_none());
+    }
+
+    /// The system's own answer, not the variable the window happened to inherit.
+    #[test]
+    fn opens_the_shell_the_system_records() {
+        let passwd = concat!(
+            "root:x:0:0:root:/root:/bin/bash\n",
+            "seefahrt:x:1000:1000::/home/seefahrt:/usr/bin/fish\n"
+        );
+
+        assert_eq!(
+            shell_in_passwd(passwd, "seefahrt").as_deref(),
+            Some("/usr/bin/fish")
+        );
+        assert_eq!(shell_in_passwd(passwd, "niemand"), None);
+    }
+
+    #[test]
+    fn takes_a_line_without_a_shell_as_no_answer() {
+        assert_eq!(shell_in_passwd("x:x:0:0::/home/x:\n", "x"), None);
+        assert_eq!(shell_in_passwd("", "x"), None);
     }
 
     /// `git` is `git.exe` on Windows, and `PATH` says nothing about that.

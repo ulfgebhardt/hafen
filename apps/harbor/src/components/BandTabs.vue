@@ -36,9 +36,9 @@
   /**
    * Which question the bar is offering pages for.
    *
-   * Held rather than read off the page, and the catalog is why: it belongs to both views, so a
-   * reader who opens it from the fleet must not find the band tabs under their hand afterwards.
-   * Everything else keeps the two in step — see `showView` and the watcher beside it.
+   * Held rather than read off the page, so that the parent can decide what a press lands on —
+   * and kept in step with the page by a watcher there, for the times a page is chosen elsewhere
+   * (a snapshot read, a demand picked in the catalog).
    *
    * Pressing a button only *asks*. Which page that lands on is the parent's to say, because only
    * it knows whether a ship is being read and which band she falls in.
@@ -90,7 +90,7 @@
       <button
         v-for="name in VIEWS"
         :key="name"
-        class="px-2 py-1"
+        class="flex items-center px-2 py-1"
         :class="view === name ? 'text-slate-100' : 'text-slate-600 hover:text-slate-400'"
         :aria-pressed="view === name"
         :title="`${VIEW_LABEL[name]} — ${VIEW_MEANING[name]}`"
@@ -112,13 +112,30 @@
             <path d="M2 3h12M2 8h12M2 13h12" />
             <path d="M4 1.5v3M9 6.5v3M6 11.5v3" />
           </template>
-          <template v-else>
+          <template v-else-if="name === 'fleet'">
             <path d="M8 15V9" />
             <path d="M8 9 3 4M8 9l5-5M8 9V2" />
             <path d="M2.4 3.4h1.2M12.4 3.4h1.2M7.4 1.4h1.2" />
           </template>
+          <!--
+            The catalog: a demand and how much of the fleet answers it — a row with a filled part
+            and an open one, three times over. Not a hull, because this is the one view whose unit
+            is not a ship.
+          -->
+          <template v-else>
+            <path d="M2 3.5h6M2 8h9M2 12.5h4" />
+            <path d="M14 3.5h-3M14 8h-1M14 12.5h-8" stroke-dasharray="1.5 1.2" />
+          </template>
         </svg>
         <span class="sr-only">{{ VIEW_LABEL[name] }}</span>
+        <!--
+          The one figure that survives the move to a button: how many demands the catalog holds.
+          A count on "Dock" or "Flotte" would be a third number for a thing that is not a page,
+          but the catalog's unit is the demand, and that number is the page's whole subject.
+        -->
+        <span v-if="name === 'contracts'" class="ml-1 font-mono text-[10px] text-slate-600">{{
+          demands
+        }}</span>
       </button>
     </span>
 
