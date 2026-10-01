@@ -189,14 +189,20 @@
   const narrowed = computed(() => filterByContract(fleet.value, contract.value))
 
   /**
-   * Which of the two harbours is drawn, and it follows the page rather than a switch.
+   * One harbour, packed, on every page that draws ships.
    *
-   * Lanes pack tighter — measured, the same 64 berths in 418 × 323 against 558 × 618 — and a fan
-   * cannot be packed that way, because a walkway at an angle needs the gaps a wedge has and a
-   * rectangle does not. So the band pages, which are about *what is on this page*, get the tight
-   * one; the fleet page, which is about *who owns what*, gets the one that can branch.
+   * The fleet page had the fan, on the argument that it is about *who owns what* and a fan can
+   * branch. What that cost was the thing the page is for: ninety-two ships spread over a picture
+   * nobody could take in, each organisation a thin wedge radiating from one point. Measured on
+   * this fleet, the same 92 berths come out **586 × 335 packed against 1164 × 556 fanned** — a
+   * third of the area, and the difference is all water nobody was looking at.
+   *
+   * The reason to keep the fan went away with `kindredOf`. Grouping was the fan's argument — it
+   * could give each organisation its own limb — and the related organisations now stand next to
+   * each other in the *order* the groups are laid out in, which a packed harbour carries just as
+   * well. Proximity says the same thing a wedge said, in a quarter of the space.
    */
-  const layout = computed<'lanes' | 'fan'>(() => (page.value === FLEET ? 'fan' : 'lanes'))
+  const layout = computed<'lanes' | 'fan'>(() => 'lanes')
 
   /**
    * The forge reading keyed by ship, for the drawing.
