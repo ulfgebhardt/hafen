@@ -1,0 +1,32 @@
+name: "pull request title"
+
+# release-please liest die Commit-Typen, also muss der Titel eines Squash-Merges einer sein.
+# Ein PR mit dem Titel "fixes" landet sonst in keiner Changelog-Zeile und in keinem Release.
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions:
+  pull-requests: write
+  statuses: write
+
+jobs:
+  main:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          scopes: |
+            core
+            cli
+            ui
+            tauri
+            quests
+            ci
