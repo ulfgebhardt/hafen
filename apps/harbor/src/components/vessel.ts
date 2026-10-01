@@ -444,6 +444,35 @@ export function gangwayOf(hull: Hull, offset: number, reach: number = BERTH.lane
 }
 
 /**
+ * Where somebody may walk once she is aboard, in the hull's own coordinates.
+ *
+ * Up the gangway, along the inboard side, round the stern and back down the outboard side: the
+ * two strips of deck that carry nothing. Everything a click answers for — the cargo, the marks,
+ * the gangway itself — stands between `DECK.from` and `DECK.to` on the centreline, and these run
+ * outboard of all of it at `0.82` of the half beam, which is clear of the widest stack
+ * (`hull.beam * 0.72`, see `cargoOf`) with room to spare.
+ *
+ * A ring and not a line: a figure that walks to the bow and turns round walks the same planks
+ * back, which from above reads as a pendulum. Round the stern it reads as somebody working.
+ *
+ * The first spot is where the gangway lands, so the path can simply be hung off it.
+ */
+export function promenadeOf(hull: Hull): readonly Spot[] {
+  const side = (hull.beam / 2) * 0.82
+  const aft = hull.length * 0.12
+  const fore = hull.length * 0.88
+  return [
+    { x: hull.length * 0.22, y: -side },
+    { x: fore, y: -side },
+    { x: hull.length * 0.95, y: 0 },
+    { x: fore, y: side },
+    { x: aft, y: side },
+    { x: hull.length * 0.05, y: 0 },
+    { x: aft, y: -side },
+  ]
+}
+
+/**
  * The gangway as a rectangle, for the hit test.
  *
  * A line is a poor target — two pixels wide is a target nobody hits — so it answers over a band

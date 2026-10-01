@@ -12,13 +12,17 @@ import {
   lanesOf,
   longestOn,
   middles,
+  networkOf,
   PACE,
+  ROAM,
   routesOf,
   spanOf,
+  stepFrom,
 } from './traffic'
 
 import type { Harbour } from './moorings'
 import type { Spot } from './plan'
+import type { Network } from './traffic'
 
 /** The shape this machine's fleet actually has: a few real groups and a tail of singletons. */
 const fleetOf = (sizes: Readonly<Record<string, number>>) =>
@@ -282,5 +286,139 @@ describe('pace', () => {
   it('travels water faster than boards', () => {
     expect(PACE.water).toBeGreaterThan(PACE.foot)
     expect(PACE.foot).toBeGreaterThan(0)
+  })
+})
+
+describe(networkOf, () => {
+  const harbour = BOTH[0]?.harbour ?? laneHarbour(fleet)
+
+  it('offers every quay as a place and every walkway as a step, both ways round', () => {
+    const network = networkOf(harbour)
+    const planks = walksOf(harbour).filter((walk) => walk.kind === 'tree')
+
+    expect(network.where.size).toBe(harbour.quays.length)
+
+    for (const way of harbour.ways.filter((one) => one.kind === 'tree')) {
+      expect(network.next.get(`q${String(way.from)}`)).toContain(`q${String(way.to)}`)
+      expect(network.next.get(`q${String(way.to)}`)).toContain(`q${String(way.from)}`)
+    }
+
+    expect(planks.length).toBeGreaterThan(0)
+  })
+
+  /** Water is not a step: a figure that walked a way round would be walking the fairway. */
+  it('never offers a way round as a step', () => {
+    const network = networkOf(harbour)
+
+    for (const way of harbour.ways.filter((one) => one.kind !== 'tree')) {
+      expect(network.next.get(`q${String(way.from)}`) ?? []).not.toContain(`q${String(way.to)}`)
+    }
+  })
+
+  /** The gangway is what it is drawn as: one step from the planking onto her deck. */
+  it('hangs a deck off the plank she lies against, as a ring', () => {
+    const mooring = harbour.moorings[0]
+    const node = mooring?.node ?? 0
+    const ring = [
+      { x: 10, y: 10 },
+      { x: 20, y: 10 },
+      { x: 20, y: 20 },
+    ]
+    const network = networkOf(harbour, new Map([[node, ring]]))
+
+    expect(network.next.get(`q${String(node)}`)).toContain(`d${String(node)}.0`)
+    expect(network.next.get(`d${String(node)}.0`)).toContain(`d${String(node)}.1`)
+    // Round and not up and down: the last spot leads back to the first.
+    expect(network.next.get(`d${String(node)}.2`)).toContain(`d${String(node)}.0`)
+    expect(network.where.get(`d${String(node)}.1`)).toStrictEqual({ x: 20, y: 10 })
+  })
+
+  it('takes a deck for a berth that does not exist as nothing at all', () => {
+    const network = networkOf(harbour, new Map([[9999, [{ x: 1, y: 1 }]]]))
+
+    expect(network.where.has('d9999.0')).toBe(false)
+  })
+
+  it('takes an empty deck as no deck', () => {
+    const mooring = harbour.moorings[0]
+    const network = networkOf(harbour, new Map([[mooring?.node ?? 0, []]]))
+
+    expect([...network.where.keys()].some((place) => place.startsWith('d'))).toBe(false)
+  })
+})
+
+describe(stepFrom, () => {
+  /**
+   * One number carries the whole behaviour: the further she is from her own ship, the more likely
+   * her next step is towards it. Outbound that reads as turning round, inbound as carrying on —
+   * the same arithmetic, which is why both sentences describe it.
+   */
+  const network: Network = {
+    where: new Map([
+      ['home', { x: 0, y: 0 }],
+      ['near', { x: 10, y: 0 }],
+      ['far', { x: ROAM, y: 0 }],
+      ['away', { x: ROAM + 20, y: 0 }],
+    ]),
+    next: new Map([
+      ['home', ['near']],
+      ['near', ['home', 'far']],
+      ['far', ['near', 'away']],
+      ['away', ['far']],
+    ]),
+  }
+
+  it('turns for home with certainty once she is a whole roam out', () => {
+    for (const roll of [0, 0.5, 0.99]) {
+      expect(stepFrom(network, 'far', { x: 0, y: 0 }, roll)).toBe('near')
+    }
+  })
+
+  it('wanders freely at her own berth', () => {
+    // far = 10/90, so all but the first tenth of the roll goes to the other options.
+    expect(stepFrom(network, 'near', { x: 0, y: 0 }, 0.9)).toBe('far')
+    expect(stepFrom(network, 'near', { x: 0, y: 0 }, 0.05)).toBe('home')
+  })
+
+  it('leaves a dead end the way she came', () => {
+    expect(stepFrom(network, 'away', { x: 0, y: 0 }, 0.99)).toBe('far')
+  })
+
+  it('stays put where there is nowhere to go', () => {
+    expect(stepFrom({ where: new Map(), next: new Map() }, 'nowhere', { x: 0, y: 0 }, 0.5)).toBe(
+      'nowhere',
+    )
+  })
+
+  /** The same place, the same roll and the same ship give the same answer. Always. */
+  it('answers the same way twice', () => {
+    for (const roll of [0.1, 0.4, 0.77]) {
+      expect(stepFrom(network, 'near', { x: 0, y: 0 }, roll)).toBe(
+        stepFrom(network, 'near', { x: 0, y: 0 }, roll),
+      )
+    }
+  })
+})
+
+describe('a walk over places that are not there', () => {
+  /**
+   * A place with no spot is not a crash.
+   *
+   * The network is built from two sources — the harbour and the decks — and a berth that is
+   * listed with a node the graph does not carry would otherwise take the whole picture down. The
+   * answer is a step, and an unplaceable neighbour is the furthest thing from home there is.
+   */
+  it('walks on where a place has no position', () => {
+    const network: Network = {
+      where: new Map([['here', { x: 0, y: 0 }]]),
+      next: new Map([
+        ['here', ['ghost', 'here']],
+        ['ghost', ['here']],
+      ]),
+    }
+
+    expect(stepFrom(network, 'here', { x: 0, y: 0 }, 0.5)).toBe('ghost')
+    // Standing nowhere, she is at no distance from home at all, so she wanders.
+    expect(stepFrom(network, 'ghost', { x: 0, y: 0 }, 0.99)).toBe('here')
   })
 })
