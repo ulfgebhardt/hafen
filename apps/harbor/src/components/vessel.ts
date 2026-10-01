@@ -132,9 +132,18 @@ export interface Line {
  * the length of its lines and not only in the gap. `offset` is passed in rather than read again
  * here: the scene has already placed the body with it, and two readings of one number are two
  * chances to disagree about where the quay is.
+ *
+ * `reach` is the same thing for the planking itself — how far the drawn walkway really is, which
+ * `reachOf` measures off the graph. It used to be `BERTH.laneCentre` outright, and in the lane
+ * harbour the walkway is half a pier further out than that, so every line stopped short in open
+ * water. A rope that ends beside the quay is a rope tied to nothing.
  */
-export function mooringOf(hull: Hull, offset: number): readonly Line[] {
-  const quay = -BERTH.laneCentre - offset
+export function mooringOf(
+  hull: Hull,
+  offset: number,
+  reach: number = BERTH.laneCentre,
+): readonly Line[] {
+  const quay = -reach - offset
   const half = hull.beam / 2
   return [
     { from: { x: hull.length * 0.08, y: -half * 0.95 }, to: { x: -2, y: quay } },
@@ -427,10 +436,10 @@ export function questAt(
  * crate among crates. It also has to reach: a ship standing off because her tree is untidy is
  * exactly the ship with a loaded pier, so the plank grows with the gap.
  */
-export function gangwayOf(hull: Hull, offset: number): Line {
+export function gangwayOf(hull: Hull, offset: number, reach: number = BERTH.laneCentre): Line {
   return {
     from: { x: hull.length * 0.22, y: -hull.beam / 2 },
-    to: { x: hull.length * 0.22, y: -BERTH.laneCentre - offset },
+    to: { x: hull.length * 0.22, y: -reach - offset },
   }
 }
 
@@ -441,8 +450,8 @@ export function gangwayOf(hull: Hull, offset: number): Line {
  * around itself. Its own function rather than a box in `pierMarks`, because it stands for no kind:
  * it is the sign that the planking is loaded at all.
  */
-export function gangwayBox(hull: Hull, offset: number): Placed {
-  const plank = gangwayOf(hull, offset)
+export function gangwayBox(hull: Hull, offset: number, reach: number = BERTH.laneCentre): Placed {
+  const plank = gangwayOf(hull, offset, reach)
   return {
     spot: { x: plank.from.x, y: (plank.from.y + plank.to.y) / 2 },
     along: 2.2,

@@ -31,7 +31,7 @@
  * gangway, the mark placement and every hit test — working without knowing any of this happened.
  */
 
-import { MARGIN, QUAY } from './moorings'
+import { MARGIN, QUAY, trimmed } from './moorings'
 import { BERTH, BLOCK, contentHeight, rowsAt } from './plan'
 
 import type { Fleetlet } from './flags'
@@ -341,7 +341,9 @@ function layout(groups: readonly Fleetlet[], blocks: readonly Block[], room: num
   const width = Math.max(...placed.map((one) => one.at.x + one.width), MARGIN.x + QUAY) + GAP.x
   const height = Math.max(...placed.map((one) => one.at.y + one.height), MARGIN.y) + QUAY + GAP.y
 
-  return {
+  // Durch dieselbe Schere wie der Faecher: ein Steg, der im Wasser endet, ist in beiden
+  // Anordnungen dieselbe Luege. Hier faellt heute nichts weg, und genau das soll so bleiben.
+  return trimmed({
     quays,
     ways,
     moorings,
@@ -349,7 +351,7 @@ function layout(groups: readonly Fleetlet[], blocks: readonly Block[], room: num
     width,
     height,
     root: { x: TRUNK_X, y: MARGIN.y },
-  }
+  })
 }
 
 /**

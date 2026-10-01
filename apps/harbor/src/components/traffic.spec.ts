@@ -198,9 +198,7 @@ describe(lanesOf, () => {
     /** Long on purpose: a boat crossing the picture is passing traffic, a short hop is a ferry. */
     it('crosses at least its share of the harbour', () => {
       for (const lane of lanes) {
-        const whole = lane.from.y === lane.to.y ? harbour.width : harbour.height
-
-        expect(spanOf(lane.from, lane.to)).toBeGreaterThanOrEqual(whole * LANE_SHARE)
+        expect(spanOf(lane.from, lane.to)).toBeGreaterThanOrEqual(harbour.width * LANE_SHARE)
       }
     })
 
@@ -257,17 +255,17 @@ describe(lanesOf, () => {
   })
 
   /**
-   * Lanes down the picture as well as across it, which this machine's own fleet does not show.
-   * The six-group shape above happens to have no clear column at all, so the arithmetic for a
-   * vertical lane went untested while every test passed — a fleet with one big group and two
-   * singletons leaves one.
+   * Across and never down, on any fleet shape.
+   *
+   * A hull seen end-on is a wedge with nothing in it to read, so a boat climbing the picture was
+   * a rocket and not traffic. The lopsided fleet is here because it is the one that *did* leave a
+   * clear column — this machine's own does not, so a plain check would have passed either way.
    */
-  it('runs lanes down the harbour as well as across it', () => {
-    const lopsided = fleetlets(fleetOf({ gross: 30, klein: 2, einzel: 1 }))
-    const lanes = lanesOf(laneHarbour(lopsided))
-
-    expect(lanes.filter((lane) => lane.from.x === lane.to.x).length).toBeGreaterThan(0)
-    expect(lanes.filter((lane) => lane.from.y === lane.to.y).length).toBeGreaterThan(0)
+  it('never runs a lane up the picture', () => {
+    const lopsided = laneHarbour(fleetlets(fleetOf({ gross: 30, klein: 2 })))
+    for (const harbour of [...BOTH.map((one) => one.harbour), lopsided]) {
+      expect(lanesOf(harbour).every((lane) => lane.from.y === lane.to.y)).toBe(true)
+    }
   })
 
   /** An empty harbour is one unit square: there is no water to run in and that is not an error. */

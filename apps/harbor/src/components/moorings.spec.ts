@@ -11,8 +11,10 @@ import {
   harbourOf,
   inTheWayOf,
   overlaps,
+  endsAtAShip,
   reachesShore,
   sectorsOf,
+  trimmed,
   walksOf,
   waysAt,
 } from './moorings'
@@ -41,6 +43,55 @@ describe(harbourOf, () => {
   it('gives every ship a way ashore', () => {
     expect(harbour.moorings).toHaveLength(64)
     expect(reachesShore(harbour)).toBe(true)
+  })
+
+  /**
+   * The other half of the promise: every piece of walkway is there for a ship.
+   *
+   * A limb is laid out to a group's sector before its berths are placed, and a berth rejected on
+   * geometry used to leave the piece that was going to serve it standing — three of them on this
+   * machine's fleet, drawn as little peaks running out into open water. Neither check implies the
+   * other: a way to nowhere strands nobody, it only lies about being a route.
+   */
+  it('ends every walkway at a ship', () => {
+    expect(endsAtAShip(harbour)).toBe(true)
+
+    for (const count of [1, 2, 5, 17, 64, 92]) {
+      const fleet = Array.from({ length: count }, (_, index) =>
+        ship({ org: `org-${String(index % 7)}`, path: `/repos/${String(index)}` }),
+      )
+      const laid = harbourOf(fleetlets(fleet))
+
+      expect(endsAtAShip(laid)).toBe(true)
+      expect(reachesShore(laid)).toBe(true)
+    }
+  })
+
+  it('cuts back a loose end without cutting anybody off', () => {
+    const before = harbourOf(fleetlets(fleetOf(REAL)))
+    // Ein Steg ins Nichts, von Hand angehaengt: er faellt, und der Rest bleibt erreichbar.
+    const tip = before.quays.at(-1)
+    // Eine freie Id und nicht `length`: nach dem Beschneiden sind die Ids nicht mehr lueckenlos.
+    const free = Math.max(...before.quays.map((quay) => quay.id)) + 1
+    const loose = {
+      id: free,
+      spot: { x: 0, y: 0 },
+      rank: 'stub' as const,
+      org: null,
+    }
+    const grown = {
+      ...before,
+      quays: [...before.quays, loose],
+      ways: [
+        ...before.ways,
+        { from: tip?.id ?? 0, to: loose.id, kind: 'tree' as const, org: null },
+      ],
+    }
+
+    expect(endsAtAShip(grown)).toBe(false)
+    expect(trimmed(grown).quays).toHaveLength(before.quays.length)
+    expect(endsAtAShip(trimmed(grown))).toBe(true)
+    expect(reachesShore(trimmed(grown))).toBe(true)
   })
 
   it('gives every ship a way ashore at any fleet size', () => {
