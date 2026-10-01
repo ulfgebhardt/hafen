@@ -23,6 +23,8 @@
     deleteBranch,
     inTauri,
     loadSnapshot,
+    measuring,
+    NOTHING_RUNNING,
     loadForge,
     openForge,
     refetchForge,
@@ -31,13 +33,14 @@
     SnapshotError,
     startTool,
     statsFor,
+    stopMeasuring,
   } from './snapshot'
 
   import type { Page, View } from './components/band'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
-  import type { Forge, RegisterAction, Snapshot } from './snapshot'
+  import type { Progress, Forge, RegisterAction, Snapshot } from './snapshot'
   import type { Ship } from '@hafen/core'
 
   const snapshot = ref<Snapshot | null>(null)
@@ -212,18 +215,57 @@
    * The picture is replaced whole when it comes back rather than patched as it goes: a harbour
    * half of which is from a minute ago is a harbour whose timestamp is a lie about half of it.
    */
+  /**
+   * How far the running measurement has got, and what it is on.
+   *
+   * Polled while it runs rather than pushed: the shell answers a command this window can already
+   * call. Four times a second is finer than the thing being watched — a repository takes longer
+   * than that to read — and it stops the moment the survey does.
+   */
+  const progress = ref<Progress>(NOTHING_RUNNING)
+  let watching: ReturnType<typeof setInterval> | null = null
+
+  const watch_ = (): void => {
+    watching ??= setInterval(() => {
+      void measuring().then((seen) => {
+        progress.value = seen
+        return seen
+      })
+    }, 250)
+  }
+  const unwatch = (): void => {
+    if (watching !== null) {
+      clearInterval(watching)
+      watching = null
+    }
+    progress.value = NOTHING_RUNNING
+  }
+
   const measure = async (only?: string): Promise<void> => {
     if (snapshot.value === null || busy.value) {
       return
     }
     busy.value = true
     trouble.value = null
+    watch_()
     try {
       snapshot.value = await remeasure(snapshot.value, only)
     } catch (error) {
-      trouble.value = error instanceof Error ? error.message : String(error)
+      const said = error instanceof Error ? error.message : String(error)
+      // A measurement somebody stopped is not a failure, and must not be reported as one.
+      trouble.value = said === 'abgebrochen' ? null : said
     } finally {
+      unwatch()
       busy.value = false
+    }
+  }
+
+  /** Stop the running survey. Nothing is half-done: the cache still holds the last whole one. */
+  const stop = async (): Promise<void> => {
+    try {
+      await stopMeasuring()
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
     }
   }
 
@@ -396,7 +438,10 @@
         :can-measure="canAct"
         :busy="busy"
         :forge-at="forge.at"
+        :touched="snapshot.touched ?? ''"
+        :progress="progress"
         @measure="measure()"
+        @stop="stop"
         @enlist="enlist($event, true)"
         @forge="askForges"
       />

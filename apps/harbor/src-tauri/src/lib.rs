@@ -31,7 +31,10 @@
 //! desktop app and a screenshot: a snapshot baked in at build time is as old as the build, and
 //! nothing on screen would say so.
 
+use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
+use std::process::{Child, Stdio};
+use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::Manager;
@@ -303,13 +306,192 @@ fn forge() -> Measured {
     Measured::of(run_cli(&["forge".to_owned()]))
 }
 
-#[tauri::command]
-fn measure(only: Option<String>) -> Measured {
-    let mut args = vec!["schnappschuss".to_owned()];
-    if let Some(path) = only.filter(|path| !path.trim().is_empty()) {
-        args.push(format!("--nur={path}"));
+/// How far a running survey has got.
+///
+/// A survey is ninety repositories and some seconds, and for all of them the window could say
+/// nothing but "misst …". Worse, the command ran on the main thread, so the picture froze while
+/// it did. It is read by polling rather than pushed as an event: the frontend reaches Tauri
+/// through `__TAURI_INTERNALS__` and carries no `@tauri-apps/api`, so a command it can already
+/// call beats a channel it would have to grow a dependency for.
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    /// How many are done, and how many there are. `of` is 0 until the survey has counted.
+    pub at: usize,
+    pub of: usize,
+    /// The repository that just landed — a path, so the window can name it.
+    pub path: String,
+    pub running: bool,
+    /// Whether somebody asked it to stop. Stays true until the next survey starts.
+    pub stopped: bool,
+}
+
+static PROGRESS: Mutex<Progress> = Mutex::new(Progress {
+    at: 0,
+    of: 0,
+    path: String::new(),
+    running: false,
+    stopped: false,
+});
+
+/// The child doing the measuring, so it can be stopped.
+static SURVEY: Mutex<Option<Child>> = Mutex::new(None);
+
+/// One line of `--fortschritt`, folded into what is known.
+///
+/// Parsed by hand and not with serde: two shapes of one object, both tiny, and a malformed line
+/// is a line to ignore rather than a reason to lose the survey. The CLI writes them, so a parser
+/// that is strict about them would be strict about ourselves.
+fn note(line: &str) {
+    let Ok(mut progress) = PROGRESS.lock() else {
+        return;
+    };
+    if let Some(count) = field(line, "\"of\":") {
+        progress.of = count.parse().unwrap_or(0);
+        return;
     }
-    Measured::of(run_cli(&args))
+    if let Some(at) = field(line, "\"at\":") {
+        progress.at = at.parse().unwrap_or(progress.at);
+    }
+    if let Some(start) = line.find("\"path\":\"") {
+        let rest = &line[start + 8..];
+        if let Some(end) = rest.find('"') {
+            progress.path = rest[..end].to_owned();
+        }
+    }
+}
+
+/// The number after a key, where the line carries one.
+fn field(line: &str, key: &str) -> Option<String> {
+    let start = line.find(key)? + key.len();
+    let rest = &line[start..];
+    let end = rest
+        .find(|one: char| !one.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let digits = &rest[..end];
+    if digits.is_empty() {
+        None
+    } else {
+        Some(digits.to_owned())
+    }
+}
+
+/// Runs the CLI and watches it work.
+///
+/// Both pipes are read at once, and that is not a detail: a snapshot of this fleet is about one
+/// and a half megabytes and a pipe holds sixty-four kilobytes, so reading the progress first and
+/// the answer afterwards would block the child on a full stdout and hang for ever. The answer is
+/// collected on its own thread while this one reads the lines.
+fn run_watched(args: &[String]) -> Result<String, String> {
+    let parts = cli();
+    let (program, leading) = parts.split_first().ok_or("HAFEN_CLI ist leer")?;
+    let mut child = std::process::Command::new(program)
+        .args(leading)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("{program} nicht ausführbar: {error}"))?;
+
+    let Some(mut out) = child.stdout.take() else {
+        return Err("kein Kanal zur CLI".to_owned());
+    };
+    let Some(said) = child.stderr.take() else {
+        return Err("kein Kanal zur CLI".to_owned());
+    };
+    let collecting = std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = out.read_to_string(&mut text);
+        text
+    });
+    if let Ok(mut running) = SURVEY.lock() {
+        *running = Some(child);
+    }
+
+    let mut complaints: Vec<String> = Vec::new();
+    for line in BufReader::new(said).lines().map_while(Result::ok) {
+        if line.contains("\"at\":") || line.contains("\"of\":") {
+            note(&line);
+            continue;
+        }
+        complaints.push(line);
+    }
+    let json = collecting.join().unwrap_or_default();
+    let status = SURVEY
+        .lock()
+        .ok()
+        .and_then(|mut running| running.take())
+        .and_then(|mut child| child.wait().ok());
+
+    let stopped = PROGRESS.lock().map(|one| one.stopped).unwrap_or(false);
+    if stopped {
+        return Err("abgebrochen".to_owned());
+    }
+    match status {
+        Some(code) if code.success() => Ok(json),
+        _ => Err(complaints
+            .into_iter()
+            .next_back()
+            .unwrap_or_else(|| "die Messung endete ohne Ergebnis".to_owned())),
+    }
+}
+
+#[tauri::command]
+async fn measure(only: Option<String>) -> Measured {
+    let mut args = vec!["schnappschuss".to_owned(), "--fortschritt".to_owned()];
+    let whole = match only.filter(|path| !path.trim().is_empty()) {
+        Some(path) => {
+            args.push(format!("--nur={path}"));
+            false
+        }
+        None => true,
+    };
+    if let Ok(mut progress) = PROGRESS.lock() {
+        *progress = Progress {
+            at: 0,
+            // One repository does not count itself: the window knows it asked for one.
+            of: if whole { 0 } else { 1 },
+            path: String::new(),
+            running: true,
+            stopped: false,
+        };
+    }
+    let answer = run_watched(&args);
+    if let Ok(mut progress) = PROGRESS.lock() {
+        progress.running = false;
+    }
+    Measured::of(answer)
+}
+
+/// How far the survey has got. Polled by the window while the bar is up.
+#[tauri::command]
+fn measure_progress() -> Progress {
+    PROGRESS.lock().map(|one| one.clone()).unwrap_or_default()
+}
+
+/// Stop measuring.
+///
+/// Kills the child rather than asking it to stop: the survey is a separate process reading
+/// repositories, it writes nothing, and the snapshot it would have produced is simply never
+/// written. Nothing is half-done afterwards — the cache still holds the last complete one.
+#[tauri::command]
+fn measure_cancel() -> Option<String> {
+    if let Ok(mut progress) = PROGRESS.lock() {
+        if !progress.running {
+            return None;
+        }
+        progress.stopped = true;
+    }
+    let Ok(mut running) = SURVEY.lock() else {
+        return Some("die Messung ließ sich nicht erreichen".to_owned());
+    };
+    match running.as_mut() {
+        Some(child) => child
+            .kill()
+            .err()
+            .map(|error| format!("Abbruch fehlgeschlagen: {error}")),
+        None => None,
+    }
 }
 
 /// Writes one of the two cache files.
@@ -583,6 +765,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             measure,
+            measure_progress,
+            measure_cancel,
             forge,
             store,
             register,
@@ -829,9 +1013,11 @@ mod tests {
     fn says_when_there_is_nothing_to_run() {
         let _env = Env::set(&[("HAFEN_CLI", Some("gibt-es-hier-nicht"))]);
 
-        assert!(measure(None)
-            .error
-            .is_some_and(|said| said.contains("nicht ausführbar")));
+        // `run_watched` and not `measure`: the command is async now, so that it no longer runs
+        // on the main thread and freezes the window. What can fail is here.
+        assert!(run_watched(&["schnappschuss".to_owned()])
+            .unwrap_err()
+            .contains("nicht ausführbar"));
     }
 
     /// Through a temporary file and a rename, so a reader sees the old snapshot or the new one.
@@ -867,6 +1053,58 @@ mod tests {
 
         // Nothing in the whole file may reach for the destructive one.
         assert!(!include_str!("lib.rs").contains("\"-D\""));
+    }
+
+    /// A progress line is folded into what is known, and a broken one is ignored.
+    ///
+    /// Parsed by hand because there are two shapes of one tiny object — and because a malformed
+    /// line is a line to skip, not a reason to lose the survey that is still running.
+    #[test]
+    fn reads_what_the_survey_reports() {
+        // Under the same lock as the environment tests: `PROGRESS` is one global, and two tests
+        // writing it at once would fail each other rather than the code.
+        let _env = Env::set(&[]);
+        note("{\"of\":94}");
+        note("{\"at\":7,\"path\":\"/repos/org/ship\"}");
+        let seen = measure_progress();
+
+        assert_eq!(seen.of, 94);
+        assert_eq!(seen.at, 7);
+        assert_eq!(seen.path, "/repos/org/ship");
+    }
+
+    #[test]
+    fn ignores_a_line_that_is_not_progress() {
+        let _env = Env::set(&[]);
+        note("{\"at\":0,\"path\":\"\"}");
+        note("{\"of\":94}");
+        note("! keine lesbare Quest: /store/quests/kaputt.md");
+        let seen = measure_progress();
+
+        assert_eq!(seen.of, 94);
+        assert_eq!(seen.path, "");
+    }
+
+    #[test]
+    fn reads_the_number_after_a_key_and_nothing_else() {
+        assert_eq!(
+            field("{\"at\":12,\"path\":\"/x\"}", "\"at\":").as_deref(),
+            Some("12")
+        );
+        assert_eq!(field("{\"at\":}", "\"at\":"), None);
+        assert_eq!(field("{}", "\"at\":"), None);
+    }
+
+    /// Nothing to stop is not a failure: the button is there while the bar is, and a click that
+    /// arrives a moment after the survey finished has simply nothing to do.
+    #[test]
+    fn stopping_nothing_is_no_error() {
+        let _env = Env::set(&[]);
+        if let Ok(mut progress) = PROGRESS.lock() {
+            progress.running = false;
+        }
+
+        assert!(measure_cancel().is_none());
     }
 
     /// `git` is `git.exe` on Windows, and `PATH` says nothing about that.

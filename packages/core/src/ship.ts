@@ -666,6 +666,15 @@ export interface SurveyProgress {
    * old while the fresh one is being assembled invisibly.
    */
   onShip?: (ship: Ship) => void
+  /**
+   * How many there are, as soon as that is known — which is before the first one is measured.
+   *
+   * A share needs a denominator, and a caller that guessed one from its own last snapshot would
+   * be wrong exactly when it matters: the first survey of a machine, and the one right after a
+   * repository was cloned or removed. The count is a measurement like any other, so it is
+   * reported rather than inferred.
+   */
+  onCount?: (total: number) => void
   /** Measured before the rest — see `surveyOrder`. */
   first?: readonly string[]
 }
@@ -798,6 +807,7 @@ export async function surveyHarbor(
 
   const paths = [...found, ...extra].sort()
   const measured = new Map<string, Ship>()
+  progress.onCount?.(paths.length)
 
   await inLanes(surveyOrder(paths, progress.first ?? []), SURVEY_LANES, async (path) => {
     const ship = await inspectShip(ports, path, {

@@ -556,6 +556,38 @@ describe('surveyHarbor while it runs', () => {
     expect(new Set(seen)).toStrictEqual(new Set(ships.map((ship) => ship.name)))
   })
 
+  /**
+   * A share needs a denominator, and a caller that guessed one from its own last snapshot would
+   * be wrong exactly when it matters: the first survey of a machine, or the one right after a
+   * repository was cloned. It arrives before the first ship does, so a bar can start at nought.
+   */
+  it('says how many there are before it measures the first one', async () => {
+    const { ports } = fleet(5)
+    const order: string[] = []
+
+    await surveyHarbor(ports, ROOT, {
+      progress: {
+        onCount: (total) => order.push(`count:${String(total)}`),
+        onShip: (ship) => order.push(ship.name),
+      },
+    })
+
+    expect(order[0]).toBe('count:5')
+    expect(order).toHaveLength(6)
+  })
+
+  it('counts a directory the register adopted, like any other', async () => {
+    const { ports } = fleet(2)
+    let total = 0
+
+    await surveyHarbor(ports, ROOT, {
+      register: { archived: [], enlisted: [] },
+      progress: { onCount: (count) => (total = count) },
+    })
+
+    expect(total).toBe(2)
+  })
+
   it('measures the ships it was asked for first, first', async () => {
     const { ports, paths } = fleet(3)
     const last = paths.at(-1) ?? ''

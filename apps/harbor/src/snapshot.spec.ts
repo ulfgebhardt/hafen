@@ -7,6 +7,8 @@ import {
   inTauri,
   loadForge,
   loadSnapshot,
+  measuring,
+  NOTHING_RUNNING,
   openForge,
   refetchForge,
   remeasure,
@@ -15,6 +17,7 @@ import {
   spliceShip,
   startTool,
   statsFor,
+  stopMeasuring,
 } from './snapshot'
 
 import type { Forge, Snapshot } from './snapshot'
@@ -152,7 +155,20 @@ describe('acting on the harbour', () => {
       const after = spliceShip(before, fresh)
 
       expect(after.ships.map((one) => one.name)).toStrictEqual(['a', 'neu', 'c'])
-      expect(after.at).toBe('später')
+    })
+
+    /**
+     * The fleet's timestamp is about the fleet. Measuring one repository used to stamp the other
+     * ninety-one with a minute they were not read in — and the header says that minute out loud.
+     */
+    it('leaves the whole fleet timestamp where it was', () => {
+      const before = { ...SNAPSHOT, ships: [ship('/a'), ship('/b')] } as Snapshot
+      const fresh = { ...SNAPSHOT, at: 'später', ships: [ship('/b', 'neu')] } as Snapshot
+
+      const after = spliceShip(before, fresh)
+
+      expect(after.at).toBe(SNAPSHOT.at)
+      expect(after.touched).toBe('später')
     })
 
     /** A repository measured for the first time is added rather than dropped on the floor. */
@@ -495,5 +511,52 @@ describe('the forge reading, beside the survey and never inside it', () => {
 
       expect(open).toHaveBeenCalledWith('https://github.com/x/y', '_blank', 'noopener')
     })
+  })
+})
+
+describe('watching a measurement', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('asks the shell how far it has got', async () => {
+    asApp({ at: 12, of: 94, path: '/repos/org/ship', running: true, stopped: false })
+
+    await expect(measuring()).resolves.toStrictEqual({
+      at: 12,
+      of: 94,
+      path: '/repos/org/ship',
+      running: true,
+      stopped: false,
+    })
+  })
+
+  /** An older shell that does not know the command yet answers less than the shape asks for. */
+  it('fills in what the shell left out', async () => {
+    asApp({ at: 3 })
+
+    await expect(measuring()).resolves.toStrictEqual({ ...NOTHING_RUNNING, at: 3 })
+  })
+
+  it('says nothing is running where there is no shell at all', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
+
+    await expect(measuring()).resolves.toStrictEqual(NOTHING_RUNNING)
+  })
+
+  it('stops the survey, and says so when that failed', async () => {
+    asApp(null)
+
+    await expect(stopMeasuring()).resolves.toBeUndefined()
+
+    asApp('Abbruch fehlgeschlagen: kein Prozess')
+
+    await expect(stopMeasuring()).rejects.toThrow('kein Prozess')
+  })
+
+  it('has nothing to stop in a browser', async () => {
+    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
+
+    await expect(stopMeasuring()).resolves.toBeUndefined()
   })
 })

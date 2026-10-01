@@ -3,9 +3,11 @@
   import { computed, ref } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
+  import { readingOf, shareOf } from './measuring'
   import PointValue from './PointValue.vue'
   import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_ORDER } from './theme'
 
+  import type { Progress } from './measuring'
   import type { Ship } from '@hafen/core'
 
   const {
@@ -15,6 +17,8 @@
     canMeasure = false,
     busy = false,
     forgeAt = '',
+    touched = '',
+    progress = null,
   } = defineProps<{
     ships: readonly Ship[]
     at: string
@@ -25,9 +29,13 @@
     busy?: boolean
     /** When the forges were last asked. Its own age, beside its own button. */
     forgeAt?: string
+    /** When one repository was last measured on its own — beside the fleet's age, never over it. */
+    touched?: string
+    /** How far a running survey has got, or `null` where none is running. */
+    progress?: Progress | null
   }>()
 
-  const emit = defineEmits<{ measure: []; enlist: [string]; forge: [] }>()
+  const emit = defineEmits<{ measure: []; enlist: [string]; forge: []; stop: [] }>()
 
   /**
    * Taking a directory on by hand — the other half of the register.
@@ -70,6 +78,11 @@
    * timestamp claims to be current, and this one is exactly as old as the last `schnappschuss`.
    */
   const taken = computed(() => new Date(at).toLocaleString('de-DE'))
+  const single = computed(() => (touched === '' ? null : new Date(touched).toLocaleString('de-DE')))
+
+  // Both readings of it live in `measuring.ts`, where a test can hold them.
+  const share = computed(() => shareOf(progress))
+  const reading = computed(() => readingOf(progress))
 </script>
 
 <template>
@@ -102,7 +115,15 @@
     >
       <PointValue :project="fleet" :personal="mine.total" />
     </p>
-    <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">gemessen {{ taken }}</p>
+    <!--
+      The age of the *whole* fleet, and a single reading beside it rather than over it.
+      Measuring one repository used to stamp the other ninety-one with a minute they were not read
+      in, which is the one lie a timestamp exists to prevent.
+    -->
+    <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">
+      vollständig gemessen {{ taken }}
+      <span v-if="single !== null" class="text-slate-700">· einzeln {{ single }}</span>
+    </p>
 
     <!--
       The one button that starts a measurement, and it is beside the timestamp on purpose: the
@@ -111,14 +132,46 @@
       worse than no button.
     -->
     <button
-      v-if="canMeasure"
-      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
-      :disabled="busy"
+      v-if="canMeasure && !busy"
+      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
       :title="`Alle ${ships.length} Repositories neu messen`"
       @click="emit('measure')"
     >
-      {{ busy ? 'misst …' : 'neu messen' }}
+      neu messen
     </button>
+
+    <!--
+      While it runs: how far, what it is on, and a way out.
+      It said "misst …" for six seconds and froze the window while it did — the command ran on the
+      main thread. It no longer does, and now the bar can say which repository is being read. The
+      count comes from the survey itself rather than from the last snapshot: the first survey of a
+      machine, and the one after a clone, are exactly when a guessed denominator is wrong.
+    -->
+    <span v-else-if="canMeasure" class="flex min-w-64 items-center gap-2">
+      <span class="h-1 min-w-24 flex-1 bg-slate-800">
+        <span
+          class="block h-full bg-sky-500/70 transition-[width] duration-200"
+          :class="share === null ? 'w-1/3 animate-pulse' : ''"
+          :style="share === null ? undefined : { width: `${String(Math.round(share * 100))}%` }"
+        />
+      </span>
+      <span class="font-mono text-[10px] whitespace-nowrap text-slate-500">
+        <template v-if="progress !== null && progress.of > 0"
+          >{{ progress.at }}/{{ progress.of }}</template
+        >
+        <template v-else>zählt …</template>
+      </span>
+      <span class="max-w-48 truncate font-mono text-[10px] text-slate-600" :title="progress?.path">
+        {{ reading }}
+      </span>
+      <button
+        class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+        title="Messung abbrechen — der Cache behält die letzte vollständige"
+        @click="emit('stop')"
+      >
+        abbrechen
+      </button>
+    </span>
 
     <!--
       The forge reading's own age and its own button, beside each other.

@@ -81,6 +81,7 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
   --nur=PFAD  nur dieses eine Repository messen
+  --fortschritt  je gemessenem Repository eine Zeile auf stderr
   HAFEN_GITEA_TOKEN  fuer nicht-oeffentliche Gitea-Repos
   HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
   --store     Katalog und Register; Default: ${DEFAULT_STORE}
@@ -221,12 +222,34 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
        * a snapshot with a `ships` list — so the caller splices by path and needs no second format.
        */
       const one = flags.find((flag) => flag.startsWith('--nur='))?.slice('--nur='.length)
+      /*
+       * `--fortschritt` reports to **stderr** while the survey runs: one JSON line for the count,
+       * then one per repository as it lands.
+       *
+       * On stderr because stdout carries the snapshot and nothing else — a caller that reads the
+       * result by piping it must not have to filter progress out of it. One line per ship rather
+       * than a redrawn bar, so whoever reads it can be a program as easily as a person; the window
+       * is the caller this exists for, and it had no way to say anything but "misst …" for six
+       * seconds.
+       */
+      const reporting = flags.includes('--fortschritt')
+      let done = 0
+      const progress = reporting
+        ? {
+            onCount: (total: number) => process.stderr.write(`${JSON.stringify({ of: total })}\n`),
+            onShip: (ship: Ship) => {
+              done += 1
+              process.stderr.write(`${JSON.stringify({ at: done, path: ship.path })}\n`)
+            },
+          }
+        : {}
       const ships =
         one === undefined || one === ''
           ? await surveyHarbor(ports, roots, {
               register: await registry(),
               catalog: await demands(),
               ownEmails: await identities(),
+              progress,
             })
           : [
               await inspectShip(ports, one, {
