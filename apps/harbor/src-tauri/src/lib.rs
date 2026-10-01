@@ -555,6 +555,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             snapshot,
             measure,
+            forge,
             store,
             register,
             tools,
