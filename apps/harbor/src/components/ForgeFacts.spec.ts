@@ -13,6 +13,7 @@ const STATS: ForgeStats = {
   issues: 442,
   pulls: 53,
   language: 'JavaScript',
+  guard: null,
 }
 
 describe('the forge panel in the datasheet', () => {

@@ -43,6 +43,7 @@ function facts(traits: readonly ShipTrait[], overrides: Partial<QuestFacts> = {}
     files: new Map(),
     dependencies: [],
     workflows: ciFiles(0),
+    forge: null,
     ...overrides,
   }
 }

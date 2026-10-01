@@ -6,6 +6,7 @@ import { detectContract } from './contract'
 import { forgeOf } from './forge'
 import { measureQuests } from './probe'
 import { EMPTY_REGISTER } from './register'
+import { statsFor } from './stats'
 import { parseSubmodules } from './submodules'
 import { daysSince } from './time'
 import { LOG_FORMAT, NO_LEDGER, readLedger } from './work'
@@ -18,6 +19,7 @@ import type { Forge } from './forge'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
 import type { Register } from './register'
+import type { ForgeStats } from './stats'
 import type { Tender } from './submodules'
 import type { Ledger } from './work'
 import type { Working } from './working'
@@ -351,6 +353,18 @@ export interface InspectOptions {
   archived?: boolean
   /** Whether the register took this directory on by hand. */
   enlisted?: boolean
+  /**
+   * What the forge said, where somebody asked it — **a file, never a request**.
+   *
+   * The survey reads this machine and asks nobody anything, and that does not change here: this
+   * is the reading `hafen forge` wrote earlier, handed in by the caller. It exists because some
+   * demands cannot be answered from a working tree at all — whether the default branch is guarded
+   * is written down at GitHub and nowhere in the repository.
+   *
+   * Absent is the normal case and means exactly what it says: those quests stay `nicht messbar`,
+   * which is the fifth verdict doing its job.
+   */
+  forge?: readonly ForgeStats[]
 }
 
 export async function inspectShip(
@@ -358,7 +372,7 @@ export async function inspectShip(
   path: string,
   options: InspectOptions = {},
 ): Promise<Ship> {
-  const { catalog = [], ownEmails = [], archived = false, enlisted = false } = options
+  const { catalog = [], ownEmails = [], archived = false, enlisted = false, forge = [] } = options
   const segments = path.split('/').filter((segment) => segment !== '')
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
@@ -465,7 +479,16 @@ export async function inspectShip(
   const quests =
     merged.quests.length === 0
       ? []
-      : evaluateQuests(merged.quests, await measureQuests(ports, path, contract, merged.quests))
+      : evaluateQuests(
+          merged.quests,
+          await measureQuests(
+            ports,
+            path,
+            contract,
+            merged.quests,
+            statsFor(forge, parseRemotes(remotes)),
+          ),
+        )
 
   return {
     name,
@@ -791,7 +814,13 @@ export async function surveyHarbor(
   root: string | readonly string[],
   options: SurveyOptions = {},
 ): Promise<readonly Ship[]> {
-  const { register = EMPTY_REGISTER, progress = {}, catalog = [], ownEmails = [] } = options
+  const {
+    register = EMPTY_REGISTER,
+    progress = {},
+    catalog = [],
+    ownEmails = [],
+    forge = [],
+  } = options
   const enlisted = register.enlisted
   const adopted = new Set(enlisted)
   const archived = new Set(register.archived)
@@ -824,6 +853,7 @@ export async function surveyHarbor(
       ownEmails,
       archived: archived.has(path),
       enlisted: adopted.has(path),
+      forge,
     })
     measured.set(path, ship)
     progress.onShip?.(ship)

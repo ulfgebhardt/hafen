@@ -69,6 +69,16 @@ export const DEFAULT_STORE =
   process.env['HAFEN_STORE'] ??
   `${XDG_DATA !== undefined && XDG_DATA !== '' ? XDG_DATA : `${homedir()}/.local/share`}/hafen`
 
+/**
+ * Where `hafen forge` writes, and therefore where the survey looks for it.
+ *
+ * The cache and not the store: it is a measurement with its own age, not a decision somebody
+ * made, and the one place in this tool that holds measurements is the cache.
+ */
+// eslint-disable-next-line n/no-process-env -- the same variable the window reads it from
+const XDG_CACHE = process.env['XDG_CACHE_HOME']
+export const DEFAULT_FORGE = `${XDG_CACHE !== undefined && XDG_CACHE !== '' ? XDG_CACHE : `${homedir()}/.cache`}/hafen/forge.json`
+
 export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
 
   hafen           alle Schiffe mit Zustand, Vertrags-Luecken und Quests
@@ -82,6 +92,7 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   --evidenz   je Quest zeigen, was gelesen wurde
   --nur=PFAD  nur dieses eine Repository messen
   --fortschritt  je gemessenem Repository eine Zeile auf stderr
+  --forge=PFAD   die Lesung von 'hafen forge' mitlesen; Default: der Cache
   HAFEN_GITEA_TOKEN  fuer nicht-oeffentliche Gitea-Repos
   HAFEN_EMAILS   weitere eigene Adressen, komma-getrennt
   --store     Katalog und Register; Default: ${DEFAULT_STORE}
@@ -127,6 +138,34 @@ export interface Snapshot {
  * Argv, command choice and exit codes — everything the bin does except touching `process`.
  * The ports come in from outside so this is answerable without a disk.
  */
+/**
+ * Where the forge reading lies, and what it says — or nothing at all.
+ *
+ * `--forge=` with an empty value switches it off, which is how a caller says "measure the disk and
+ * nothing else". A file that is not there is not an error either: it only means nobody has asked
+ * the forge yet, and the quests that need it say so themselves.
+ */
+async function readForge(ports: Ports, flags: readonly string[]): Promise<readonly ForgeStats[]> {
+  const given = flags.find((flag) => flag.startsWith('--forge='))?.slice('--forge='.length)
+  if (given === '') {
+    return []
+  }
+  const path = given ?? DEFAULT_FORGE
+  const raw = await ports.fs.readFile(path)
+  if (raw === null) {
+    return []
+  }
+  try {
+    return (JSON.parse(raw) as ForgeReading).stats
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) {
+      throw error
+    }
+    process.stderr.write(`! keine lesbare Forge-Lesung: ${path}\n`)
+    return []
+  }
+}
+
 export async function main(argv: readonly string[], ports: Ports): Promise<number> {
   const flags = argv.filter((arg) => arg.startsWith('--'))
   const [command, rootArg] = argv.filter((arg) => !arg.startsWith('--'))
@@ -232,6 +271,15 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
        * is the caller this exists for, and it had no way to say anything but "misst …" for six
        * seconds.
        */
+      /*
+       * The forge reading, where one is at hand — **a file, never a request**.
+       *
+       * The survey still asks nobody anything: this is what `hafen forge` wrote, with its own
+       * timestamp, read off the disk. It is here because some demands cannot be answered from a
+       * working tree at all — whether the default branch is guarded is written down at GitHub and
+       * nowhere in the repository. Without the file those quests stay `nicht messbar`.
+       */
+      const forge = await readForge(ports, flags)
       const reporting = flags.includes('--fortschritt')
       let done = 0
       const progress = reporting
@@ -250,12 +298,14 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
               catalog: await demands(),
               ownEmails: await identities(),
               progress,
+              forge,
             })
           : [
               await inspectShip(ports, one, {
                 catalog: await demands(),
                 ownEmails: await identities(),
                 archived: (await registry()).archived.includes(one),
+                forge,
               }),
             ]
       const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }

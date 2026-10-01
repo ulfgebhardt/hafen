@@ -86,6 +86,27 @@ export interface ForgeStats {
   issues: number
   pulls: number
   language: string | null
+  /**
+   * What guards the default branch, where the forge lets us see it.
+   *
+   * `null` for a forge that was not asked this (Gitea here), and `admin: false` where the answer
+   * may be incomplete: **rulesets are public**, the classic branch protection rule is not. So an
+   * empty answer from a repository we do not administer means "we may not look" and not "nothing
+   * guards it" — the difference between `nicht messbar` and an invented gap.
+   */
+  guard: Guard | null
+}
+
+/** What stands between a push and the default branch. */
+export interface Guard {
+  /** A pull request is required before anything lands. */
+  pullRequest: boolean
+  /** Checks have to pass before it does. */
+  statusChecks: boolean
+  /** Where it was read: a ruleset (public), the classic rule (admin only), or nothing found. */
+  source: 'ruleset' | 'rule' | 'none'
+  /** Whether we may see everything there is to see. */
+  admin: boolean
 }
 
 /** A repository that could not be asked, and why — never a silently missing row. */
@@ -114,6 +135,12 @@ const QUERY = `query($owner:String!,$repo:String!){
     primaryLanguage{name}
     issues(states:OPEN){totalCount}
     pullRequests(states:OPEN){totalCount}
+    viewerPermission
+    defaultBranchRef{
+      name
+      branchProtectionRule{requiresApprovingReviews requiresStatusChecks}
+    }
+    rulesets(first:10){nodes{enforcement target rules(first:30){nodes{type}}}}
   }
 }`
 
@@ -126,8 +153,61 @@ interface GraphAnswer {
       primaryLanguage?: { name?: string } | null
       issues?: { totalCount?: number }
       pullRequests?: { totalCount?: number }
+      viewerPermission?: string | null
+      defaultBranchRef?: {
+        name?: string
+        branchProtectionRule?: {
+          requiresApprovingReviews?: boolean
+          requiresStatusChecks?: boolean
+        } | null
+      } | null
+      rulesets?: {
+        nodes?: readonly ({
+          enforcement?: string
+          target?: string
+          rules?: { nodes?: readonly { type?: string }[] }
+        } | null)[]
+      } | null
     } | null
   }
+}
+
+/**
+ * What guards the branch, read from the two places GitHub keeps it.
+ *
+ * **Rulesets first, because they are what people use now and because they are public.** Measured
+ * on this fleet: not one repository has a classic protection rule, two have an active ruleset with
+ * `PULL_REQUEST` and `REQUIRED_STATUS_CHECKS`, and `vuejs/core` answers the same question to a
+ * reader with no rights there at all. A quest that read only the classic rule would have called
+ * every one of them unguarded — the same false gap the fixed config path produced one quest over.
+ */
+export function guardOf(repo: NonNullable<GraphAnswer['data']>['repository']): Guard | null {
+  if (repo === undefined || repo === null) {
+    return null
+  }
+  const admin = repo.viewerPermission === 'ADMIN'
+  const rules = (repo.rulesets?.nodes ?? [])
+    .filter((set) => set !== null && set.enforcement === 'ACTIVE' && set.target === 'BRANCH')
+    .flatMap((set) => (set?.rules?.nodes ?? []).map((rule) => rule.type ?? ''))
+  if (rules.length > 0) {
+    return {
+      pullRequest: rules.includes('PULL_REQUEST'),
+      statusChecks: rules.includes('REQUIRED_STATUS_CHECKS'),
+      source: 'ruleset',
+      admin,
+    }
+  }
+
+  const classic = repo.defaultBranchRef?.branchProtectionRule
+  if (classic !== undefined && classic !== null) {
+    return {
+      pullRequest: classic.requiresApprovingReviews ?? false,
+      statusChecks: classic.requiresStatusChecks ?? false,
+      source: 'rule',
+      admin,
+    }
+  }
+  return { pullRequest: false, statusChecks: false, source: 'none', admin }
 }
 
 interface GiteaAnswer {
@@ -162,6 +242,7 @@ function fromGraph(slug: Slug, raw: string): ForgeStats | null {
     issues: repo.issues?.totalCount ?? 0,
     pulls: repo.pullRequests?.totalCount ?? 0,
     language: repo.primaryLanguage?.name ?? null,
+    guard: guardOf(repo),
   }
 }
 
@@ -188,6 +269,9 @@ function fromGitea(slug: Slug, raw: string): ForgeStats | null {
     issues: answer.open_issues_count ?? 0,
     pulls: answer.open_pr_counter ?? 0,
     language: answer.language ?? null,
+    // Not asked of Gitea: it keeps branch protection somewhere else entirely, and an answer of
+    // "nothing guards it" that was never asked for is the invented gap this whole field avoids.
+    guard: null,
   }
 }
 
@@ -268,6 +352,31 @@ export function isRead(one: ForgeStats | Unread): one is ForgeStats {
  * project twice. Two ships that were folded into one already share a remote, so the set is what
  * gets asked.
  */
+/**
+ * The reading that belongs to these remotes, or `null`.
+ *
+ * By `origin` and by slug, the same way `slugsOf` picks what to ask about — so what was asked for
+ * and what is read back cannot drift apart. A mirror is not asked and therefore never matched.
+ */
+export function statsFor(
+  stats: readonly ForgeStats[],
+  remotes: readonly { name: string; url: string }[],
+): ForgeStats | null {
+  const origin = remotes.find((remote) => remote.name === 'origin')
+  const slug = origin === undefined ? null : slugOf(origin.url)
+  if (slug === null) {
+    return null
+  }
+  return (
+    stats.find(
+      (one) =>
+        one.slug.host === slug.host &&
+        one.slug.owner.toLowerCase() === slug.owner.toLowerCase() &&
+        one.slug.repo.toLowerCase() === slug.repo.toLowerCase(),
+    ) ?? null
+  )
+}
+
 export function slugsOf(ships: readonly Ship[]): readonly Slug[] {
   const seen = new Map<string, Slug>()
   for (const ship of ships) {
