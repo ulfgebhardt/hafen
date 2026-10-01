@@ -7,10 +7,10 @@ import {
   BEAM_CEILING,
   BEAM_FLOOR,
   beamShare,
-  apronWalk,
   BERTH_SLACK,
   bridgeOf,
   cargoOf,
+  deckOf,
   DECK,
   fieldOf,
   heapLevel,
@@ -20,6 +20,7 @@ import {
   hasPlume,
   hullMarks,
   hullOf,
+  within,
   landedOf,
   LANDED_PER_ROW,
   LENGTH_CEILING,
@@ -29,7 +30,6 @@ import {
   offsetOf,
   outlineOf,
   pierRowY,
-  promenadeOf,
   pierMarks,
   pierRows,
   questAt,
@@ -427,39 +427,6 @@ describe(gangwayOf, () => {
   })
 })
 
-describe(promenadeOf, () => {
-  const hull = hullOf(ship(), 400)
-
-  /** Outboard of the widest stack, so nobody walks through the cargo. */
-  it('keeps the walk clear of anything a click answers for', () => {
-    const widest = (hull.beam * 0.72) / 2
-
-    for (const spot of promenadeOf(hull)) {
-      const onDeck = spot.x > hull.length * DECK.from && spot.x < hull.length * DECK.to
-
-      expect(!onDeck || Math.abs(spot.y) > widest).toBe(true)
-    }
-  })
-
-  /** It starts where the gangway lands, so the path hangs off the one way aboard. */
-  it('starts at the head of the gangway', () => {
-    const plank = gangwayOf(hull, 0)
-    const first = promenadeOf(hull)[0]
-
-    expect(first?.x).toBeCloseTo(plank.from.x)
-    expect(first?.y).toBeLessThan(0)
-  })
-
-  /** A ring: walking out to the bow and back the same way reads as a pendulum, not as work. */
-  it('goes round the ship and not up and down one side', () => {
-    const walk = promenadeOf(hull)
-
-    expect(walk.some((spot) => spot.y > 0)).toBe(true)
-    expect(walk.some((spot) => spot.y < 0)).toBe(true)
-    expect(walk.length).toBeGreaterThan(4)
-  })
-})
-
 describe(apronOf, () => {
   const hull = hullOf(ship(), 400)
   const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
@@ -496,62 +463,87 @@ describe(apronOf, () => {
   })
 })
 
-describe(apronWalk, () => {
-  const hull = hullOf(ship(), 400)
-  const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
+describe(within, () => {
+  /** The one shape here whose edge is not a rectangle, so it needs a real test. */
+  it('knows the inside of a hull from the outside of it', () => {
+    const outline = outlineOf(40, 10)
 
-  it('has nowhere to walk where nothing waits', () => {
-    expect(apronWalk([])).toStrictEqual([])
+    expect(within(outline, { x: 20, y: 0 })).toBe(true)
+    expect(within(outline, { x: 20, y: 9 })).toBe(false)
+    // Past the bow, where a hull has already tapered away to a point.
+    expect(within(outline, { x: 39, y: 4 })).toBe(false)
   })
+})
+
+describe(deckOf, () => {
+  const hull = hullOf(ship(), 400)
 
   /**
-   * The claim: a figure walks between the packages and round them, never over one. Every leg of
-   * the ring runs in an aisle or past an end, so no point of it lands on a box.
+   * Two faults with one cause, and this is the measurement that replaces both.
+   *
+   * The deck was a ring at seven hand-picked fractions of her length and `0.82` of her half beam.
+   * That is clear of the widest *cargo* stack and not of the deckhouse at `0.72`, so figures
+   * walked through it; and a ring that turns at `x * 0.95` is outside a hull whose bow starts
+   * tapering at `0.82`.
    */
-  it('never walks over a package', () => {
-    const items = stack(9)
-    const walk = apronWalk(items)
+  it('keeps every spot inside her outline', () => {
+    const ground = deckOf(hull, [])
+    const outline = hull.outline
 
-    for (let step = 0; step < walk.length; step += 1) {
-      const from = walk[step] ?? { x: 0, y: 0 }
-      const to = walk[(step + 1) % walk.length] ?? { x: 0, y: 0 }
-      for (let along = 0; along <= 20; along += 1) {
-        const at = {
-          x: from.x + ((to.x - from.x) * along) / 20,
-          y: from.y + ((to.y - from.y) * along) / 20,
-        }
-        const inside = items.some(
-          (box) =>
-            Math.abs(at.x - box.spot.x) < box.along / 2 &&
-            Math.abs(at.y - box.spot.y) < box.across / 2,
-        )
+    expect(ground).not.toBeNull()
 
-        expect(inside).toBe(false)
+    for (const spot of ground?.spots ?? []) {
+      expect(within(outline, spot)).toBe(true)
+    }
+  })
+
+  it('leaves out every spot that something stands on', () => {
+    const loaded = ship({
+      quests: Array.from({ length: 8 }, (_, i) => quest(`q${String(i)}`, 'met')),
+    })
+    const standing = [...cargoOf(loaded, hull), bridgeOf(loaded, hull)]
+    const ground = deckOf(hull, standing)
+
+    expect(ground).not.toBeNull()
+
+    for (const spot of ground?.spots ?? []) {
+      for (const box of standing) {
+        const over =
+          Math.abs(spot.x - box.spot.x) < box.along / 2 &&
+          Math.abs(spot.y - box.spot.y) < box.across / 2
+
+        expect(over).toBe(false)
       }
     }
   })
 
-  /** Through the aisles and not only round the outside — "zwischen und rund herum". */
-  it('walks the aisle between two rows', () => {
-    const walk = apronWalk(stack(LANDED_PER_ROW + 1))
-    const between = (pierRowY(0) + pierRowY(1)) / 2
+  /** Walkable means connected: a spot nobody can step to is a figure standing in one place. */
+  it('joins what it keeps into one walk', () => {
+    const ground = deckOf(hull, [])
 
-    expect(walk.some((spot) => Math.abs(spot.y - between) < 0.001)).toBe(true)
+    expect(ground?.links.length).toBeGreaterThan(0)
+    expect(ground?.gate).toBeGreaterThanOrEqual(0)
   })
 
-  /**
-   * A closed ring, so the walk network carries it exactly as it carries a ship's deck — and it
-   * closes along an aisle or along an end, never diagonally across the stack.
-   */
-  it('closes on itself along a straight leg', () => {
-    for (const count of [1, 4, 9, 12]) {
-      const walk = apronWalk(stack(count))
-      const first = walk[0]
-      const last = walk.at(-1)
-      const straight = first?.x === last?.x || first?.y === last?.y
+  /** The gate is at the foot of the plank, so coming aboard is one step from it. */
+  it('opens where the gangway lands', () => {
+    const ground = deckOf(hull, [])
+    const gate = ground?.spots[ground.gate]
+    const landing = { x: hull.length * 0.22, y: -hull.beam / 2 }
 
-      expect(straight).toBe(true)
+    const away = (spot: { x: number; y: number }) =>
+      Math.hypot(spot.x - landing.x, spot.y - landing.y)
+
+    expect(gate).toBeDefined()
+
+    for (const spot of ground?.spots ?? []) {
+      expect(away(gate ?? landing)).toBeLessThanOrEqual(away(spot) + 1e-9)
     }
+  })
+
+  /** A hull too small to stand on is nothing to walk, not an empty ground to join to a plank. */
+  it('is nothing where no cell fits inside her at all', () => {
+    expect(deckOf({ length: 0.2, beam: 0.2, outline: outlineOf(0.2, 0.2) }, [])).toBeNull()
   })
 })
 

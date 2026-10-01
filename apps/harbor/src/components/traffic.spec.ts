@@ -19,11 +19,24 @@ import {
   spanOf,
   stepFrom,
 } from './traffic'
-import { ringAs } from './vessel'
 
 import type { Harbour } from './moorings'
 import type { Spot } from './plan'
 import type { Network } from './traffic'
+import type { Ground } from './vessel'
+
+/**
+ * A closed ring as ground, for these tests only.
+ *
+ * The harbour has no ring any more — a deck is a field with the cargo left out, like an apron —
+ * but a ring is still the shortest thing that says "one piece of ground with a gate on it", which
+ * is all `networkOf` is being asked about here.
+ */
+const ringAs = (spots: readonly Spot[]): Ground => ({
+  spots,
+  links: spots.map((_, index): readonly [number, number] => [index, (index + 1) % spots.length]),
+  gate: 0,
+})
 
 /** The shape this machine's fleet actually has: a few real groups and a tail of singletons. */
 const fleetOf = (sizes: Readonly<Record<string, number>>) =>
@@ -357,6 +370,38 @@ describe(networkOf, () => {
     expect(plank).toContain(`d${String(node)}.0.0`)
     expect(plank).toContain(`d${String(node)}.1.0`)
     expect(network.where.get(`d${String(node)}.1.1`)).toStrictEqual({ x: 9, y: 1 })
+  })
+
+  /**
+   * The quay touches **one** spot of a piece of ground, and that is what makes the gangway real.
+   *
+   * It was the plank's foot before, so a figure stepped straight from whatever quay node happened
+   * to be nearest onto the ship's deck — across open water, past the plank that is drawn. The
+   * scene now hands the plank's own two ends in as the first two spots, so the gate is on the
+   * quay and every route aboard runs head → foot → deck. This asserts the half that lives here:
+   * nothing but the gate is reachable from the quay in one step.
+   */
+  it('lets onto a piece of ground at its gate and nowhere else', () => {
+    const node = harbour.moorings[0]?.node ?? 0
+    const plankHead = { x: 5, y: 0 }
+    const plankFoot = { x: 5, y: 4 }
+    const aboard: Ground = {
+      spots: [plankHead, plankFoot, { x: 4, y: 6 }, { x: 6, y: 6 }],
+      links: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+      ],
+      gate: 0,
+    }
+    const network = networkOf(harbour, new Map([[node, [aboard]]]))
+    const fromQuay = network.next.get(`q${String(node)}`) ?? []
+    const mine = fromQuay.filter((place) => place.startsWith(`d${String(node)}.`))
+
+    expect(mine).toStrictEqual([`d${String(node)}.0.0`])
+    // And the deck itself is two steps further, over the plank.
+    expect(network.next.get(`d${String(node)}.0.0`)).toContain(`d${String(node)}.0.1`)
+    expect(network.next.get(`d${String(node)}.0.1`)).toContain(`d${String(node)}.0.2`)
   })
 
   it('takes an empty deck as no deck', () => {
