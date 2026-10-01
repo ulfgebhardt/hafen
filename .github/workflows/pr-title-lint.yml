@@ -30,3 +30,8 @@ jobs:
             tauri
             quests
             ci
+            # release-please titles its own pull request `chore(release): …`, so the scope it uses
+            # has to be one this accepts — otherwise the one PR that must pass is the one that
+            # cannot. `deps` is the same story for dependabot.
+            release
+            deps
