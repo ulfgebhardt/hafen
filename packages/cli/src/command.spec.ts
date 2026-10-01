@@ -451,6 +451,14 @@ describe(main, () => {
        */
       'git grep -I -c',
       'git submodule status',
+      /*
+       * Added with kinship. Both are reads of something already written down: every commit with
+       * no parent, and what `.gitmodules` says each carried repository is fetched from. `config`
+       * with `-f` and `--get-regexp` only ever prints — a `--set` would be a different command
+       * and would land here as a different prefix, which is the shape that makes this list work.
+       */
+      'git rev-list --max-parents=0',
+      'git config -f .gitmodules --get-regexp',
       // The forge reading, and the only two that leave this machine. Both are GETs: a GraphQL
       // *query* has no side effect by definition, and `curl` is given no method and no body.
       'gh api graphql -f query=query(',

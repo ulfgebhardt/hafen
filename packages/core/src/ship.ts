@@ -100,6 +100,20 @@ export interface Ship {
    * committed.
    */
   lines: number | null
+  /**
+   * The commits her history begins at — every one with no parent, sorted.
+   *
+   * The one reading that can say two repositories are the *same project*. A fork, a rebranding,
+   * a deployment repo split off from a template: all of them keep the root commit of what they
+   * came from, whatever they were renamed to and whichever organisation they ended up in. Eight
+   * of the nine families on this fleet cross an organisation boundary, so nothing derived from a
+   * directory name could have found them.
+   *
+   * A list, because a repository can honestly have more than one — a merged history, a grafted
+   * import. Kinship is an intersection of the sets, never "the first one", which would depend on
+   * git's output order.
+   */
+  roots: readonly string[]
   /** Days since the last commit — the source of `rust`. */
   rustDays: number | null
   /** Worktrees other than the main one, i.e. active docks. */
@@ -376,6 +390,20 @@ export interface InspectOptions {
 }
 
 /**
+ * The root commits, one per line, sorted so two readings of the same repository compare equal.
+ *
+ * Sorted here and not where they are compared: an order that comes out of git is an order that
+ * can change, and a set whose spelling depends on the day is a set two snapshots disagree about.
+ */
+export function parseRoots(output: string | null): readonly string[] {
+  return output === null
+    ? []
+    : [...new Set(output.split('\n').map((line) => line.trim()))]
+        .filter((line) => line !== '')
+        .sort()
+}
+
+/**
  * The lines `git grep -I -c '' HEAD` reported, added up.
  *
  * Each line is `HEAD:<path>:<count>`, and a path may hold colons — so the count is read from the
@@ -421,6 +449,8 @@ export async function inspectShip(
     refs,
     remoteHead,
     modules,
+    moduleUrls,
+    roots,
     text,
   ] = await Promise.all([
     ports.fs.isDirectory(`${path}/.git`),
@@ -463,6 +493,30 @@ export async function inspectShip(
      */
     git(ports, path, ['submodule', 'status']),
     /*
+     * And where each of them is fetched from.
+     *
+     * `git submodule status` says *that* a repository is carried; only `.gitmodules` says
+     * *which*. The url is what lets a carried repository be recognised as one of ours, which is
+     * the tie the harbour draws two ships near each other for.
+     */
+    git(ports, path, ['config', '-f', '.gitmodules', '--get-regexp', '^submodule\\.']),
+    /*
+     * Where her history begins — every commit with no parent.
+     *
+     * The one reading here that can say two repositories are *the same project*: a fork, a
+     * rebranding, a deployment repo split off from its template all keep the root commit of what
+     * they came from. Nothing else measured here can tell that apart from a coincidence of names,
+     * and it needs no forge and no network.
+     *
+     * A list and not one hash, because a repository can genuinely have several roots — a merged
+     * history, a grafted import. Two of them are kin where the sets *intersect*; picking "the
+     * first" would make the answer depend on git's output order.
+     *
+     * Measured over this fleet: 0.75 s for all 92, and it finds nine families, eight of which
+     * cross organisation boundaries.
+     */
+    git(ports, path, ['rev-list', '--max-parents=0', 'HEAD']),
+    /*
      * How much text this repository holds, counted once by git.
      *
      * `git grep -I -c '' HEAD` prints a line per **text** file with its line count, and the `-I`
@@ -495,7 +549,7 @@ export async function inspectShip(
       ? null
       : await git(ports, path, ['branch', '--merged', defaultBranch, '--format=%(refname:short)'])
   const localBranches = parseBranches(refs, contained)
-  const tenders = parseSubmodules(modules)
+  const tenders = parseSubmodules(modules, moduleUrls)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
   // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
@@ -546,6 +600,7 @@ export async function inspectShip(
     stash,
     ledger,
     lines: countLines(text),
+    roots: parseRoots(roots),
     rustDays,
     docks,
     ahead,

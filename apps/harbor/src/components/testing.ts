@@ -44,6 +44,7 @@ export function ship(overrides: Partial<Ship> = {}): Ship {
     stash: 0,
     ledger: NO_LEDGER,
     lines: null,
+    roots: [],
     rustDays: 1,
     docks: [],
     ahead: 0,

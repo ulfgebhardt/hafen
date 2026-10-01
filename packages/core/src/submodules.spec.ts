@@ -13,9 +13,9 @@ describe(parseSubmodules, () => {
   /** The leading character is the whole reading, and all three of them occur out there. */
   it('reads the state off the first character of each line', () => {
     expect(parseSubmodules(STATUS)).toStrictEqual([
-      { path: 'lib/bootstrap3', state: 'aboard', at: '9a78818a' },
-      { path: 'api', state: 'adrift', at: '5b2c04ca' },
-      { path: 'inspector', state: 'missing', at: '2451664c' },
+      { path: 'lib/bootstrap3', state: 'aboard', at: '9a78818a', url: null },
+      { path: 'api', state: 'adrift', at: '5b2c04ca', url: null },
+      { path: 'inspector', state: 'missing', at: '2451664c', url: null },
     ])
   })
 

@@ -376,7 +376,7 @@ describe('what waits and what she is', () => {
     behind: 1,
     stash: 1,
     docks: ['/docks/one'],
-    submodules: [{ path: 'lib', state: 'aboard' as const, at: 'aaaaaaaa' }],
+    submodules: [{ path: 'lib', state: 'aboard' as const, at: 'aaaaaaaa', url: null }],
     working: { staged: 0, unstaged: 0, untracked: 0, conflicted: 1 },
   })
   const hull = hullOf(busy, 400)
