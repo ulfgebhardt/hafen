@@ -3,6 +3,7 @@
 
   import { mountScene } from './scene'
 
+  import type { Layout } from './band'
   import type { Chosen } from './chosen'
   import type { Scene } from './scene'
   import type { ForgeStats, Ship } from '@hafen/core'
@@ -37,8 +38,8 @@
      * the question a drawing exists for: *where* they are.
      */
     found?: readonly Ship[]
-    /** Which harbour to draw: docks in lanes, or the fan that can branch. */
-    layout?: 'lanes' | 'fan'
+    /** Which harbour to draw: docks packed in lanes, or one ring per project. */
+    layout?: Layout
     /**
      * What the forges said, by ship path.
      *

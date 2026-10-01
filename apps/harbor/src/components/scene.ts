@@ -29,13 +29,14 @@
 import { rustLevel, shipPoints } from '@hafen/core'
 import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 
+import { harbourOf as basinHarbour } from './basins'
 import { PIER } from './chosen'
 import { conditionOf } from './condition'
 import { boomLoaded, boomTip, carriesOut, craneCycle } from './crane'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
-import { harbourOf as laneHarbour } from './lanes'
-import { harbourOf as fanHarbour, MARGIN, QUAY, reachOf, walksOf } from './moorings'
+import { harbourOf } from './lanes'
+import { MARGIN, QUAY, reachOf, walksOf } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { lanesOf, networkOf, PACE, routesOf, stepFrom } from './traffic'
@@ -74,6 +75,7 @@ import {
   ZOOM_STEP,
 } from './viewport'
 
+import type { Layout } from './band'
 import type { Chosen } from './chosen'
 import type { Harbour } from './moorings'
 import type { Side, Spot } from './plan'
@@ -411,14 +413,14 @@ function dockLabels(harbour: Harbour): Container {
       text: fit(block.org, Math.max(6, Math.floor(block.width / 3.4))),
       style: DOCK_LABEL,
     })
-    const middle = (block.at.x + block.width / 2) * UNIT
+    const middle = block.label.x * UNIT
     // Measured off the text itself: a monospace guess is wrong for every name but one.
     const left = middle - text.width / 2
-    text.position.set(left, (block.at.y - 6) * UNIT)
+    text.position.set(left, block.label.y * UNIT)
     group.addChild(text)
 
     const mark = new Graphics()
-    mark.rect(left - 10, (block.at.y - 5.6) * UNIT, 6, 8)
+    mark.rect(left - 10, block.label.y * UNIT + 2, 6, 8)
     mark.fill({ color: flagTint(block.org), alpha: 0.9 })
     group.addChild(mark)
   }
@@ -500,11 +502,7 @@ function launch(size = 1): Container {
 }
 
 export interface Scene {
-  draw: (
-    ships: readonly Ship[],
-    forge?: ReadonlyMap<string, ForgeStats>,
-    layout?: 'lanes' | 'fan',
-  ) => void
+  draw: (ships: readonly Ship[], forge?: ReadonlyMap<string, ForgeStats>, layout?: Layout) => void
   /** The ship under the pointer, or `null` on the way out. */
   onHover: (handler: (ship: Ship | null) => void) => void
   /**
@@ -1314,7 +1312,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   const draw = (
     ships: readonly Ship[],
     forge: ReadonlyMap<string, ForgeStats> = new Map(),
-    layout: 'lanes' | 'fan' = 'lanes',
+    layout: Layout = 'lanes',
   ): void => {
     stats = forge
     world.removeChildren()
@@ -1337,7 +1335,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * from here down is written once and knows nothing about which arrangement it is drawing.
      * They differ in what they can do: lanes pack tighter, the fan can branch at an angle.
      */
-    const harbour = (layout === 'fan' ? fanHarbour : laneHarbour)(fleetlets(ships))
+    const harbour = (layout === 'basins' ? basinHarbour : harbourOf)(fleetlets(ships))
     const order = harbour.moorings
     extent = { width: harbour.width * UNIT, height: harbour.height * UNIT }
     lively = livelinessOf(ships)

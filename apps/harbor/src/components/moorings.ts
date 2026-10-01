@@ -308,6 +308,15 @@ export interface Dock {
   width: number
   height: number
   angle: number
+  /**
+   * Where the name goes, decided by the layout that made the dock.
+   *
+   * It used to be computed in the renderer as "above the top-left corner, shifted half a width" —
+   * which is right for a rectangle of rows and wrong for a basin, whose whole point is a hole in
+   * the middle *for the name*. Where a label can stand is a property of the arrangement, and the
+   * arrangement is the only thing that knows it.
+   */
+  label: Spot
 }
 
 export interface Harbour {
@@ -673,12 +682,14 @@ export function harbourOf(groups: readonly Fleetlet[], aspect = 16 / 9): Harbour
     if (mine.length > 0) {
       const left = Math.min(...mine.map((one) => one.x))
       const top = Math.min(...mine.map((one) => one.y))
+      const wide = Math.max(...mine.map((one) => one.x + one.width)) - left
       blocks.push({
         org: group.org,
         at: { x: left, y: top },
-        width: Math.max(...mine.map((one) => one.x + one.width)) - left,
+        width: wide,
         height: Math.max(...mine.map((one) => one.y + one.height)) - top,
         angle,
+        label: { x: left + wide / 2, y: top - 6 },
       })
       tips.push({ id: onLimb, org: group.org })
     }

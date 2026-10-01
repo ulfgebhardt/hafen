@@ -177,3 +177,13 @@ export function pagesOf(view: View): readonly Page[] {
 export function viewOf(page: Page): View {
   return page === FLEET ? 'fleet' : page === CONTRACTS ? 'contracts' : 'dock'
 }
+
+/**
+ * Which of the two arrangements a page is drawn with.
+ *
+ * `lanes` packs docks into rows and answers "what is on this page". `basins` draws one ring per
+ * *project* — the kindreds `kin.ts` measures — and answers "what belongs with what", which is the
+ * fleet page's whole question. The fan that used to answer it spent four times the area saying
+ * less.
+ */
+export type Layout = 'lanes' | 'basins'
