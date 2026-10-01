@@ -61,11 +61,11 @@
     it is a tab nobody finds again, and "no archived repositories" is an answer worth being able
     to read. The catalog sits last because it is the only page that is not a set of ships.
   -->
-  <nav class="flex gap-px border-b border-slate-800 bg-slate-950 px-2">
+  <nav class="flex gap-px overflow-hidden border-b border-slate-800 bg-slate-950 px-2">
     <button
       v-for="name in PAGES"
       :key="name"
-      class="group px-3 py-1.5 text-left"
+      class="group shrink-0 px-3 py-1.5 text-left whitespace-nowrap"
       :class="
         page === name
           ? 'border-b-2 border-slate-300 text-slate-100'
@@ -109,7 +109,7 @@
     -->
     <span
       v-if="contract !== null"
-      class="ml-3 flex items-baseline gap-1.5 self-center font-mono text-[10px]"
+      class="ml-3 flex shrink-0 items-baseline gap-1.5 self-center font-mono text-[10px] whitespace-nowrap"
     >
       <span class="text-slate-600">Vertrag</span>
       <span class="text-orange-300">{{ contract.id }}</span>
@@ -125,7 +125,17 @@
       </button>
     </span>
 
-    <p class="ml-auto self-center pr-3 font-mono text-[10px] text-slate-600">
+    <!--
+      What this page means, and it may never push the bar taller.
+      It is the one line here whose length is not the window's business: on a narrow window it
+      wrapped to seven lines and the whole tab bar grew with it, so the tabs moved every time
+      somebody picked a longer page. It shrinks to an ellipsis instead and keeps the sentence in
+      its own title — a bar that changes height is a bar nobody can aim at.
+    -->
+    <p
+      class="ml-auto min-w-0 flex-1 self-center truncate pr-3 text-right font-mono text-[10px] text-slate-600"
+      :title="PAGE_MEANING[page]"
+    >
       {{ PAGE_MEANING[page] }}
     </p>
 
@@ -133,7 +143,7 @@
       A field and never a dropdown: ninety repositories have no shared axis to pick from, and the
       one thing somebody has in mind is a word out of the name or the path.
     -->
-    <span class="flex items-center gap-1 self-center pr-1">
+    <span class="flex shrink-0 items-center gap-1 self-center pr-1">
       <input
         v-model="query"
         type="search"

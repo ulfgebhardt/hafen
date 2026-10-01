@@ -93,34 +93,41 @@
       <!--
         Why each one is offered, per branch: "gone" and "merged" are different reasons and a reader
         deciding whether to delete wants the one that applies to this name.
+
+        Name and button on one line, the reason and the command under them — and that is a fix.
+        All four stood in one row, with the command refusing to shrink, so in a 384-pixel panel a
+        branch name was squeezed to a single column of letters. A long name is the normal case
+        here: `werft/0250-reissboden-ocelot-social-community` is what these are called.
       -->
       <ul class="mt-1 space-y-1.5">
-        <li v-for="branch in stale" :key="branch.name" class="flex items-baseline gap-2">
-          <span class="min-w-0 flex-1">
-            <span class="block font-mono text-xs break-all text-slate-300">{{ branch.name }}</span>
-            <span class="text-[11px] text-slate-600">{{
-              branch.gone
-                ? 'der Remote hat diesen Branch nicht mehr'
-                : `bereits in ${ship.defaultBranch ?? 'dem Default-Branch'} enthalten`
+        <li v-for="branch in stale" :key="branch.name">
+          <span class="flex items-baseline gap-2">
+            <span class="min-w-0 flex-1 font-mono text-xs break-all text-slate-300">{{
+              branch.name
             }}</span>
+            <button
+              class="shrink-0 font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+              :disabled="busy"
+              :title="`Nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
+              @click="emit('prune', branch.name)"
+            >
+              ausführen
+            </button>
           </span>
+          <span class="block text-[11px] text-slate-600">{{
+            branch.gone
+              ? 'der Remote hat diesen Branch nicht mehr'
+              : `bereits in ${ship.defaultBranch ?? 'dem Default-Branch'} enthalten`
+          }}</span>
           <!--
             The command this one button runs, written out on its own row.
             One line for the whole set used to stand under the list, and beside per-row buttons it
             read as what a button does — so the button looked like it would take all of them. What
             you see is now what this button runs, and nothing else.
           -->
-          <code class="shrink-0 font-mono text-[10px] text-slate-600 select-all"
+          <code class="block font-mono text-[10px] break-all text-slate-600 select-all"
             >git branch -d {{ branch.name }}</code
           >
-          <button
-            class="shrink-0 font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
-            :disabled="busy"
-            :title="`Nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
-            @click="emit('prune', branch.name)"
-          >
-            ausführen
-          </button>
         </li>
       </ul>
     </template>
