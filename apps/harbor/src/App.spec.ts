@@ -13,6 +13,9 @@ const stubs = {
   HarborScene: {
     name: 'HarborScene',
     template: '<div class="scene-stub" />',
+    // Declared so a spec can read what the window handed the drawing — chiefly which ships are on
+    // it and which of them a search found.
+    props: ['ships', 'found', 'layout', 'centre', 'hold', 'forge'],
     // Declared so the stub can hand a ship up the same way the real scene does.
     emits: ['update:picked'],
   },
@@ -711,5 +714,58 @@ describe('the catalog page, from the window', () => {
     await clickingTitled(page, 'Vertragsfilter aufheben')
 
     expect(page.text()).toContain('3 Schiffe')
+  })
+})
+
+describe('searching the harbour', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const three = {
+    ...snapshot,
+    ships: [
+      ship({ path: '/repos/a', name: 'hafen' }),
+      ship({ path: '/repos/b', name: 'werft' }),
+      ship({ path: '/repos/c', name: 'hafen-data' }),
+    ],
+  }
+
+  const open = async (): Promise<ReturnType<typeof mount>> => {
+    bridge({
+      snapshot: { path: '/cache', json: JSON.stringify(three), error: null },
+      tools: [],
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+    return page
+  }
+
+  /**
+   * Marked and not filtered. A search that rebuilt the harbour out of whatever matched answered
+   * "what matched" and lost the question a drawing exists for: where they are.
+   */
+  it('keeps the whole fleet drawn and hands the matches down', async () => {
+    const page = await open()
+
+    await page.find('input[type="search"]').setValue('hafen')
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' })
+
+    expect(scene.props('ships') as readonly unknown[]).toHaveLength(3)
+    expect(
+      (scene.props('found') as readonly { name: string }[]).map((one) => one.name),
+    ).toStrictEqual(['hafen', 'hafen-data'])
+  })
+
+  it('says so where nothing matches, instead of showing an empty harbour', async () => {
+    const page = await open()
+
+    await page.find('input[type="search"]').setValue('gibtesnicht')
+    await flushPromises()
+
+    expect(page.text()).toContain('Kein Schiff passt zu')
+    expect(page.findComponent({ name: 'HarborScene' }).props('ships') as unknown[]).toHaveLength(3)
   })
 })

@@ -13,6 +13,7 @@
     layout = 'lanes',
     centre = null,
     hold = null,
+    found = [],
   } = defineProps<{
     ships: readonly Ship[]
     /**
@@ -29,6 +30,13 @@
      * the time this one is built, so the place she occupied has to survive outside both.
      */
     hold?: { x: number; y: number } | null
+    /**
+     * The ships a search found — marked in the drawing, never filtered out of it.
+     *
+     * A search that rebuilt the harbour out of three ships answered "what matched" and threw away
+     * the question a drawing exists for: *where* they are.
+     */
+    found?: readonly Ship[]
     /** Which harbour to draw: docks in lanes, or the fan that can branch. */
     layout?: 'lanes' | 'fan'
     /**
@@ -78,6 +86,7 @@
     scene.draw(ships, forge, layout)
     scene.highlight(picked.value, demand.value)
     scene.focus(centre, hold)
+    scene.mark(found)
   })
 
   // Redrawn rather than diffed: a snapshot is replaced whole, and a basin of a hundred hulls
@@ -98,6 +107,15 @@
   watch([picked, demand], ([ship, quest]) => {
     scene?.highlight(ship, quest)
   })
+
+  // Typing is not a redraw: the same harbour, with the matches ringed and the view moved to hold
+  // them. Watched on its own so a search costs nothing but a ring and a pan.
+  watch(
+    () => found,
+    (ships) => {
+      scene?.mark(ships)
+    },
+  )
 
   /** Where a ship stands right now — asked by the page before it swaps the drawing out. */
   defineExpose({

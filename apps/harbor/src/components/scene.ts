@@ -513,6 +513,17 @@ export interface Scene {
    * changes at a switch should be the harbour around her, not where the eye has to look.
    */
   where: (ship: Ship | null) => { x: number; y: number } | null
+  /**
+   * Mark the ships a search found, and frame them.
+   *
+   * Marking and not filtering: a search that rebuilds the harbour out of three ships answers
+   * "what matched" and throws away the question the drawing exists for — *where* they are. The
+   * fleet stays whole, the matches are ringed, and the view moves to hold exactly them.
+   *
+   * An empty list clears the marks and leaves the view where it is: a cleared search is not a
+   * reason to throw the reader somewhere else.
+   */
+  mark: (ships: readonly Ship[]) => void
   destroy: () => void
 }
 
@@ -521,6 +532,8 @@ interface Placed {
   ship: Ship
   /** Where her berth sits in the drawing, in pixels — what `focus` centres the window on. */
   spot: { x: number; y: number }
+  /** The ring that says a search found her. Its own layer: a found ship may also be the chosen one. */
+  found: Graphics
   /** The halo under the hull. */
   chosen: Graphics
   /** The ring around one box aboard — in the body, because the cargo moves with her. */
@@ -1383,6 +1396,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       slot.addChild(quayside)
 
       const body = new Container()
+      const found = new Graphics()
+      slot.addChild(found)
       const chosen = new Graphics()
       const aboard = new Graphics()
       const ashore = new Graphics()
@@ -1488,6 +1503,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       placed.push({
         ship: berth.ship,
         spot: { x: flat.x + (BERTH.pitch / 2) * UNIT, y: flat.y },
+        found,
         chosen,
         aboard,
         ashore,
@@ -1807,6 +1823,43 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     return { x: pan.x + entry.spot.x * scale, y: pan.y + entry.spot.y * scale }
   }
 
+  /**
+   * Hold these berths in the window, as big as they will go.
+   *
+   * One match is zoomed to as close as a single ship was drawn before, which is what made a
+   * one-hit search readable; several are framed together with a margin, so what the eye has to
+   * compare is on screen at once. Nothing at all leaves the view alone.
+   */
+  const frame = (ships: readonly Ship[]): void => {
+    const spots = ships.flatMap((ship) => {
+      const entry = berthOf(ship)
+      return entry === undefined ? [] : [entry.spot]
+    })
+    if (spots.length === 0) {
+      return
+    }
+    const view = viewOf()
+    const pad = BERTH.pitch * UNIT
+    const box = {
+      left: Math.min(...spots.map((spot) => spot.x)) - pad,
+      right: Math.max(...spots.map((spot) => spot.x)) + pad,
+      top: Math.min(...spots.map((spot) => spot.y)) - pad,
+      bottom: Math.max(...spots.map((spot) => spot.y)) + pad,
+    }
+    const wanted = Math.min(
+      view.width / Math.max(box.right - box.left, 1),
+      view.height / Math.max(box.bottom - box.top, 1),
+    )
+    // Never past what the window would show a single berth at, and never below the fit: a search
+    // is a way of looking at this harbour, not a different drawing of it.
+    zoom = clampZoom(Math.max(fitScale(extent, view), wanted))
+    pan = {
+      x: view.width / 2 - ((box.left + box.right) / 2) * zoom,
+      y: view.height / 2 - ((box.top + box.bottom) / 2) * zoom,
+    }
+    settle()
+  }
+
   const focus = (ship: Ship | null, hold: { x: number; y: number } | null = null): void => {
     const entry = berthOf(ship)
     if (entry === undefined) {
@@ -1923,6 +1976,22 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      */
     focus,
     where,
+    mark: (ships) => {
+      const wanted = new Set(ships.map((ship) => ship.path))
+      const accent = hex(SCENE.found)
+      for (const entry of placed) {
+        entry.found.clear()
+        if (!wanted.has(entry.ship.path)) {
+          continue
+        }
+        // A ring round the whole berth and not a tint on the hull: the chosen ship already owns
+        // the hull's outline, and two marks on one shape would be one mark nobody can read.
+        entry.found
+          .circle(0, 0, (entry.hull.length / 2 + 4) * UNIT)
+          .stroke({ width: 3, color: accent, alpha: 0.75 })
+      }
+      frame(ships)
+    },
     highlight: (ship, chosen = null) => {
       const accent = hex(SCENE.accent)
       for (const entry of placed) {
