@@ -216,15 +216,14 @@ describe('while a survey runs', () => {
   })
 
   /**
-   * The age of the whole fleet, and a single reading beside it rather than over it: measuring one
-   * repository used to stamp the other ninety-one with a minute they were not read in.
+   * The header carries one age and it is the fleet's: measuring one repository used to stamp the
+   * other ninety-one with a minute they were not read in. When *one* ship was read is her own
+   * business and stands on her sheet, beside the button that reads her again.
    */
-  it('keeps the fleet age and the single reading apart', () => {
-    const bar = mount(FleetBar, {
-      props: { ships: [ship()], at: AT, source: '/cache', touched: '2026-09-30T12:00:00Z' },
-    })
+  it('carries the age of the whole fleet and nothing else', () => {
+    const bar = mount(FleetBar, { props: { ships: [ship()], at: AT, source: '/cache' } })
 
     expect(bar.text()).toContain('vollständig gemessen')
-    expect(bar.text()).toContain('einzeln')
+    expect(bar.text()).not.toContain('einzeln')
   })
 })

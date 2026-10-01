@@ -175,6 +175,15 @@ export interface Ship {
    * branch, age and points are absent rather than zero — the two must not look alike.
    */
   hasGit: boolean
+  /**
+   * When *this* ship was last read, where that is not the time of the whole survey.
+   *
+   * Absent after a full survey, because then the snapshot's own `at` is the answer for every ship
+   * in it. Set where one repository was measured on its own: that ship is younger than the
+   * picture around her, and the sheet beside her says so rather than letting the header's figure
+   * speak for a minute it was not read in.
+   */
+  measuredAt?: string
 }
 
 /**

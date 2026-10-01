@@ -14,6 +14,8 @@
   import { forgeLinks } from '@hafen/core'
   import { computed } from 'vue'
 
+  import { SCENE } from './theme'
+
   import type { ForgeStats } from '@hafen/core'
 
   const { stats, at = '' } = defineProps<{ stats: ForgeStats; at?: string }>()
@@ -62,6 +64,14 @@
       cut: stats.issues > MOST,
       href: links.value['issues'],
       filled: false,
+      /*
+       * The same colour the drawing uses, from the same constant.
+       *
+       * It was `border-amber-500` here and `SCENE.issue` out there — two spellings of one reading,
+       * and the only way a reader can connect a crate on the apron with a row in this panel is
+       * that they look alike. Tailwind cannot read a constant, so the colour is set as a style.
+       */
+      color: SCENE.issue,
     },
     {
       name: 'PRs',
@@ -70,6 +80,7 @@
       cut: stats.pulls > MOST,
       href: links.value['pulls'],
       filled: true,
+      color: SCENE.pull,
     },
   ])
 </script>
@@ -118,9 +129,10 @@
             v-for="mark in row.drawn"
             :key="mark"
             class="inline-block h-2.5 w-1.5 border"
-            :class="
-              row.filled ? 'border-sky-500/70 bg-sky-500/60' : 'border-amber-500/70 bg-transparent'
-            "
+            :style="{
+              borderColor: row.color,
+              backgroundColor: row.filled ? row.color : 'transparent',
+            }"
           />
           <span v-if="row.cut" class="font-mono text-[10px] text-slate-500">+</span>
           <span v-if="row.count === 0" class="font-mono text-[10px] text-slate-700">keine</span>

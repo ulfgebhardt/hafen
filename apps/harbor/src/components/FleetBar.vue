@@ -17,7 +17,6 @@
     canMeasure = false,
     busy = false,
     forgeAt = '',
-    touched = '',
     progress = null,
   } = defineProps<{
     ships: readonly Ship[]
@@ -29,8 +28,6 @@
     busy?: boolean
     /** When the forges were last asked. Its own age, beside its own button. */
     forgeAt?: string
-    /** When one repository was last measured on its own — beside the fleet's age, never over it. */
-    touched?: string
     /** How far a running survey has got, or `null` where none is running. */
     progress?: Progress | null
   }>()
@@ -78,7 +75,6 @@
    * timestamp claims to be current, and this one is exactly as old as the last `schnappschuss`.
    */
   const taken = computed(() => new Date(at).toLocaleString('de-DE'))
-  const single = computed(() => (touched === '' ? null : new Date(touched).toLocaleString('de-DE')))
 
   // Both readings of it live in `measuring.ts`, where a test can hold them.
   const share = computed(() => shareOf(progress))
@@ -122,7 +118,6 @@
     -->
     <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">
       vollständig gemessen {{ taken }}
-      <span v-if="single !== null" class="text-slate-700">· einzeln {{ single }}</span>
     </p>
 
     <!--

@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from 'vitest'
 import ShipSheet from './ShipSheet.vue'
 import { quest, ship } from './testing'
 
+/** A ledger with enough in it that the score has parts to break down. */
+const LEDGER = {
+  total: { commits: 14990, pulls: 3783, merges: 5115, authors: 110, unscored: 14187, byKind: {} },
+  own: NO_WORK,
+}
+
 describe('shipSheet', () => {
   it('heads the sheet with the full path, which the scene caption cannot carry', () => {
     const sheet = mount(ShipSheet, { props: { ship: ship() } })
@@ -274,5 +280,52 @@ describe('the thumbnail is the way back', () => {
     await sheet.find('svg').trigger('click')
 
     expect(sheet.emitted('pick')).toStrictEqual([[null]])
+  })
+})
+
+describe('when this ship was read', () => {
+  /**
+   * One time and not two: either she was measured on her own since the last survey, or the survey
+   * is her answer. The header carries the fleet's age; this carries hers.
+   */
+  it('shows her own time where she has one', () => {
+    const sheet = mount(ShipSheet, {
+      props: {
+        ship: ship({ measuredAt: '2026-10-01T12:00:00Z' }),
+        at: '2026-09-30T08:00:00Z',
+        canAct: true,
+      },
+    })
+
+    expect(sheet.text()).toContain('1.10.2026')
+    expect(sheet.text()).not.toContain('30.9.2026')
+  })
+
+  it('falls back to the survey, which is her age as much as anybody else', () => {
+    const sheet = mount(ShipSheet, {
+      props: { ship: ship(), at: '2026-09-30T08:00:00Z', canAct: true },
+    })
+
+    expect(sheet.text()).toContain('30.9.2026')
+  })
+
+  /** Nothing measured, nothing claimed. */
+  it('says nothing where there is no time at all', () => {
+    const sheet = mount(ShipSheet, { props: { ship: ship(), canAct: true } })
+
+    expect(sheet.text()).not.toContain('gemessen')
+  })
+})
+
+describe('the score and what went into it', () => {
+  /**
+   * The rows under it are points, the line above them is counts — and "Autoren 2.200" under
+   * "110 Autoren" read as a second author count that was wrong by a factor of twenty.
+   */
+  it('says that the breakdown is points and not counts', () => {
+    const sheet = mount(ShipSheet, { props: { ship: ship({ ledger: LEDGER }) } })
+
+    expect(sheet.text()).toContain('Punkte aus')
+    expect(sheet.text()).toContain('110 Autoren')
   })
 })

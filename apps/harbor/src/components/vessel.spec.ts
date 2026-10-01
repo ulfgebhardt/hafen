@@ -10,7 +10,7 @@ import {
   cargoOf,
   DECK,
   fieldOf,
-  FORGE_MOST,
+  heapLevel,
   forgeLoad,
   gangwayOf,
   hasPlume,
@@ -643,6 +643,34 @@ describe(apronOf, () => {
   })
 })
 
+describe(heapLevel, () => {
+  /**
+   * The two scales differ on purpose. Measured over the 71 repositories this fleet could read:
+   * issues run 0 at the median and 51 at the ninetieth percentile, pull requests 0 and 14 — so
+   * ten issues is a quiet repository and ten pull requests is a queue.
+   */
+  it('reads ten issues as few and ten pull requests as many', () => {
+    expect(heapLevel('issue', 10)).toBeLessThan(heapLevel('pull', 10))
+  })
+
+  it('has nothing to show where nothing is open', () => {
+    expect(heapLevel('issue', 0)).toBe(0)
+    expect(heapLevel('pull', 0)).toBe(0)
+  })
+
+  it('climbs with the count and stops at the top rung', () => {
+    const climbs = [0, 1, 4, 5, 25, 100, 400].map((count) => heapLevel('issue', count))
+
+    expect(climbs).toStrictEqual([0, 1, 1, 2, 3, 4, 5])
+    expect(heapLevel('issue', 100000)).toBe(5)
+  })
+
+  /** A negative count cannot happen and must not invent a heap if it ever does. */
+  it('takes nonsense as nothing', () => {
+    expect(heapLevel('pull', -3)).toBe(0)
+  })
+})
+
 describe(forgeLoad, () => {
   const hull = hullOf(ship(), 400)
 
@@ -651,19 +679,28 @@ describe(forgeLoad, () => {
     expect(forgeLoad(hull, 0, 0)).toStrictEqual([])
   })
 
-  /** A question and a request for code: two kinds, and the row says which is which. */
-  it('stands issues and pull requests apart', () => {
-    const boxes = forgeLoad(hull, 2, 1)
+  /** A question and a crate of code: two kinds, and the row says which is which. */
+  it('heaps issues and pull requests apart', () => {
+    const boxes = forgeLoad(hull, 300, 2)
+    const issues = boxes.filter((box) => box.kind === 'issue')
+    const pulls = boxes.filter((box) => box.kind === 'pull')
 
-    expect(boxes.map((box) => box.kind)).toStrictEqual(['issue', 'issue', 'pull'])
+    expect(issues).toHaveLength(5)
+    expect(pulls).toHaveLength(1)
+    expect(Math.min(...pulls.map((box) => box.spot.x))).toBeGreaterThan(
+      Math.max(...issues.map((box) => box.spot.x)),
+    )
   })
 
-  /** Capped like every other row, and the box says it was cut rather than claiming six. */
-  it('caps a long row and says that it did', () => {
-    const boxes = forgeLoad(hull, 40, 0)
+  /** The pile grows upward in rows rather than sideways for ever. */
+  it('stacks a full heap in two rows', () => {
+    const rows = new Set(
+      forgeLoad(hull, 300, 0)
+        .filter((box) => box.kind === 'issue')
+        .map((box) => box.spot.y),
+    )
 
-    expect(boxes).toHaveLength(FORGE_MOST)
-    expect(boxes.every((box) => box.capped)).toBe(true)
+    expect(rows.size).toBe(2)
   })
 
   /**
@@ -674,5 +711,13 @@ describe(forgeLoad, () => {
     const boxes = forgeLoad(hull, 1, 0)
 
     expect(boxes[0]?.spot.y).toBeGreaterThan(pierRowY(MARK_ROW))
+  })
+
+  /** Two heaps that slid together as one shrank would be one heap that changes shape. */
+  it('keeps the second heap in its place however small the first one is', () => {
+    const full = forgeLoad(hull, 300, 300).filter((box) => box.kind === 'pull')
+    const thin = forgeLoad(hull, 1, 300).filter((box) => box.kind === 'pull')
+
+    expect(thin.map((box) => box.spot.x)).toStrictEqual(full.map((box) => box.spot.x))
   })
 })
