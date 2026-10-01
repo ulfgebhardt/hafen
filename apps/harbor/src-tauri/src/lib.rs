@@ -31,6 +31,8 @@
 //! desktop app and a screenshot: a snapshot baked in at build time is as old as the build, and
 //! nothing on screen would say so.
 
+mod ports;
+
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
@@ -621,7 +623,7 @@ fn on_path(command: &str) -> bool {
 ///
 /// Takes the platform and the variable rather than reading them, so the Windows case can be
 /// tested on any machine. A `cfg!` inside would be a branch that only one runner ever enters.
-fn executables(command: &str, windows: bool, pathext: Option<String>) -> Vec<String> {
+pub(crate) fn executables(command: &str, windows: bool, pathext: Option<String>) -> Vec<String> {
     let mut names = vec![command.to_owned()];
     if !windows {
         return names;
@@ -821,7 +823,17 @@ pub fn run() {
             register,
             tools,
             run_tool,
-            branch_delete
+            branch_delete,
+            // The window's own way to the outside world, so it needs no second program to
+            // measure. See `ports.rs` — the allow list of readings is enforced there.
+            ports::port_run,
+            ports::port_which,
+            ports::port_read_file,
+            ports::port_read_dir,
+            ports::port_is_directory,
+            ports::port_real_path,
+            ports::port_write_file,
+            ports::port_host
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hafen");
