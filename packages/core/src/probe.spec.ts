@@ -31,6 +31,7 @@ function facts(overrides: Partial<QuestFacts> = {}): QuestFacts {
     files: new Map(),
     dependencies: [],
     workflows: ciFiles(0),
+    forge: null,
     ...overrides,
   }
 }
@@ -490,5 +491,72 @@ describe('whether anything here builds', () => {
 
   it('is unmeasured where the ship has no workflows', () => {
     expect(runCheck(check('baut-in-ci'), facts()).ok).toBeNull()
+  })
+})
+
+describe('what guards the default branch', () => {
+  const reading = (guard: unknown): QuestFacts =>
+    facts({
+      forge: {
+        slug: { host: 'github.com', owner: 'o', repo: 'r' },
+        stars: 0,
+        watchers: 0,
+        forks: 0,
+        issues: 0,
+        pulls: 0,
+        language: null,
+        guard,
+      } as QuestFacts['forge'],
+    })
+
+  const asked = check('forge-schutz', { fordert: 'pull-request, status-checks' }, 'forge')
+
+  /** The reading is a file somebody fetched, never a request this survey makes. */
+  it('is unmeasured where nobody asked the forge', () => {
+    const seen = runCheck(asked, facts())
+
+    expect(seen.ok).toBeNull()
+    expect(seen.evidence.found).toContain('hafen forge')
+  })
+
+  it('reads what the ruleset demands', () => {
+    const guarded = reading({
+      pullRequest: true,
+      statusChecks: true,
+      source: 'ruleset',
+      admin: false,
+    })
+
+    expect(runCheck(asked, guarded).ok).toBe(true)
+  })
+
+  it('names what is missing rather than only failing', () => {
+    const half = reading({ pullRequest: true, statusChecks: false, source: 'rule', admin: true })
+    const seen = runCheck(asked, half)
+
+    expect(seen.ok).toBe(false)
+    expect(seen.evidence.found).toContain('status-checks')
+  })
+
+  /**
+   * The distinction the whole field exists for: rulesets are public, the classic rule is not. An
+   * empty answer from a repository we do not administer means "we may not look", and reading that
+   * as a gap would be inventing one.
+   */
+  it('refuses to call a repository unguarded when it may not look', () => {
+    const blind = reading({ pullRequest: false, statusChecks: false, source: 'none', admin: false })
+
+    expect(runCheck(asked, blind).ok).toBeNull()
+  })
+
+  it('does call it unguarded where it could see everything', () => {
+    const open = reading({ pullRequest: false, statusChecks: false, source: 'none', admin: true })
+
+    expect(runCheck(asked, open).ok).toBe(false)
+  })
+
+  /** A reading written before this field existed carries no `guard` — and is not a finding. */
+  it('takes an older reading as one that cannot answer', () => {
+    expect(runCheck(asked, reading(undefined)).ok).toBeNull()
   })
 })

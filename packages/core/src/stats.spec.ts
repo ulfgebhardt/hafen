@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { mockPorts, mockRemote } from './mock'
-import { forgeLinks, isRead, readStats, slugOf, slugsOf } from './stats'
+import { forgeLinks, guardOf, isRead, readStats, slugOf, slugsOf, statsFor } from './stats'
 
 import type { CommandMap } from './mock'
 import type { Ship } from './ship'
@@ -202,5 +202,125 @@ describe(forgeLinks, () => {
     expect(links['repo']).toBe('https://github.com/ulfgebhardt/hafen')
     expect(links['issues']).toBe('https://github.com/ulfgebhardt/hafen/issues')
     expect(links['pulls']).toBe('https://github.com/ulfgebhardt/hafen/pulls')
+  })
+})
+
+describe(guardOf, () => {
+  const repo = (over: Record<string, unknown> = {}) => ({
+    viewerPermission: 'ADMIN',
+    rulesets: { nodes: [] },
+    defaultBranchRef: { name: 'main', branchProtectionRule: null },
+    ...over,
+  })
+
+  /**
+   * Rulesets first, because they are what people use now **and because they are public**.
+   * Measured: `vuejs/core` answers this to a reader with no rights there at all.
+   */
+  it('reads an active ruleset over the classic rule', () => {
+    const guard = guardOf(
+      repo({
+        rulesets: {
+          nodes: [
+            {
+              enforcement: 'ACTIVE',
+              target: 'BRANCH',
+              rules: { nodes: [{ type: 'PULL_REQUEST' }, { type: 'REQUIRED_STATUS_CHECKS' }] },
+            },
+          ],
+        },
+      }),
+    )
+
+    expect(guard).toStrictEqual({
+      pullRequest: true,
+      statusChecks: true,
+      source: 'ruleset',
+      admin: true,
+    })
+  })
+
+  it('ignores a ruleset that is not enforced', () => {
+    const guard = guardOf(
+      repo({
+        rulesets: {
+          nodes: [
+            {
+              enforcement: 'DISABLED',
+              target: 'BRANCH',
+              rules: { nodes: [{ type: 'PULL_REQUEST' }] },
+            },
+          ],
+        },
+      }),
+    )
+
+    expect(guard?.source).toBe('none')
+  })
+
+  it('falls back to the classic rule where there is no ruleset', () => {
+    const guard = guardOf(
+      repo({
+        defaultBranchRef: {
+          name: 'main',
+          branchProtectionRule: { requiresApprovingReviews: true, requiresStatusChecks: false },
+        },
+      }),
+    )
+
+    expect(guard).toStrictEqual({
+      pullRequest: true,
+      statusChecks: false,
+      source: 'rule',
+      admin: true,
+    })
+  })
+
+  /**
+   * The distinction the whole field exists for: nothing found by a reader who may not see
+   * everything is **not** the same as nothing being there.
+   */
+  it('says whether it was allowed to see everything', () => {
+    expect(guardOf(repo({ viewerPermission: 'READ' }))?.admin).toBe(false)
+    expect(guardOf(repo())?.admin).toBe(true)
+  })
+
+  it('has nothing to say about a repository that was not answered', () => {
+    expect(guardOf(null)).toBeNull()
+  })
+})
+
+describe(statsFor, () => {
+  const reading = (owner: string, repo: string): ForgeStats => ({
+    slug: { host: 'github.com', owner, repo },
+    stars: 1,
+    watchers: 0,
+    forks: 0,
+    issues: 0,
+    pulls: 0,
+    language: null,
+    guard: null,
+  })
+
+  /** By `origin` and by slug — what was asked for and what is read back cannot drift apart. */
+  it('matches the reading to the remote it was asked about', () => {
+    const stats = [reading('IT4Change', 'dornsloops')]
+    const remotes = [{ name: 'origin', url: 'git@github.com:IT4Change/dornsloops.git' }]
+
+    expect(statsFor(stats, remotes)?.slug.repo).toBe('dornsloops')
+  })
+
+  /** A mirror is never asked, so it is never matched either. */
+  it('answers nothing for a ship whose only remote is a mirror', () => {
+    const stats = [reading('IT4Change', 'dornsloops')]
+    const mirror = [{ name: 'gitea', url: 'git@github.com:IT4Change/dornsloops.git' }]
+
+    expect(statsFor(stats, mirror)).toBeNull()
+  })
+
+  it('answers nothing where nothing was read about her', () => {
+    const remotes = [{ name: 'origin', url: 'git@github.com:IT4Change/anderes.git' }]
+
+    expect(statsFor([reading('IT4Change', 'dornsloops')], remotes)).toBeNull()
   })
 })

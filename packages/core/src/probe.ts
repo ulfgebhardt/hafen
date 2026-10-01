@@ -24,6 +24,7 @@ import { bodyBuilds } from './role'
 import type { Contract, ContractPorts } from './contract'
 import type { Quest, QuestCheck, ShipTrait } from './quest'
 import type { CheckRole } from './role'
+import type { ForgeStats } from './stats'
 
 /** What a probe read, so a verdict can be argued with instead of believed. */
 export interface Evidence {
@@ -76,6 +77,14 @@ export interface QuestFacts {
    * time, while `detectContract` had already read every one of these files for `inCi`.
    */
   workflows: readonly string[]
+  /**
+   * What the forge said about this ship, where a reading was handed in.
+   *
+   * `null` is the normal case: the survey asks nobody anything, so unless the caller passed the
+   * file `hafen forge` wrote, nothing here knows what GitHub thinks. Quests that need it answer
+   * `nicht messbar`, which is what that verdict is for.
+   */
+  forge: ForgeStats | null
 }
 
 /**
@@ -185,7 +194,14 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
   if (check.kind === 'manuell' || check.probe === 'manuell') {
     return say('von Hand zu prüfen', 'nirgends', 'nicht maschinell prüfbar', null)
   }
-  if (check.kind !== 'datei') {
+  /*
+   * `forge` is measured now, where a reading was handed in — see `forge-schutz`.
+   *
+   * It was the named blind spot: "this applies here and I cannot check it". It still is for every
+   * ship whose forge nobody asked, and that is the point — the verdict depends on whether the
+   * reading exists, not on the kind of the check.
+   */
+  if (check.kind !== 'datei' && check.kind !== 'forge') {
     return say(
       `Prüfung der Art ${check.kind}`,
       'nirgends',
@@ -423,6 +439,67 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       )
     }
 
+    /**
+     * What guards the default branch — the one demand no working tree can answer.
+     *
+     * Read from the forge **file**, never from the network: the survey asks nobody anything, and
+     * this is the reading `hafen forge` wrote. Without one the answer is `nicht messbar`, which is
+     * the honest sentence — "this applies here and I cannot check it".
+     *
+     * And where nothing was found, the answer depends on whether we were *allowed* to look.
+     * Rulesets are public, the classic protection rule is admin-only — so an empty answer from a
+     * repository we do not administer means "we may not see it" and not "nothing guards it". The
+     * second would be an invented gap, which is the one thing this catalog never does.
+     */
+    case 'forge-schutz': {
+      const asked = (check.args['fordert'] ?? '')
+        .split(',')
+        .map((one) => one.trim())
+        .filter((one) => one !== '')
+      const stats = facts.forge
+      if (stats === null) {
+        return say(
+          `der Hauptzweig verlangt ${asked.join(' und ')}`,
+          'nirgends',
+          'die Forge wurde nicht gefragt — `hafen forge` liefert die Lesung',
+          null,
+        )
+      }
+      /*
+       * `?? null` and not `stats.guard`: a reading written before this field existed carries no
+       * `guard` at all, and `undefined` would walk straight past a `=== null` check into a crash.
+       * An old file is not a finding — it is a reading that cannot answer this question.
+       */
+      const guard = stats.guard ?? null
+      if (guard === null) {
+        return say(
+          `der Hauptzweig verlangt ${asked.join(' und ')}`,
+          stats.slug.host,
+          `${stats.slug.host} beantwortet diese Frage nicht — oder die Lesung ist aelter als sie`,
+          null,
+        )
+      }
+      if (guard.source === 'none' && !guard.admin) {
+        return say(
+          `der Hauptzweig verlangt ${asked.join(' und ')}`,
+          `${stats.slug.host} (kein Ruleset sichtbar)`,
+          'kein Ruleset, und ohne Admin-Recht ist die klassische Regel nicht lesbar',
+          null,
+        )
+      }
+      const has: Record<string, boolean> = {
+        'pull-request': guard.pullRequest,
+        'status-checks': guard.statusChecks,
+      }
+      const missing = asked.filter((one) => has[one] !== true)
+      return say(
+        `der Hauptzweig verlangt ${asked.join(' und ')}`,
+        `${stats.slug.host} (${guard.source === 'none' ? 'nichts gesetzt' : guard.source})`,
+        missing.length === 0 ? 'alles davon' : `es fehlt: ${missing.join(', ')}`,
+        missing.length === 0,
+      )
+    }
+
     case 'ci-nennt': {
       const text = check.args['text'] ?? ''
       if (facts.workflows.length === 0) {
@@ -564,6 +641,7 @@ export async function measureQuests(
   shipPath: string,
   contract: Contract,
   catalog: readonly Quest[],
+  forge: ForgeStats | null = null,
 ): Promise<QuestFacts> {
   const paths = wantedFiles(catalog)
   const asksDependencies = catalog.some((quest) =>
@@ -606,5 +684,6 @@ export async function measureQuests(
     files: new Map([...files, ...fromCi]),
     dependencies,
     workflows,
+    forge,
   }
 }

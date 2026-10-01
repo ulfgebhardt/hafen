@@ -627,3 +627,48 @@ describe('schnappschuss --nur', () => {
     expect((JSON.parse(stdout()) as { ships: unknown[] }).ships).toHaveLength(1)
   })
 })
+
+describe('schnappschuss --forge', () => {
+  /**
+   * The survey still asks nobody anything: this is the file `hafen forge` wrote, read off the
+   * disk. It exists because some demands cannot be answered from a working tree at all.
+   */
+  it('reads the forge file it is pointed at', async () => {
+    const stdout = out()
+    const reading = {
+      at: '2026-10-01T00:00:00Z',
+      stats: [
+        {
+          slug: { host: 'github.com', owner: 'org', repo: 'ship' },
+          stars: 3,
+          watchers: 0,
+          forks: 0,
+          issues: 0,
+          pulls: 0,
+          language: null,
+          guard: { pullRequest: true, statusChecks: true, source: 'ruleset', admin: false },
+        },
+      ],
+      unread: [],
+    }
+    const withForge = withShip()
+    withForge.fs.readFile = async (path: string) =>
+      Promise.resolve(path === '/tmp/forge.json' ? JSON.stringify(reading) : null)
+
+    await expect(
+      main(['schnappschuss', ROOT, '--forge=/tmp/forge.json', `--store=${STORE}`], withForge),
+    ).resolves.toBe(0)
+
+    expect(stdout()).toContain('"ships"')
+  })
+
+  /** An empty value is how a caller says "measure the disk and nothing else". */
+  it('takes an empty --forge as none', async () => {
+    const stdout = out()
+
+    await expect(
+      main(['schnappschuss', ROOT, '--forge=', `--store=${STORE}`], withShip()),
+    ).resolves.toBe(0)
+    expect((JSON.parse(stdout()) as { ships: unknown[] }).ships).toHaveLength(1)
+  })
+})
