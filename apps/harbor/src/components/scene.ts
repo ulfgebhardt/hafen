@@ -79,6 +79,14 @@ import type { FederatedPointerEvent } from 'pixi.js'
  *
  * The whole point of the change: a plank is a plank whether it carries the fleet or one ship.
  */
+/**
+ * The flag that says whose dock a walkway serves, in world units.
+ *
+ * Small on purpose: it replaces a coloured line, and the point of replacing it was that the
+ * colour was shouting. `every` is how often one is planted along a way.
+ */
+const PENNANT = { staff: 2.6, fly: 1.8, every: 26 } as const
+
 const PLANK = 4.6
 
 /** How many boats run one lane. Two, so a lane is traffic and not one boat going back and forth. */
@@ -268,13 +276,51 @@ function ground(harbour: Harbour, extent: Extent): Container {
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
     planks.stroke({ width: PLANK, color: hex(SCENE.quay), alpha: 1 })
     planks.moveTo(from.x, from.y).lineTo(to.x, to.y)
-    planks.stroke({
-      width: PLANK,
-      color: walk.org === null ? hex(SCENE.quayEdge) : flagTint(walk.org),
-      alpha: walk.org === null ? 0.5 : 0.32,
-    })
+    planks.stroke({ width: PLANK, color: hex(SCENE.quayEdge), alpha: 0.5 })
   }
   group.addChild(planks)
+
+  /*
+   * Whose dock a walkway serves, said with a **pennant** and no longer with its colour.
+   *
+   * Tinting the planking itself gave the harbour five or six coloured ribbons running through it,
+   * and colour is the loudest thing a drawing has: the lines then read as the subject and the
+   * ships as what lies between them. The planking is concrete, so it is drawn as concrete — the
+   * same grey as the shore it belongs to — and the group is said by a small flag on a staff,
+   * which is both quieter and more literal. A flag is also a *mark on* something and not the
+   * something itself, which is exactly the relationship here.
+   *
+   * Spaced rather than one per way: a way is as long as it is, and a single flag at the middle of
+   * a long avenue says nothing about its far end.
+   */
+  const pennants = new Graphics()
+  for (const walk of walksOf(harbour).filter((one) => one.kind === 'tree' && one.org !== null)) {
+    const org = walk.org
+    if (org === null) {
+      continue
+    }
+    const from = project(walk.from)
+    const to = project(walk.to)
+    const span = Math.hypot(to.x - from.x, to.y - from.y)
+    const many = Math.max(1, Math.floor(span / (PENNANT.every * UNIT)))
+    for (let index = 0; index < many; index += 1) {
+      const at = (index + 0.5) / many
+      const x = from.x + (to.x - from.x) * at
+      const y = from.y + (to.y - from.y) * at
+      pennants
+        .moveTo(x, y)
+        .lineTo(x, y - PENNANT.staff * UNIT)
+        .stroke({ width: 1, color: hex(SCENE.crane), alpha: 0.55 })
+      pennants
+        .poly([
+          { x, y: y - PENNANT.staff * UNIT },
+          { x: x + PENNANT.fly * UNIT, y: y - PENNANT.staff * UNIT + 0.5 * UNIT },
+          { x, y: y - PENNANT.staff * UNIT + 1 * UNIT },
+        ])
+        .fill({ color: flagTint(org), alpha: 0.95 })
+    }
+  }
+  group.addChild(pennants)
 
   /*
    * The extra ways round: denser inside a group than between two.
