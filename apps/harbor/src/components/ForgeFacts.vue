@@ -33,11 +33,45 @@
     { name: 'Sterne', value: stats.stars, href: links.value['stars'] },
     { name: 'Beobachter', value: stats.watchers, href: links.value['watchers'] },
     { name: 'Forks', value: stats.forks, href: links.value['forks'] },
-    { name: 'Issues', value: stats.issues, href: links.value['issues'] },
-    { name: 'PRs', value: stats.pulls, href: links.value['pulls'] },
   ])
 
   const asked = computed(() => (at === '' ? null : new Date(at).toLocaleString('de-DE')))
+
+  /**
+   * How many marks one row may carry. The number beside it is always the true one.
+   *
+   * The same rule the hull follows (`MAX_PER_KIND` in `marks.ts`): a repository with 442 open
+   * issues would otherwise be a wall of boxes that says "viel" and nothing else. Twelve is what
+   * fits on the panel's width at this size.
+   */
+  const MOST = 12
+
+  /**
+   * What is open, drawn rather than only counted.
+   *
+   * Issues and pull requests are the two figures here that are *work in flight* — the others
+   * describe attention. A row of marks reads as an amount before the eye reaches the number, and
+   * the two kinds keep the shapes the harbour already uses: a filled box for a request that
+   * carries code, an open one for an issue that carries a question.
+   */
+  const open = computed(() => [
+    {
+      name: 'Issues',
+      count: stats.issues,
+      drawn: Math.min(stats.issues, MOST),
+      cut: stats.issues > MOST,
+      href: links.value['issues'],
+      filled: false,
+    },
+    {
+      name: 'PRs',
+      count: stats.pulls,
+      drawn: Math.min(stats.pulls, MOST),
+      cut: stats.pulls > MOST,
+      href: links.value['pulls'],
+      filled: true,
+    },
+  ])
 </script>
 
 <template>
@@ -63,6 +97,39 @@
         <span class="text-slate-600 group-hover:text-slate-400">{{ figure.name }}</span>
       </button>
     </p>
+
+    <!--
+      The two that are work in flight, as an amount and not only as a number.
+      Capped at twelve marks with a `+` where it was cut — the count beside it stays the true one,
+      which is the same promise the crates on a hull make.
+    -->
+    <ul class="mt-1.5 space-y-1">
+      <li v-for="row in open" :key="row.name">
+        <button
+          class="group flex w-full items-center gap-2"
+          :title="`${row.count} offene ${row.name} auf ${stats.slug.host} ansehen`"
+          @click="emit('open', row.href ?? links['repo'] ?? '')"
+        >
+          <span
+            class="w-12 shrink-0 text-left font-mono text-[10px] text-slate-600 group-hover:text-slate-400"
+            >{{ row.name }}</span
+          >
+          <span
+            v-for="mark in row.drawn"
+            :key="mark"
+            class="inline-block h-2.5 w-1.5 border"
+            :class="
+              row.filled ? 'border-sky-500/70 bg-sky-500/60' : 'border-amber-500/70 bg-transparent'
+            "
+          />
+          <span v-if="row.cut" class="font-mono text-[10px] text-slate-500">+</span>
+          <span v-if="row.count === 0" class="font-mono text-[10px] text-slate-700">keine</span>
+          <span class="ml-auto pl-2 font-mono text-xs text-slate-300 group-hover:text-orange-300">{{
+            row.count.toLocaleString('de-DE')
+          }}</span>
+        </button>
+      </li>
+    </ul>
 
     <p class="mt-1 flex items-baseline gap-2 text-[11px]">
       <span v-if="stats.language !== null" class="text-slate-500">{{ stats.language }}</span>

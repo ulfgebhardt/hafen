@@ -68,3 +68,30 @@ describe('the forge panel in the datasheet', () => {
     expect(panel.text()).toContain('Sterne')
   })
 })
+
+describe('what is open, drawn', () => {
+  /** An amount before the eye reaches the number — the same promise the crates on a hull make. */
+  it('draws a capped row of marks and keeps the true count beside it', () => {
+    const panel = mount(ForgeFacts, { props: { stats: STATS } })
+    const marks = panel.findAll('li')[0]?.findAll('span.inline-block') ?? []
+
+    expect(marks).toHaveLength(12)
+    expect(panel.findAll('li')[0]?.text()).toContain('+')
+    expect(panel.findAll('li')[0]?.text()).toContain('442')
+  })
+
+  it('draws one mark per request where they fit', () => {
+    const panel = mount(ForgeFacts, { props: { stats: { ...STATS, pulls: 3 } } })
+    const row = panel.findAll('li')[1]
+
+    expect(row?.findAll('span.inline-block')).toHaveLength(3)
+    expect(row?.text()).not.toContain('+')
+  })
+
+  /** Nothing open is an answer, and it must not look like a row that was never drawn. */
+  it('says so where nothing is open at all', () => {
+    const panel = mount(ForgeFacts, { props: { stats: { ...STATS, issues: 0 } } })
+
+    expect(panel.findAll('li')[0]?.text()).toContain('keine')
+  })
+})
