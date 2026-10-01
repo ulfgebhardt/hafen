@@ -33,6 +33,7 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     working: NOTHING_OPEN,
     stash: 0,
     ledger: NO_LEDGER,
+    lines: null,
     rustDays: 1,
     docks: [],
     ahead: 0,

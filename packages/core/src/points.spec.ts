@@ -15,6 +15,7 @@ import {
   isKept,
   KEPT_POINTS,
   KIND_POINTS,
+  pointLines,
   projectPoints,
   PULL_POINTS,
   QUEST_POINTS,
@@ -53,6 +54,7 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     working: NOTHING_OPEN,
     stash: 0,
     ledger: NO_LEDGER,
+    lines: null,
     rustDays: 1,
     docks: [],
     ahead: 0,
@@ -421,5 +423,48 @@ describe('how wide a repository is', () => {
 
     expect(fleetPoints([broad]).contracts).toBe(questValue(broad))
     expect(fleetPoints([broad]).contracts).toBeGreaterThan(fleetPoints([narrow]).contracts)
+  })
+})
+
+describe(pointLines, () => {
+  const billed = (over: Partial<Ship> = {}) => pointLines(ship(over))
+
+  /**
+   * Commit kinds in their own lines, because that is where nearly all of it comes from — and
+   * because 96 % of this fleet's commits carry no convention, which one "Commits" line would hide.
+   */
+  it('bills each kind of commit on its own line', () => {
+    const lines = billed({
+      ledger: {
+        total: { ...NO_WORK, byKind: { feat: 10, fix: 5 }, unscored: 100 },
+        own: NO_WORK,
+      },
+    })
+
+    expect(lines.find((line) => line.name === 'feat')).toStrictEqual({
+      name: 'feat',
+      count: 10,
+      rate: KIND_POINTS.feat,
+      points: 10 * KIND_POINTS.feat,
+    })
+    expect(lines.find((line) => line.name === 'ohne Convention')?.points).toBe(100)
+  })
+
+  /** The sum of the bill is the score: a bill that does not add up is worse than none. */
+  it('adds up to the project score', () => {
+    const subject = ship({
+      ledger: {
+        total: { ...NO_WORK, byKind: { feat: 7, chore: 3 }, unscored: 40, pulls: 12, authors: 4 },
+        own: NO_WORK,
+      },
+    })
+    const total = pointLines(subject).reduce((sum, line) => sum + line.points, 0)
+
+    expect(total).toBe(shipPoints(subject).project)
+  })
+
+  /** Nothing counted is no line: a column of zeroes says nothing and costs a reader a line each. */
+  it('leaves out what there is none of', () => {
+    expect(billed().every((line) => line.count > 0)).toBe(true)
   })
 })

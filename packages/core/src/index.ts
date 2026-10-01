@@ -99,7 +99,7 @@ export {
   readLedger,
 } from './work'
 
-export type { FleetPoints, ShipPoints } from './points'
+export type { PointLine, FleetPoints, ShipPoints } from './points'
 export {
   ACTIVE_WINDOW_DAYS,
   BREADTH_POINTS,
@@ -121,6 +121,7 @@ export {
   questValue,
   scoreWork,
   SHIPSHAPE_POINTS,
+  pointLines,
   shipPoints,
   SPAN_CEILING,
   spanOf,

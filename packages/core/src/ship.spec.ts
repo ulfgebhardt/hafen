@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { mockPorts } from './mock'
 import {
+  countLines,
   findAcrossRoots,
   findShipPaths,
   inspectShip,
@@ -715,5 +716,23 @@ describe('two directories, one project', () => {
 
     expect(ships).toHaveLength(2)
     expect(ships[0]?.aliases).toBeUndefined()
+  })
+})
+
+describe(countLines, () => {
+  /** One line per text file: `HEAD:<path>:<count>`, and a path may hold colons. */
+  it('adds up what git reported', () => {
+    expect(countLines('HEAD:src/a.ts:12\nHEAD:src/b.ts:30')).toBe(42)
+    expect(countLines('HEAD:weird:name:7')).toBe(7)
+  })
+
+  /** No answer and no lines are two different things and must not look alike. */
+  it('says nothing where git said nothing', () => {
+    expect(countLines(null)).toBeNull()
+    expect(countLines('')).toBe(0)
+  })
+
+  it('ignores a line that carries no count', () => {
+    expect(countLines('HEAD:src/a.ts:5\nkaputt')).toBe(5)
   })
 })
