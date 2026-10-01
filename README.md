@@ -3,9 +3,45 @@
 Eine Übersicht über alle Git-Repos einer Maschine: Zustand, Test-Vertrag, und was die Flotte von
 ihnen fordert — mit der Evidenz hinter jedem Urteil.
 
+![Die Flotte als Fächer: ein Ast je Organisation, ein Rumpf je Repository](docs/flotte.png)
+
+## Wozu
+
+Auf einer Entwicklermaschine liegen irgendwann neunzig Arbeitsbäume, und keine Frage über sie
+lässt sich mehr aus dem Kopf beantworten: Welches Repo hat seit einem Jahr niemand angefasst?
+Wo liegt Arbeit in einem Stash, die in keinem Commit und in keinem Baum steht? Welches Projekt
+hat keine Lizenz, keinen Lint-Schritt, keinen Release-Weg? `ls` beantwortet keine davon, und
+`git status` beantwortet sie für genau ein Verzeichnis.
+
+Der Hafen beantwortet sie für alle auf einmal, und zwar **gemessen**:
+
+- **Kein gepflegter Zustand.** Rost kommt aus `git log`, der Test-Vertrag aus den Manifesten, die
+  Urteile aus den Forderungen. Ein Statusfeld, das jemand pflegen muss, steht irgendwann falsch da
+  — eine abgeleitete Antwort kann das nicht.
+- **Jede Antwort trägt ihre Evidenz**: was gefragt wurde, wo nachgesehen wurde, was dort stand
+  (`--evidenz`). Ein blankes Urteilswort wäre zu glauben statt zu prüfen.
+- **Fünf Urteile, und `nicht messbar` ist keines der anderen vier.** Eine Rust-Crate ohne lesbare
+  Prüfung sagt das, statt eine Lücke zu behaupten. Unmessbar ist nicht verletzt.
+
 **Der Hafen misst und zeichnet. Er tut nichts.** Kein Commit, kein Push, keine Netzwerkanfrage,
-kein Knopf, der etwas startet. Das ist als Erlaubnisliste lesender git-Kommandos getestet, nicht
-zugesagt.
+kein Knopf, der etwas startet. Das ist keine Vorsatzerklärung: `command.spec.ts` prüft jeden
+Aufruf gegen eine **Erlaubnisliste** lesender git-Kommandos. Eine Verbotsliste wäre die schwächere
+Richtung — mit einer Lücke ließe sie einen Schreibvorgang still durch, die Erlaubnisliste stolpert
+im schlimmsten Fall über einen neuen lesenden Aufruf.
+
+Das ist der Punkt, an dem das Vorgängerprojekt gescheitert ist: ein Agenten-Cockpit, in dem jede
+Messung die nächste Aufgabe rechtfertigte — 295 Auftragsdateien, und die Projekte, um die es ging,
+standen still. Was ein Werkzeug *tun* kann, kostet Aufmerksamkeit. Was es nur misst, nicht.
+
+Dieses Werkzeug läuft in achtzig-plus Arbeitsbäumen, die **nicht alle unsere** sind. Deshalb die
+Grenze, und deshalb bleibt der Store lokal.
+
+![Ein Schiff mit Datenblatt: Ladung, Flaggen, Schäden und was heute zu tun wäre](docs/schiff.png)
+
+Jedes Repository ist ein Schiff, und jedes Merkmal eine eigene Messung: die Rumpflänge sind die
+Punkte, die Masten die erfüllten Forderungen, der Rost die Liegezeit seit dem letzten Commit, die
+Figuren am Steg die Zahl der Autoren. Keine Zusammenfassung zu einer Note — ein großes Schiff mit
+verletztem Vertrag soll geschäftig *und* falsch aussehen, nicht mittelmäßig.
 
 ## Benutzen
 
@@ -21,11 +57,31 @@ pnpm hafen schnappschuss         # Zeitpunkt + Wurzel + Schiffe als JSON
 Ohne Argument steht die Hilfe da. Die Wurzel ist als zweites Argument überschreibbar, der Store
 über `--store=<pfad>` oder `HAFEN_STORE`.
 
+## Installieren
+
+Gebaute Pakete hängen an jedem Release: **[Releases](https://github.com/ulfgebhardt/hafen/releases/latest)**
+
+| Plattform | Artefakt                                            |
+| --------- | --------------------------------------------------- |
+| Linux     | `.AppImage`, `.deb`, `.rpm`                         |
+| macOS     | `.dmg` — Apple Silicon und Intel als eigene Dateien |
+| Windows   | `.msi` und `.exe` (NSIS)                            |
+
+Nichts davon ist signiert: macOS und Windows werden beim ersten Start warnen, und das ist ehrlich
+so — eine Signatur kostet ein Zertifikat, das dieses Werkzeug nicht hat.
+
+**Das Fenster misst nicht selbst, es ruft die CLI.** Die muss als `hafen` auf dem `PATH` liegen,
+oder `HAFEN_CLI` nennt den Aufruf — im Checkout etwa:
+
+```sh
+HAFEN_CLI="pnpm --filter @hafen/cli exec tsx src/index.ts" pnpm --filter @hafen/harbor app
 ```
-HAFEN  89 Schiffe
+
+```
+HAFEN  92 Schiffe
 
 in Fahrt  (12)
-  utopia-os/utopia-map                        main  Rost 200d
+  seezeichen/bramsegel-ui                     main  Rost 200d
       ! fehlt: typecheck
       ! typecheck       offen: irgendein Schritt dieses Schiffs prüft Typen …
       + e2e             2 von 2 Prüfungen erfüllt
@@ -37,7 +93,7 @@ QUESTS
   ?   44  nicht messbar
   +   63  erfüllt
   ·  270  nicht anwendbar
-  44 von 89 Schiffen sind an eine Quest gebunden
+  44 von 92 Schiffen sind an eine Quest gebunden
 ```
 
 ## Die fünf Urteile
@@ -47,6 +103,8 @@ QUESTS
 Fünf und nicht drei, weil **unmessbar nicht verletzt ist**: eine Rust-Crate ohne lesbaren
 Lint-Schritt sagt das, statt eine Lücke zu behaupten. Und `nicht anwendbar` ist nicht `erfüllt`:
 eine Forderung, die hier nicht gilt, ist keine bestandene.
+
+![Der Katalog: je Forderung ein Balken über die ganze Flotte](docs/vertraege.png)
 
 ## Der Katalog
 
@@ -175,6 +233,25 @@ damit der Teil, der ohne ständige Aufmerksamkeit etwas wert ist.
 ## Tests
 
 ```sh
-pnpm test:lint
-pnpm test:unit
+pnpm test:lint   # eslint + typecheck über alle Pakete
+pnpm test:unit   # vitest mit Coverage-Schwellen
 ```
+
+Tests liegen neben der Datei, die sie prüft (`x.ts` / `x.spec.ts`). Die Schwellen in den
+`vitest.config.ts` sind gemessene Werte ohne Luft: ein Punkt Spielraum ist ein Punkt erlaubter
+Verfall, und sie zu heben ist ein eigener Commit. Dieselben beiden Kommandos laufen in der CI,
+dazu `cargo fmt`, `cargo clippy` und `cargo test` auf Linux, macOS und Windows — der Rust-Teil
+ist reines `std`, und dass er auf allen dreien baut, ist eine Aussage, die geprüft wird statt
+behauptet.
+
+## Releases
+
+Die Version entsteht aus den Commits, nicht aus der Erinnerung: `release-please` liest die
+[Conventional Commits](https://www.conventionalcommits.org/) auf `master`, schlägt den nächsten
+Stand als Pull Request vor, und beim Merge entstehen Tag, Changelog und die vier Tauri-Builds.
+Deshalb muss ein PR-Titel einem Commit-Typ folgen (`feat:`, `fix:`, `chore:` …) — ein Squash-Merge
+mit dem Titel „fixes" landet sonst in keiner Changelog-Zeile.
+
+## Lizenz
+
+Apache-2.0 — siehe [LICENSE](LICENSE).
