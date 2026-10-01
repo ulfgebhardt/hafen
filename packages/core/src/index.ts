@@ -170,6 +170,8 @@ export { deferred, mockChecks, mockContract, mockPorts, mockRemote } from './moc
  * own timestamp so the survey stays free of it.
  */
 export type { ForgeReading, ForgeStats, Slug, Unread } from './stats'
+export { familiesOf, addressesOf } from './kin'
+export type { Family } from './kin'
 export { forgeLinks, isRead, readStats, slugOf, slugsOf } from './stats'
 
 /**

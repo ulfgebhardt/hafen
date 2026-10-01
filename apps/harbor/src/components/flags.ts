@@ -34,6 +34,8 @@
  * different docks, and a dock carries its organisation's name in writing.
  */
 
+import { familiesOf } from '@hafen/core'
+
 import type { Ship } from '@hafen/core'
 
 /**
@@ -125,19 +127,77 @@ export function flagTint(org: string): number {
 export interface Fleetlet {
   org: string
   ships: readonly Ship[]
+  /**
+   * Which kindred the organisation belongs to — the lowest organisation name in it.
+   *
+   * Not drawn and not a group of its own: it decides the *order* the groups are laid out in, so
+   * that organisations holding pieces of the same project end up beside each other. A fifth level
+   * between the harbour and a dock would be a line on the picture for something that is already
+   * visible as proximity.
+   */
+  kindred: string
 }
 
 /**
- * The fleet split by organisation, biggest group first.
+ * Where a repository filed directly under a root belongs.
  *
- * Biggest first because the layout hangs the groups off one walkway in this order, and a harbour
- * that put its eighteen-ship organisation at the far end would spend the whole picture getting
- * there. Ties by name, so nothing swaps between two snapshots.
- *
- * A repository filed directly under a root has no organisation, and it gets its own group rather
- * than being spread among the others — "ohne" is an answer about where it lies, not a gap.
+ * Its own group rather than spread among the others — "ohne" is an answer about where it lies,
+ * not a gap.
  */
 export const NO_ORG = 'ohne'
+
+/**
+ * Which organisations hold pieces of the same project.
+ *
+ * Measured by `familiesOf` and lifted one level: a family that spans two organisations ties those
+ * two together, however the directories are filed. On this fleet that turns 25 organisations into
+ * 15 kindreds, the largest holding nine of them — the whole Leuchtturm universe, which was
+ * previously scattered across the picture by group size.
+ *
+ * Organisations and not ships, and that is the correction this went through. Grouping the *ships*
+ * by family gave 72 groups for 92 ships, which is a harbour more strung out than the one it was
+ * meant to fix: nearly every family is one repository. The organisation stays the dock; kinship
+ * decides which docks are neighbours.
+ */
+export function kindredOf(ships: readonly Ship[]): ReadonlyMap<string, string> {
+  const orgOf = (ship: Ship): string => (ship.org === '' ? NO_ORG : ship.org)
+  const names = [...new Set(ships.map(orgOf))].sort()
+  const parent = new Map(names.map((name) => [name, name]))
+  const find = (name: string): string => {
+    let at = name
+    while (parent.get(at) !== at) {
+      at = parent.get(at) ?? at
+    }
+    return at
+  }
+
+  for (const family of familiesOf(ships)) {
+    const held = [...new Set(family.ships.map(orgOf))]
+    for (const other of held.slice(1)) {
+      const one = find(held[0] ?? other)
+      const two = find(other)
+      if (one !== two) {
+        // Towards the lower name, so the representative of a kindred is a property of its members
+        // and not of the order the families came in.
+        parent.set(one < two ? two : one, one < two ? one : two)
+      }
+    }
+  }
+
+  return new Map(names.map((name) => [name, find(name)]))
+}
+
+/**
+ * The fleet split by organisation, **kindred first** and biggest kindred at the front.
+ *
+ * The layout hangs the groups off one walkway in this order, so this order *is* where things end
+ * up. Biggest first, because a harbour that put its eighteen-ship organisation at the far end
+ * would spend the whole picture getting there.
+ *
+ * Kindred ahead of size is the fix for a strung-out fan: nine organisations holding one project
+ * were spread across the whole picture because they happen to be of different sizes, and size was
+ * the only thing the order knew. Ties by name after that, so nothing swaps between two snapshots.
+ */
 
 export function fleetlets(ships: readonly Ship[]): readonly Fleetlet[] {
   const byOrg = new Map<string, Ship[]>()
@@ -146,7 +206,28 @@ export function fleetlets(ships: readonly Ship[]): readonly Fleetlet[] {
     byOrg.set(org, [...(byOrg.get(org) ?? []), ship])
   }
 
+  const kindred = kindredOf(ships)
+  /*
+   * How big each kindred is, so the biggest one still comes first.
+   *
+   * Sorting by the group's own size alone is what strung the picture out: nine organisations
+   * holding one project were spread across the whole fan because they happen to be of different
+   * sizes. Kindred first, then size inside it, keeps both — the large things stay near the trunk
+   * and the related ones stay together.
+   */
+  const weight = new Map<string, number>()
+  for (const [org, group] of byOrg) {
+    const name = kindred.get(org) ?? org
+    weight.set(name, (weight.get(name) ?? 0) + group.length)
+  }
+
   return [...byOrg]
-    .map(([org, group]) => ({ org, ships: group }))
-    .sort((a, b) => b.ships.length - a.ships.length || a.org.localeCompare(b.org))
+    .map(([org, group]) => ({ org, ships: group, kindred: kindred.get(org) ?? org }))
+    .sort(
+      (a, b) =>
+        (weight.get(b.kindred) ?? 0) - (weight.get(a.kindred) ?? 0) ||
+        a.kindred.localeCompare(b.kindred) ||
+        b.ships.length - a.ships.length ||
+        a.org.localeCompare(b.org),
+    )
 }

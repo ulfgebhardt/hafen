@@ -40,6 +40,15 @@ export interface Tender {
   state: TenderState
   /** The commit the parent records, short. Kept because it is what a human compares. */
   at: string
+  /**
+   * Where it is fetched from, as `.gitmodules` writes it — or `null` where that file says nothing.
+   *
+   * Measured for a question `git submodule status` cannot answer: whether the carried repository
+   * is *also one of ours*. A submodule pointing at a repository that lies somewhere else on this
+   * machine is a hard tie between the two, and the harbour draws ships that are tied near each
+   * other. Without the url there is only a relative path, which names nothing outside the parent.
+   */
+  url: string | null
 }
 
 /** The leading character git prints, and what each one means. */
@@ -53,16 +62,61 @@ const STATES: Record<string, TenderState> = {
 const SHORT = 8
 
 /**
+ * The urls out of `.gitmodules`, by the submodule's path.
+ *
+ * `git config --get-regexp` prints `submodule.<name>.url <value>`, and the **name** is not always
+ * the path: a submodule can be declared under any name. So the path is read from the matching
+ * `submodule.<name>.path` line, and a name with a url and no path is dropped rather than guessed
+ * at — keyed by path, because that is what `git submodule status` prints and what joins the two.
+ */
+export function parseModuleUrls(config: string | null): ReadonlyMap<string, string> {
+  const urls = new Map<string, string>()
+  if (config === null) {
+    return urls
+  }
+  const paths = new Map<string, string>()
+  const seen = new Map<string, string>()
+  for (const line of config.split('\n')) {
+    const match = /^submodule\.(?<name>.+)\.(?<key>url|path) (?<value>.+)$/u.exec(line.trim())
+    const groups = match?.groups
+    if (groups === undefined) {
+      continue
+    }
+    const { name = '', key = '', value = '' } = groups
+    ;(key === 'url' ? seen : paths).set(name, value)
+  }
+  for (const [name, url] of seen) {
+    const path = paths.get(name)
+    if (path !== undefined) {
+      urls.set(path, url)
+    }
+  }
+  return urls
+}
+
+/**
  * One line per submodule, as `git submodule status` prints them.
  *
  * A line whose leading character git does not use — `U` for a merge conflict inside the submodule
  * — is read as `adrift` rather than dropped: it is certainly not in sync, and a carried repository
  * that vanished from the reading because of an unexpected first byte would be the worse answer.
  */
-export function parseSubmodules(output: string | null): readonly Tender[] {
+export function parseSubmodules(
+  output: string | null,
+  /**
+   * What `git config -f .gitmodules --get-regexp url` printed, if anything.
+   *
+   * A second reading and not a second source of truth: `git submodule status` says which
+   * submodules the *tree* has, `.gitmodules` says where each is fetched from. A repository can
+   * have one without the other — a submodule removed from the file but left in the index — so the
+   * status leads and the url is attached where there is one.
+   */
+  config: string | null = null,
+): readonly Tender[] {
   if (output === null) {
     return []
   }
+  const urls = parseModuleUrls(config)
 
   return output
     .split('\n')
@@ -70,7 +124,9 @@ export function parseSubmodules(output: string | null): readonly Tender[] {
     .flatMap((line) => {
       const state = STATES[line.slice(0, 1)] ?? 'adrift'
       const [hash = '', path = ''] = line.slice(1).trim().split(/\s+/u)
-      return path === '' ? [] : [{ path, state, at: hash.slice(0, SHORT) }]
+      return path === ''
+        ? []
+        : [{ path, state, at: hash.slice(0, SHORT), url: urls.get(path) ?? null }]
     })
 }
 

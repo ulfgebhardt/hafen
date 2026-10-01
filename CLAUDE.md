@@ -47,6 +47,8 @@ englische Fachbegriffe — keine Erfindungen, und **nicht abweichen**.
 | erfüllt / verletzt | `met` / `violated` | nicht anwendbar | `notApplicable` |
 | Voraussetzung offen | `waiting` | nicht messbar | `unmeasured` |
 | Aktiv / Ruhend / Archiviert | `active` / `dormant` / `archived` | Werftkapazität | `capacity` |
+| Reederei (Orga-Gruppe) | `fleetlet` | Sippe (verwandte Reedereien) | `kindred` |
+| Familie (dasselbe Projekt) | `family` | Beiboot (Submodul) | `tender` |
 
 `dock` hieß in Werft der Worktree und ist hier **frei** — die Worktree-Verwaltung ist genau der
 Teil, der nicht mitkam. Der Name wurde für dieses Projekt erwogen und verworfen: der Hafen *ist*
@@ -69,6 +71,17 @@ Technik, das Werkzeug ist der Hafen; kein Konflikt.
 - **Keine Datenbank.** Im Register stehen genau zwei Dinge: was archiviert ist und welche
   Verzeichnisse von Hand aufgenommen wurden. Beides sind Entscheidungen, keine Messungen.
 - **`git` wird als Kommando aufgerufen, nicht als Bibliothek.**
+- **Zusammengehörigkeit wird gemessen, nicht gefiltert** (`kin.ts`). Drei Kanten, alle schon
+  irgendwo aufgeschrieben: ein geteilter Wurzel-Commit (`git rev-list --max-parents=0 HEAD`), ein
+  Remote, das auf ein anderes Schiff der Flotte zeigt, und ein Submodul, das dasselbe tut. Die
+  Verzeichnis-Orga ist eine Ablage-Entscheidung — auf dieser Flotte stimmt sie 89 von 92 Mal und
+  verfehlt jeden interessanten Fall: acht Repos in sechs Orgas teilen Wurzel `c0ffee11`.
+  Gemeinsame *Autoren* wurde erwogen und verworfen: bei einer eigenen Flotte sagt das Signal „ich
+  habe an beidem gearbeitet", und das haben alle gemeinsam.
+- **Die Sippe ordnet, sie gruppiert nicht** (`kindredOf` in `flags.ts`). Nach *Familie* gruppiert
+  wären 92 Schiffe 72 Gruppen — strung out statt kompakt, weil fast jede Familie ein Repo ist.
+  Eine Ebene höher sind 25 Orgas 15 Sippen, die größte mit neun. Die Orga bleibt das Dock; die
+  Sippe entscheidet nur, welche Docks Nachbarn sind.
 
 ## Quests
 

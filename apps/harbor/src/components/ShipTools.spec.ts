@@ -88,9 +88,9 @@ describe('shipTools', () => {
 
 describe('the boats she carries', () => {
   const tenders = [
-    { path: 'lib/bootstrap3', state: 'aboard' as const, at: '1a2b3c4d' },
-    { path: 'api', state: 'adrift' as const, at: '2b3c4d5e' },
-    { path: 'inspector', state: 'missing' as const, at: '3c4d5e6f' },
+    { path: 'lib/bootstrap3', state: 'aboard' as const, at: '1a2b3c4d', url: null },
+    { path: 'api', state: 'adrift' as const, at: '2b3c4d5e', url: null },
+    { path: 'inspector', state: 'missing' as const, at: '3c4d5e6f', url: null },
   ]
 
   /**

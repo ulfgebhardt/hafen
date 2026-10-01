@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { CUTS, cutOf, flagColor, flagTint, fleetlets, hueOf, NO_ORG, RUNGS } from './flags'
+import {
+  CUTS,
+  cutOf,
+  flagColor,
+  flagTint,
+  fleetlets,
+  hueOf,
+  kindredOf,
+  NO_ORG,
+  RUNGS,
+} from './flags'
 import { ship } from './testing'
 
 describe(hueOf, () => {
@@ -97,5 +107,72 @@ describe(fleetlets, () => {
 
   it('answers for an empty fleet', () => {
     expect(fleetlets([])).toStrictEqual([])
+  })
+})
+
+describe(kindredOf, () => {
+  const kin = (name: string, org: string, roots: readonly string[] = []) =>
+    ship({ name, org, path: `/repos/${org}/${name}`, roots })
+
+  /**
+   * Organisations and not ships, which is the correction this went through.
+   *
+   * Grouping the *ships* by family gave 72 groups for 92 repositories — a harbour more strung out
+   * than the one it was meant to fix, because nearly every family is a single repository. The
+   * organisation stays the dock; kinship only decides which docks are neighbours.
+   */
+  it('ties the organisations that hold pieces of one project', () => {
+    const kindred = kindredOf([
+      kin('leuchtturm', 'Leuchtturm-Verbund', ['c0ffee11']),
+      kin('brise', 'Brise-Net', ['c0ffee11']),
+      kin('notes', 'ulfgebhardt', ['ffffffff']),
+    ])
+
+    expect(kindred.get('Leuchtturm-Verbund')).toBe(kindred.get('Brise-Net'))
+    expect(kindred.get('ulfgebhardt')).not.toBe(kindred.get('Brise-Net'))
+  })
+
+  /** Every organisation is in exactly one, including the ones nothing ties to anything. */
+  it('gives an untied organisation a kindred of its own', () => {
+    const kindred = kindredOf([kin('a', 'one'), kin('b', 'two')])
+
+    expect([...kindred.keys()].sort()).toStrictEqual(['one', 'two'])
+    expect(kindred.get('one')).toBe('one')
+  })
+
+  /** A repository filed under no organisation is still somewhere, and `ohne` is where. */
+  it('places a repository with no organisation at all', () => {
+    expect(kindredOf([ship({ org: '', path: '/a' })]).get(NO_ORG)).toBe(NO_ORG)
+  })
+})
+
+describe('the order the docks are laid out in', () => {
+  const kin = (name: string, org: string, roots: readonly string[] = []) =>
+    ship({ name, org, path: `/repos/${org}/${name}`, roots })
+
+  /**
+   * Related organisations stand together, and the biggest kindred still comes first.
+   *
+   * Sorting by a group's own size alone is what strung the picture out: nine organisations holding
+   * one project were spread across the whole fan because they happen to be of different sizes.
+   * Here `small` holds one ship and still stands beside `big`, ahead of the larger `other`.
+   */
+  it('keeps organisations of one kindred next to each other', () => {
+    const fleet = [
+      kin('a', 'big', ['1111']),
+      kin('b', 'big', ['1111']),
+      kin('c', 'small', ['1111']),
+      kin('d', 'other'),
+      kin('e', 'other'),
+    ]
+
+    expect(fleetlets(fleet).map((one) => one.org)).toStrictEqual(['big', 'small', 'other'])
+  })
+
+  /** And every group still says which kindred it belongs to, for whoever lays it out. */
+  it('names the kindred on every group', () => {
+    const groups = fleetlets([kin('a', 'zeta', ['1111']), kin('b', 'alpha', ['1111'])])
+
+    expect(new Set(groups.map((one) => one.kindred))).toStrictEqual(new Set(['alpha']))
   })
 })
