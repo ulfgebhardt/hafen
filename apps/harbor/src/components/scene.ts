@@ -899,6 +899,10 @@ function crane(hull: Hull, reach: { x: number; y: number }): Graphics {
   return post
 }
 
+/** How deep the cloth hangs, and how much air there is between it and the plating, in pixels. */
+const HOIST = 1.9 * UNIT
+const FLAG_GAP = 0.9
+
 /**
  * The organisation's flag, at the masthead aft.
  *
@@ -911,13 +915,14 @@ function flag(hull: Hull, org: string): Graphics {
   // Right aft, clear of the deckhouse: an ensign staff, which is where a ship carries her flag.
   const staff = project({ x: hull.length * 0.03, y: 0 })
   /*
-   * Long enough that the cloth flies **clear of her own plating**.
+   * A staff on her deck, and the cloth clear of her plating with a gap to spare.
    *
-   * It was a fixed 2.4 units, and a hull is 5.6 to 7.2 across — so the flag lay on the ship, over
-   * the one thing in the drawing she is read by. The staff starts on her deck, which is where a
-   * staff stands, and ends just outside her side.
+   * It was a fixed 2.4 units and a hull is 5.6 to 7.2 across, so the flag lay *on* the ship —
+   * over the one thing in the drawing she is read by. The staff starts where a staff stands and
+   * reaches past her side; `FLAG_GAP` is the water between the cloth's lower edge and the
+   * plating, so the two never touch at any beam.
    */
-  const height = (hull.beam / 2 + 1.9) * UNIT
+  const height = (hull.beam / 2 + FLAG_GAP) * UNIT + HOIST
   const fly = 3 * UNIT
   const top = staff.y - height
 
@@ -926,7 +931,7 @@ function flag(hull: Hull, org: string): Graphics {
 
   const cut = cutOf(org)
   const notch = cut === 'swallowtail' ? fly * 0.32 : cut === 'burgee' ? fly * 0.5 : 0
-  const hoist = 1.9 * UNIT
+  const hoist = HOIST
   if (cut === 'pennant') {
     cloth
       .moveTo(staff.x, top)

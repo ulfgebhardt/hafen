@@ -84,17 +84,23 @@
    */
   const view = ref<View>('dock')
   /** The drawing, so the place a ship holds on screen can be asked before it is swapped out. */
-  const harbour = ref<{ where: (ship: Ship | null) => { x: number; y: number } | null } | null>(
-    null,
-  )
+  const harbour = ref<{
+    where?: (ship: Ship | null) => { x: number; y: number } | null
+  } | null>(null)
   const hold = ref<{ x: number; y: number } | null>(null)
 
   const showView = (next: View): void => {
     // Asked before the page changes, because the drawing she is in is gone a tick later.
-    hold.value = harbour.value?.where(picked.value) ?? null
+    // Optional all the way down: on the catalog page there is no drawing at all, and a page that
+    // is between two drawings has a ref that is not a scene yet. Neither is a reason to fail.
+    hold.value = harbour.value?.where?.(picked.value) ?? null
     view.value = next
     if (next === 'fleet') {
       page.value = FLEET
+      return
+    }
+    if (next === 'contracts') {
+      page.value = CONTRACTS
       return
     }
     const held = picked.value
@@ -102,14 +108,12 @@
   }
 
   /*
-   * A page chosen anywhere else pulls the switch with it — except the catalog, which is in both.
-   * Without this, opening the first band after a snapshot is read would leave the buttons saying
-   * "Flotte" over the band tabs.
+   * A page chosen anywhere else pulls the switch with it: opening the first band after a snapshot
+   * is read would otherwise leave the buttons saying "Flotte" over the band tabs, and picking a
+   * demand in the catalog moves the reader to a band without the switch noticing.
    */
   watch(page, (next) => {
-    if (next !== CONTRACTS) {
-      view.value = viewOf(next)
-    }
+    view.value = viewOf(next)
   })
 
   /**

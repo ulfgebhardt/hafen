@@ -138,23 +138,42 @@ export function draws(page: Page): boolean {
  * The catalog is in both, because it is in neither: it counts demands and not hulls, and is as
  * much about one dock as about the whole fleet.
  */
-export const VIEWS = ['dock', 'fleet'] as const
+export const VIEWS = ['dock', 'fleet', 'contracts'] as const
 
 export type View = (typeof VIEWS)[number]
 
-export const VIEW_LABEL: Record<View, string> = { dock: 'Dock', fleet: 'Flotte' }
+export const VIEW_LABEL: Record<View, string> = {
+  dock: 'Dock',
+  fleet: 'Flotte',
+  contracts: 'Verträge',
+}
 
 export const VIEW_MEANING: Record<View, string> = {
   dock: 'die Baender: Aktiv, Ruhend, Archiviert',
   fleet: 'die ganze Flotte auf einem Blatt, nach Reederei',
+  contracts: 'was die Flotte fordert — je Forderung statt je Schiff',
 }
 
-/** The pages one view offers, in the order they are drawn. */
+/**
+ * The pages one view offers, in the order they are drawn.
+ *
+ * The catalog is in neither list: it counts demands and not hulls, so it is not a *band* of the
+ * fleet at all — it is a third question, and it sits with the other two as a button rather than
+ * as a tab among pages it has nothing in common with. That also takes the one entry out of the
+ * tab bar that meant something different from everything beside it.
+ */
 export function pagesOf(view: View): readonly Page[] {
-  return view === 'fleet' ? [FLEET, CONTRACTS] : [...BANDS, CONTRACTS]
+  switch (view) {
+    case 'fleet':
+      return [FLEET]
+    case 'contracts':
+      return [CONTRACTS]
+    case 'dock':
+      return [...BANDS]
+  }
 }
 
 /** Which view a page belongs to — so a page picked elsewhere can put the buttons right. */
 export function viewOf(page: Page): View {
-  return page === FLEET ? 'fleet' : 'dock'
+  return page === FLEET ? 'fleet' : page === CONTRACTS ? 'contracts' : 'dock'
 }
