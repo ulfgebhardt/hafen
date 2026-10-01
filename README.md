@@ -221,7 +221,7 @@ apps/harbor     Das Fenster. Liest einen Snapshot, misst nichts.
 `packages/core` importiert kein `node:fs` und kein `child_process`. Dadurch läuft dieselbe Logik
 in der CLI, im Fenster und im Test gegen einen Mock.
 
-Im Fenster gilt derselbe Schnitt noch einmal: `fleet.ts` und `hull.ts` rechnen aus, _was_
+Im Fenster gilt derselbe Schnitt noch einmal: `fleet.ts` und `vessel.ts` rechnen aus, _was_
 gezeichnet wird — Reihenfolge, Segmente, Tiefgang — und sind zu 100 % gemessen. `scene.ts`
 zeichnet nur und ist als einziges von der Coverage ausgenommen, weil über Pixel keine Zusicherung
 möglich ist, die kein Screenshot wäre. Der Blindfleck ist damit klein und benannt.

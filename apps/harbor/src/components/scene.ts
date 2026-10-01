@@ -438,8 +438,8 @@ function lift(): Container {
  * north–south one: the boat crabbed sideways up the water between two docks.
  *
  * `size` is decoration and says so: a second, smaller boat on a long stretch is there to keep the
- * water from reading as a single ferry shuttling for ever, the same way the frames in `hull.ts`
- * are there and are labelled as the one thing in the drawing that measures nothing.
+ * water from reading as a single ferry shuttling for ever — and like the riprap along the
+ * shore, it is labelled where it is drawn as something that measures nothing.
  */
 function launch(size = 1): Container {
   const group = new Container()
@@ -1428,8 +1428,12 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
             foot,
             stack: project(onApron[0]?.spot ?? { x: apronX(hull), y: 0 }),
             ship: project({ x: hull.length * 0.86, y: 0 }),
-            // Slower for a big stack: a crane with twenty boxes to move does not hurry each one.
-            period: 7 + (onApron.length % 4),
+            /*
+             * Slower for a big stack, and this time it really is: `% 4` looked derived and was
+             * not — a stack of four and one of eight came out the same, five and nine likewise.
+             * A reading that cannot be read back is worse than an honest constant.
+             */
+            period: 6 + Math.min(onApron.length, 16) * 0.25,
             phase: drift(berth.ship.path),
           })
         }

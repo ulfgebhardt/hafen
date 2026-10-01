@@ -16,7 +16,7 @@
  * — even beside it — reads as driving along a line somebody drew, which is what a walkway is and
  * what a fairway is not. They run on `lanesOf`: long straight lanes down the middle of whatever
  * open water the harbour has, clear of every dock, drawn nowhere and measuring nothing. They are
- * decoration and the only thing here that is, the same as the frames in `hull.ts`.
+ * decoration and the only thing here that is, and it says so where it is drawn.
  *
  * Nothing here draws. `scene.ts` turns a route into a sprite and a pace into pixels per frame; the
  * decisions that can be wrong — what travels where, how fast, and how far off a dock — are here,
