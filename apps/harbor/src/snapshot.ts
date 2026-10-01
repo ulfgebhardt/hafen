@@ -16,15 +16,20 @@
 
 import { slugOf } from '@hafen/core'
 
+import { NOTHING_RUNNING } from './components/measuring'
 import { TOOLS } from './components/tools'
 
+import type { Progress } from './components/measuring'
 import type { ToolName } from './components/tools'
 import type { ForgeStats, Ship, Slug } from '@hafen/core'
 
 export interface Snapshot {
+  /** When the **whole** fleet was last surveyed. Never moved by measuring one repository. */
   at: string
   root: string
   ships: readonly Ship[]
+  /** When one repository was last measured on its own, where that has happened since. */
+  touched?: string
 }
 
 /**
@@ -165,7 +170,15 @@ export function spliceShip(snapshot: Snapshot, fresh: Snapshot): Snapshot {
   const byPath = new Map(fresh.ships.map((ship) => [ship.path, ship]))
   const kept = snapshot.ships.map((ship) => byPath.get(ship.path) ?? ship)
   const added = fresh.ships.filter((ship) => !snapshot.ships.some((old) => old.path === ship.path))
-  return { ...snapshot, at: fresh.at, ships: [...kept, ...added] }
+  /*
+   * `at` stays the time of the last **whole** survey, and that is the point of the field.
+   *
+   * It used to take the fresh one, so measuring a single repository stamped the other
+   * ninety-one with a minute they were not read in — the one lie a timestamp exists to prevent,
+   * and the header says that time out loud. `touched` carries the single reading instead, beside
+   * it and never over it.
+   */
+  return { ...snapshot, touched: fresh.at, ships: [...kept, ...added] }
 }
 
 /**
@@ -367,6 +380,42 @@ export async function openForge(url: string): Promise<void> {
     return
   }
   const failure = (await invoke('open_url', { url })) as string | null
+  if (failure !== null) {
+    throw new Error(failure)
+  }
+}
+
+/**
+ * How far the measurement has got — asked, not pushed.
+ *
+ * Polled rather than listened for, because this file reaches Tauri through the one global it
+ * already uses and carries no `@tauri-apps/api`: a command it can call beats a channel it would
+ * have to grow a dependency for, and the thing being polled changes at most ninety times.
+ */
+export type { Progress } from './components/measuring'
+export { NOTHING_RUNNING } from './components/measuring'
+
+export async function measuring(): Promise<Progress> {
+  const invoke = caller()
+  if (invoke === null) {
+    return NOTHING_RUNNING
+  }
+  return { ...NOTHING_RUNNING, ...((await invoke('measure_progress')) as Partial<Progress>) }
+}
+
+/**
+ * Stop measuring.
+ *
+ * The survey is a separate process that reads repositories and writes nothing, so stopping it
+ * leaves nothing half-done: the cache still holds the last complete measurement, which is exactly
+ * what the header goes on saying.
+ */
+export async function stopMeasuring(): Promise<void> {
+  const invoke = caller()
+  if (invoke === null) {
+    return
+  }
+  const failure = (await invoke('measure_cancel')) as string | null
   if (failure !== null) {
     throw new Error(failure)
   }

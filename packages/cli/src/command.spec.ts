@@ -585,6 +585,38 @@ describe('schnappschuss --nur', () => {
     expect(answer.at).not.toBe('')
   })
 
+  /**
+   * `--fortschritt` reports to stderr while the survey runs: the count first, then one line per
+   * repository as it lands.
+   *
+   * On stderr because stdout carries the snapshot and nothing else — a caller that reads the
+   * answer by piping it must not have to filter progress out of it. The window is the caller this
+   * exists for: it had no way to say anything but "misst …" for six seconds.
+   */
+  it('reports the count and then every ship, on stderr', async () => {
+    const stdout = out()
+    const stderr = err()
+
+    await expect(
+      main(['schnappschuss', ROOT, '--fortschritt', `--store=${STORE}`], withShip()),
+    ).resolves.toBe(0)
+
+    const lines = stderr().trim().split('\n')
+
+    expect(JSON.parse(lines[0] ?? '{}')).toStrictEqual({ of: 1 })
+    expect(JSON.parse(lines[1] ?? '{}')).toStrictEqual({ at: 1, path: `${ROOT}/org/ship` })
+    // The answer itself is untouched by it.
+    expect((JSON.parse(stdout()) as { ships: unknown[] }).ships).toHaveLength(1)
+  })
+
+  it('says nothing about progress unless it was asked to', async () => {
+    const stderr = err()
+
+    await expect(main(['schnappschuss', ROOT, `--store=${STORE}`], withShip())).resolves.toBe(0)
+
+    expect(stderr()).toBe('')
+  })
+
   /** An empty value is how a shell spells "unset" by accident, and must not mean "measure /". */
   it('treats an empty --nur as no --nur', async () => {
     const stdout = out()

@@ -154,3 +154,77 @@ describe('taking a directory on', () => {
     expect(page.text()).not.toContain('neu messen')
   })
 })
+
+describe('while a survey runs', () => {
+  const RUNNING = { at: 23, of: 92, path: '/repos/org/ship', running: true, stopped: false }
+
+  /**
+   * It said "misst …" for six seconds and froze the window while it did. Now it says how far, on
+   * what, and offers the way out — the count from the survey itself, not from the last snapshot.
+   */
+  it('shows how far it has got and what it is reading', () => {
+    const bar = mount(FleetBar, {
+      props: {
+        ships: [ship()],
+        at: AT,
+        source: '/cache',
+        canMeasure: true,
+        busy: true,
+        progress: RUNNING,
+      },
+    })
+
+    expect(bar.text()).toContain('23/92')
+    expect(bar.text()).toContain('org/ship')
+    expect(bar.text()).not.toContain('neu messen')
+  })
+
+  it('offers a way out, and hands the decision up', async () => {
+    const bar = mount(FleetBar, {
+      props: {
+        ships: [ship()],
+        at: AT,
+        source: '/cache',
+        canMeasure: true,
+        busy: true,
+        progress: RUNNING,
+      },
+    })
+
+    await bar
+      .findAll('button')
+      .find((one) => one.text() === 'abbrechen')
+      ?.trigger('click')
+
+    expect(bar.emitted('stop')).toStrictEqual([[]])
+  })
+
+  /** Before the count arrives there is nought out of nought, and a full bar would be a lie. */
+  it('says it is counting before it can say a share', () => {
+    const bar = mount(FleetBar, {
+      props: {
+        ships: [ship()],
+        at: AT,
+        source: '/cache',
+        canMeasure: true,
+        busy: true,
+        progress: { ...RUNNING, at: 0, of: 0 },
+      },
+    })
+
+    expect(bar.text()).toContain('zählt')
+  })
+
+  /**
+   * The age of the whole fleet, and a single reading beside it rather than over it: measuring one
+   * repository used to stamp the other ninety-one with a minute they were not read in.
+   */
+  it('keeps the fleet age and the single reading apart', () => {
+    const bar = mount(FleetBar, {
+      props: { ships: [ship()], at: AT, source: '/cache', touched: '2026-09-30T12:00:00Z' },
+    })
+
+    expect(bar.text()).toContain('vollständig gemessen')
+    expect(bar.text()).toContain('einzeln')
+  })
+})

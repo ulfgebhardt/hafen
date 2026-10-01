@@ -96,7 +96,6 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 
 ## Niemals
 
-- **Nicht committen oder pushen.** Der Mensch committet selbst. Gilt auch für den Store.
 - **Nichts auf eine Forge schreiben, und nicht nach draußen fragen.** Kein `fetch`, kein `gh`.
   Viele dieser Repos sind nicht allein unsere, und ein Werkzeug, das beim Ansehen einer Liste
   Anfragen verschickt, tut das ungefragt.
