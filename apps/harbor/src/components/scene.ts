@@ -485,7 +485,14 @@ export interface Scene {
    * Does nothing for a ship this page does not carry, which is the honest answer — there is
    * nothing to centre on.
    */
-  focus: (ship: Ship | null) => void
+  focus: (ship: Ship | null, hold?: { x: number; y: number } | null) => void
+  /**
+   * Where a ship is on screen right now, or `null` where this page does not carry her.
+   *
+   * Asked before a page is left, so the next drawing can put her back on the same spot: what
+   * changes at a switch should be the harbour around her, not where the eye has to look.
+   */
+  where: (ship: Ship | null) => { x: number; y: number } | null
   destroy: () => void
 }
 
@@ -854,7 +861,14 @@ function flag(hull: Hull, org: string): Graphics {
   const cloth = new Graphics()
   // Right aft, clear of the deckhouse: an ensign staff, which is where a ship carries her flag.
   const staff = project({ x: hull.length * 0.03, y: 0 })
-  const height = 2.4 * UNIT
+  /*
+   * Long enough that the cloth flies **clear of her own plating**.
+   *
+   * It was a fixed 2.4 units, and a hull is 5.6 to 7.2 across — so the flag lay on the ship, over
+   * the one thing in the drawing she is read by. The staff starts on her deck, which is where a
+   * staff stands, and ends just outside her side.
+   */
+  const height = (hull.beam / 2 + 1.9) * UNIT
   const fly = 3 * UNIT
   const top = staff.y - height
 
@@ -897,6 +911,8 @@ function drawVessel(
   org: string,
   /** How far her planking really is — measured per berth, see `reachOf`. */
   reach: number,
+  /** Which way her berth is mirrored, for the one mark that must not mirror with it. */
+  side: Side,
 ): void {
   const condition = conditionOf(ship)
   const plate = hex(HULL_COLOR[rustLevel(ship.rustDays)])
@@ -973,7 +989,17 @@ function drawVessel(
   into.addChild(bridge(ship, hull))
   into.addChild(tiers(ship, hull, traits))
   into.addChild(windows(hull, traits, traits.tiers))
-  into.addChild(flag(hull, org))
+  /*
+   * Counter-mirrored, so it flies up the page for every ship.
+   *
+   * The body is flipped for the row on the other side of a plank (`body.scale.y = side`), and a
+   * flag that flipped with it would hang below half the fleet. Hers is the one mark that is not
+   * about geometry at all — it says who she belongs to — so it reads the same way round
+   * everywhere.
+   */
+  const colours = flag(hull, org)
+  colours.scale.y = side
+  into.addChild(colours)
   into.addChild(shipState(ship, hull))
 }
 
@@ -1257,7 +1283,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       body.addChild(chosen)
       slot.addChild(body)
 
-      drawVessel(berth.ship, body, hull, offset, traits, berth.org, reach)
+      drawVessel(berth.ship, body, hull, offset, traits, berth.org, reach, side)
       // On top of the cargo: a ring under a box would be hidden by the box it marks.
       body.addChild(aboard)
       slot.addChild(caption(berth.ship, side))
@@ -1519,16 +1545,36 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     }
   })
 
-  const focus = (ship: Ship | null): void => {
-    const entry = placed.find((one) => one.ship.path === ship?.path)
+  const berthOf = (ship: Ship | null): Placed | undefined =>
+    placed.find((one) => one.ship.path === ship?.path)
+
+  const where = (ship: Ship | null): { x: number; y: number } | null => {
+    const entry = berthOf(ship)
+    if (entry === undefined) {
+      return null
+    }
+    const scale = zoom ?? fitScale(extent, viewOf())
+    return { x: pan.x + entry.spot.x * scale, y: pan.y + entry.spot.y * scale }
+  }
+
+  const focus = (ship: Ship | null, hold: { x: number; y: number } | null = null): void => {
+    const entry = berthOf(ship)
     if (entry === undefined) {
       return
     }
     const view = viewOf()
     const scale = zoom ?? fitScale(extent, view)
-    pan = { x: view.width / 2 - entry.spot.x * scale, y: view.height / 2 - entry.spot.y * scale }
+    /*
+     * Where she was, if that is known — otherwise the middle.
+     *
+     * Holding her place is the better answer at a switch: the reader is looking at her, and what
+     * should change is the harbour around her. Centring moves the one thing that was already
+     * where the eye is.
+     */
+    const at = hold ?? { x: view.width / 2, y: view.height / 2 }
+    pan = { x: at.x - entry.spot.x * scale, y: at.y - entry.spot.y * scale }
     // Through `settle`, so the same clamp applies as to a drag: a harbour smaller than the window
-    // cannot be pushed off it, and centring must not be the one way round that.
+    // cannot be pushed off it, and this must not be the one way round that.
     settle()
   }
 
@@ -1626,6 +1672,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
      * glance — that reason went with the view.
      */
     focus,
+    where,
     highlight: (ship, chosen = null) => {
       const accent = hex(SCENE.accent)
       for (const entry of placed) {
