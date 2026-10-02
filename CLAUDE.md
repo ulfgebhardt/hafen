@@ -259,3 +259,9 @@ pnpm test:unit   # vitest mit Coverage-Schwellen
 Tests liegen neben der Datei, die sie prüfen (`x.ts` / `x.spec.ts`). Die Schwellen in den
 `vitest.config.ts` sind gemessene Werte ohne Luft: ein Punkt Spielraum ist ein Punkt erlaubter
 Verfall, und sie zu heben ist ein eigener Commit.
+
+**Ein grünes `pnpm test:lint` ist nicht unbedingt ein gelaufenes.** turbo cacht je Paket, und am
+02.10.2026 meldete es „6 successful, 4 cached" — darunter der `tsc`-Lauf der CLI, dessen Fixture
+ein neues `Ship`-Feld nicht kannte. Die CI hatte einen Cache-Miss und fand es, lokal war es
+unsichtbar. Vor einem Push, der an einem geteilten Typ gerührt hat: `pnpm test:lint --force`. Die
+Zeile `Cached: 0 cached, 6 total` ist der Beleg, dass wirklich gemessen wurde.
