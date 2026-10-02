@@ -212,23 +212,49 @@ fn snapshot(which: Option<String>) -> Snapshot {
 /**
  * Which terminal to open a terminal tool in.
  *
- * `$HAFEN_TERMINAL` first, then whatever of the usual ones is on the PATH. Measured and not
- * assumed: a hardcoded `xterm` is the setting that is wrong on every desktop except one, and a
- * button that fails in the click is worse than no button — so the window asks `tools()` which of
- * these exist before it draws any of them.
+ * Three places, strongest first. `$HAFEN_TERMINAL` is an instruction to this window and is taken
+ * as given. `$TERMINAL` is the convention for the terminal this *person* uses — `.xinitrc` sets
+ * it, `i3-sensible-terminal` reads it — and was not read at all: a machine whose terminal is
+ * `urxvtc` opened a white `xterm` with bitmap fonts, because that was the only name on the list
+ * it had. The same reason the login shell is read from `/etc/passwd`: where the choice is
+ * recorded, it is read and not guessed.
+ *
+ * `$TERMINAL` is not ours and can name something that is no longer installed, so it has to be on
+ * the PATH like everything on the list — a button that fails in the click is worse than one that
+ * opens the next best thing. The list itself is measured and not assumed: a hardcoded `xterm` is
+ * the setting that is wrong on every desktop except one, so `tools()` asks before it draws.
+ *
+ * `urxvt` and not `urxvtc`: the client needs a running daemon and without one it exits at once,
+ * while `spawn` still reports success. Somebody who names `urxvtc` in `$TERMINAL` runs the daemon;
+ * a list that guesses cannot know that.
  */
-const TERMINALS: [&str; 6] = ["alacritty", "kitty", "wezterm", "foot", "konsole", "xterm"];
+const TERMINALS: [&str; 7] = [
+    "alacritty",
+    "kitty",
+    "wezterm",
+    "foot",
+    "konsole",
+    "urxvt",
+    "xterm",
+];
 
 fn terminal() -> Option<String> {
-    if let Ok(given) = std::env::var("HAFEN_TERMINAL") {
-        if !given.trim().is_empty() {
-            return Some(given.trim().to_owned());
-        }
-    }
-    TERMINALS
-        .iter()
-        .find(|name| on_path(name))
-        .map(|name| (*name).to_owned())
+    named("HAFEN_TERMINAL")
+        .or_else(|| named("TERMINAL").filter(|given| on_path(given)))
+        .or_else(|| {
+            TERMINALS
+                .iter()
+                .find(|name| on_path(name))
+                .map(|name| (*name).to_owned())
+        })
+}
+
+/// A variable that names something, or nothing where it is unset or blank.
+fn named(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|given| given.trim().to_owned())
+        .filter(|given| !given.is_empty())
 }
 
 /**
@@ -241,10 +267,8 @@ fn terminal() -> Option<String> {
  * overrides it, the same way `$HAFEN_TERMINAL` overrides the terminal.
  */
 fn user_shell() -> Option<String> {
-    if let Ok(given) = std::env::var("HAFEN_SHELL") {
-        if !given.trim().is_empty() {
-            return Some(given.trim().to_owned());
-        }
+    if let Some(given) = named("HAFEN_SHELL") {
+        return Some(given);
     }
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("LOGNAME"))
@@ -396,7 +420,8 @@ fn run_tool(name: String, path: String) -> Option<String> {
     let mut command = if tool.terminal {
         let Some(shell) = terminal() else {
             return Some(
-                "kein Terminal gefunden — HAFEN_TERMINAL setzen oder eines installieren".to_owned(),
+                "kein Terminal gefunden — TERMINAL oder HAFEN_TERMINAL setzen, oder eines installieren"
+                    .to_owned(),
             );
         };
         let mut started = std::process::Command::new(shell);
@@ -422,11 +447,29 @@ fn run_tool(name: String, path: String) -> Option<String> {
         started
     };
 
-    command
-        .current_dir(&path)
-        .spawn()
-        .err()
-        .map(|error| format!("{name}: {error}"))
+    command.current_dir(&path);
+    started(command).map(|error| format!("{name}: {error}"))
+}
+
+/**
+ * Starts a program and collects it when it ends, without waiting for it here.
+ *
+ * Spawned and then dropped, every terminal somebody closed stayed in the process table as a
+ * zombie for as long as the window ran — seven of them after six minutes of trying the button.
+ * Nothing broke, and that is not the same as nothing being wrong: a child nobody waits for is a
+ * child nobody owns. A thread waits for it instead, so the click still returns at once.
+ */
+fn started(mut command: std::process::Command) -> Option<std::io::Error> {
+    match command.spawn() {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                // Its exit status says nothing to anyone: the tool has long been handed over.
+                let _ = child.wait();
+            });
+            None
+        }
+        Err(error) => Some(error),
+    }
 }
 
 /**
@@ -858,6 +901,52 @@ mod tests {
     fn finds_a_terminal_that_was_named() {
         let _env = Env::set(&[("HAFEN_TERMINAL", Some("meinterminal"))]);
         assert_eq!(terminal().as_deref(), Some("meinterminal"));
+    }
+
+    /// The person's own terminal, where `.xinitrc` recorded it — not the first name on our list.
+    #[test]
+    fn opens_the_terminal_the_person_named() {
+        // `git` because it is on every runner, Windows included; any installed program would do.
+        let _env = Env::set(&[("HAFEN_TERMINAL", None), ("TERMINAL", Some("git"))]);
+        assert_eq!(terminal().as_deref(), Some("git"));
+    }
+
+    /// This window's own variable is the stronger instruction, the same as for the shell.
+    #[test]
+    fn lets_the_window_variable_win() {
+        let _env = Env::set(&[
+            ("HAFEN_TERMINAL", Some("meinterminal")),
+            ("TERMINAL", Some("git")),
+        ]);
+        assert_eq!(terminal().as_deref(), Some("meinterminal"));
+    }
+
+    /// `$TERMINAL` is not ours: a name nothing answers to falls through instead of failing the click.
+    #[test]
+    fn passes_over_a_terminal_that_is_not_installed() {
+        let _env = Env::set(&[
+            ("HAFEN_TERMINAL", None),
+            ("TERMINAL", Some("kein-solches-terminal")),
+        ]);
+        assert_ne!(terminal().as_deref(), Some("kein-solches-terminal"));
+    }
+
+    /// A blank variable is how a shell spells "unset" by accident, and is read as unset.
+    #[test]
+    fn reads_a_blank_variable_as_none() {
+        let _env = Env::set(&[("TERMINAL", Some("  "))]);
+        assert_eq!(named("TERMINAL"), None);
+    }
+
+    /// Started and handed back at once; and what cannot start says why.
+    #[test]
+    fn starts_without_waiting_and_says_what_failed() {
+        let mut quick = std::process::Command::new(if cfg!(windows) { "cmd" } else { "true" });
+        if cfg!(windows) {
+            quick.args(["/C", "exit"]);
+        }
+        assert!(started(quick).is_none());
+        assert!(started(std::process::Command::new("kein-solches-programm")).is_some());
     }
 
     /**
