@@ -199,6 +199,14 @@ diesem lesbar bleiben.
   festem Pfad hätte ausgerechnet den Repositories eine Lücke bescheinigt, die das Geforderte tun.
   Die Workflow-Inhalte trägt `QuestFacts` seitdem mit — sie wurden vorher gelesen, verworfen und
   das Verzeichnis ein zweites Mal nur zum Zählen aufgelistet.
+- **Ein unbekanntes Werkzeug ist ein Blindfleck, keine Lücke** (`unreadCommand` in `role.ts`).
+  Die Werkzeuglisten bleiben geschlossen, aber was sie nicht kennen, zählte bis 02.10.2026 als
+  nichts: `"build": "tsup …"` bescheinigte Leitstand.example, nichts zu bauen. Behauptet ein Skript eine
+  Rolle oder einen Build per Namen (`claimOf`) und läuft etwas Ungelesenes, ist die Prüfung
+  `nicht messbar`, und die Evidenz nennt den Befehl — so lernt die Liste, was fehlt. Der Name
+  macht dabei nie einen Check, er verhindert nur eine erfundene Lücke. Die eine offene Regel ist
+  der Unterbefehl: `<werkzeug> build|lint|typecheck` sagt, was getan wird (`vuepress build`,
+  `storybook build`). `test` nicht, das Verb sagt nicht, ob unit oder e2e.
 - **`art: forge` ist der benannte Blindfleck.** Ob ein Zweig geschützt ist, steht in der
   GitHub-API und nirgends im Repository. Eine solche Quest wird `nicht messbar` — weder ein
   erfundenes `verletzt` noch ein stillschweigendes `nicht anwendbar`, sondern der Satz "das gilt

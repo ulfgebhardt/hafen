@@ -63,6 +63,10 @@ const ROLE_COMMANDS: Record<CheckRole, readonly RoleCommand[]> = {
     { tool: 'next', needs: [/\blint\b/] },
     { tool: 'ruff', needs: [/\bcheck\b/] },
     { tool: 'clippy' },
+    // Without `--frail` remark reports and exits green, and `-o` would rewrite the markdown.
+    { tool: 'remark', needs: [/--frail\b/] },
+    // Without `--check` it formats the staged files, which is a writer and not a lint.
+    { tool: 'pretty-quick', needs: [/--check\b/] },
   ],
   typecheck: [
     { tool: 'tsc', needs: [/--noEmit\b/] },
@@ -164,10 +168,137 @@ function runs(command: string, entry: RoleCommand): boolean {
   return invokes(command, entry.tool) && (entry.needs ?? []).every((need) => need.test(command))
 }
 
+/**
+ * Whatever runs *scripts*: the package managers, and the task runners that fan out.
+ *
+ * `npx` is not among them — it runs a binary, and reading `npx playwright install` as a hand-off
+ * to a script called `playwright` would be an invention.
+ */
+const RUNNERS: readonly string[] = ['npm', 'pnpm', 'yarn', 'bun', 'turbo', 'lerna']
+
+/**
+ * Words in front of the tool that only decide *how* it runs: `npx vuepress build`,
+ * `cross-env NODE_ENV=production nuxt build`. Read past, never read as the tool.
+ */
+const WRAPPERS: readonly string[] = ['npx', 'pnpx', 'bunx', 'cross-env', 'env', 'dotenv', '--']
+
+/**
+ * Whatever runs a *file* rather than doing anything itself. `node build` runs `build.js`, and
+ * what that does is not in the command — so the next word is a path and never a verb.
+ */
+const INTERPRETERS: readonly string[] = [
+  'node',
+  'tsx',
+  'ts-node',
+  'bun',
+  'deno',
+  'sh',
+  'bash',
+  'python',
+  'python3',
+]
+
+/**
+ * Tools that run *scripts* by name without being a package manager: `run-s build` runs the
+ * script `build`, so its `build` is a name and not a verb. `delegationOf` does not follow them,
+ * which leaves what they reach unread — not invented.
+ */
+const SCRIPT_CHAINS: readonly string[] = ['run-s', 'run-p', 'npm-run-all', 'concurrently']
+
+/**
+ * Tools that are known to do neither a check nor a build: they move files, print or wait.
+ *
+ * Closed like the role lists. `"build": "echo nothing to build"` builds nothing, and
+ * `"build": "mkdirp dist && ncp static dist"` copies; without this list the first would be a
+ * verb (`echo build`) and the second an unknown tool claiming a build it does not do.
+ */
+const HELPERS: readonly string[] = [
+  'echo',
+  'printf',
+  'true',
+  'false',
+  'exit',
+  'export',
+  'cd',
+  'rm',
+  'rimraf',
+  'cp',
+  'ncp',
+  'mv',
+  'mkdir',
+  'mkdirp',
+  'touch',
+  'cat',
+  'chmod',
+  'ln',
+  'sleep',
+  'wait-on',
+  'git',
+  'husky',
+  'patch-package',
+]
+
+/** Where in these words the tool stands, `-1` where nothing but set-up does. */
+function toolIndex(spoken: readonly string[]): number {
+  return spoken.findIndex(
+    (word) => !WRAPPERS.includes(word) && !word.startsWith('-') && !/^\w+=/u.test(word),
+  )
+}
+
+/**
+ * The tool a command runs, past any environment assignment and wrapper — `null` for a command
+ * that is only those.
+ *
+ * As a basename without a JavaScript extension, the same reading as `invokes`.
+ */
+export function toolOf(command: string): string | null {
+  const spoken = words(command)
+  const word = spoken[toolIndex(spoken)]
+  return word === undefined ? null : (word.split('/').pop() ?? word).replace(/\.[cm]?js$/, '')
+}
+
+/**
+ * The subcommands that say outright what a tool is asked to do.
+ *
+ * The open half of this module, and deliberately the only one. `vuepress build docs`,
+ * `storybook build` and `vike build` are the same sentence in three tools — measured on
+ * 02.10.2026, twelve role-named scripts on this fleet said it with a tool no list knew. A verb in
+ * the place of a subcommand is the project naming the action, not a guess about the tool.
+ *
+ * `test` is not among them: `playwright test` is end to end and `bun test` a unit run, so the
+ * verb does not say which role it is — the closed lists above have to.
+ */
+const VERBS: ReadonlyMap<string, CheckRole | 'build'> = new Map([
+  ['build', 'build'],
+  ['lint', 'lint'],
+  ['typecheck', 'typecheck'],
+])
+
+/**
+ * What a command's subcommand says it does, or `null`.
+ *
+ * Only for a tool that does things itself: a runner's `build` is the name of a script
+ * (`delegationOf` reads that, `SCRIPT_CHAINS` do not), an interpreter's is a file, and a
+ * helper's (`echo build`) is text.
+ */
+function verbOf(command: string): CheckRole | 'build' | null {
+  const tool = toolOf(command)
+  if (tool === null || [...RUNNERS, ...SCRIPT_CHAINS, ...INTERPRETERS, ...HELPERS].includes(tool)) {
+    return null
+  }
+  const spoken = words(command)
+  const verb = spoken.slice(toolIndex(spoken) + 1).find((word) => !word.startsWith('-'))
+  return verb === undefined ? null : (VERBS.get(verb) ?? null)
+}
+
 /** Which roles these commands measure, ignoring anything the commands delegate to. */
 export function commandRoles(commands: readonly string[]): readonly CheckRole[] {
   const found = new Set<CheckRole>()
   for (const command of commands.filter(judges)) {
+    const verb = verbOf(command)
+    if (verb !== null && verb !== 'build') {
+      found.add(verb)
+    }
     for (const role of CHECK_ROLES) {
       if (ROLE_COMMANDS[role].some((entry) => runs(command, entry))) {
         found.add(role)
@@ -196,7 +327,11 @@ export function bodyRoles(body: string): readonly CheckRole[] {
  */
 const BUILD_COMMANDS: readonly RoleCommand[] = [
   { tool: 'vite', needs: [/(^|\s)build(\s|$)/u] },
-  { tool: 'tsc', needs: [/(^|\s)(-b|--build)(\s|$)/u] },
+  // Every `tsc` that is not asked to keep quiet emits — `-b`, `-p tsconfig.json` or nothing at
+  // all. Leuchtturm's `"build": "tsc && tsc-alias"` is the plain form, and was missed.
+  { tool: 'tsc', needs: [/^(?!.*--noEmit\b)/u] },
+  { tool: 'tsup' },
+  { tool: 'unbuild' },
   { tool: 'nuxt', needs: [/(^|\s)(build|generate)(\s|$)/u] },
   { tool: 'next', needs: [/(^|\s)build(\s|$)/u] },
   { tool: 'astro', needs: [/(^|\s)build(\s|$)/u] },
@@ -216,7 +351,7 @@ const BUILD_COMMANDS: readonly RoleCommand[] = [
 
 /** Whether this one command builds an artifact. */
 export function buildsArtifact(command: string): boolean {
-  return BUILD_COMMANDS.some((entry) => runs(command, entry))
+  return verbOf(command) === 'build' || BUILD_COMMANDS.some((entry) => runs(command, entry))
 }
 
 /** Whether anything in this script body builds one. */
@@ -235,14 +370,6 @@ export interface Delegation {
    */
   scope: 'self' | 'members'
 }
-
-/**
- * Whatever runs *scripts*: the package managers, and the task runners that fan out.
- *
- * `npx` is not among them — it runs a binary, and reading `npx playwright install` as a hand-off
- * to a script called `playwright` would be an invention.
- */
-const RUNNERS: readonly string[] = ['npm', 'pnpm', 'yarn', 'bun', 'turbo', 'lerna']
 
 /** Runners that always mean every member, whatever else stands on the line. */
 const FANOUT_RUNNERS: readonly string[] = ['turbo', 'lerna']
@@ -405,4 +532,87 @@ export function nameProximity(
     return 3
   }
   return roleTools(commands, role).some((tool) => name.includes(tool)) ? 2 : 1
+}
+
+/** What a script's name says it does, as far as this module has a word for it. */
+export type Claim = CheckRole | 'build'
+
+/** The name parts that claim something, in the order `claimOf` prefers the later one. */
+const CLAIMS: readonly Claim[] = [...CHECK_ROLES, 'build']
+
+/**
+ * Name parts that make a script the preparation of a run rather than the run itself.
+ *
+ * Measured on 02.10.2026: `e2e:seed` fills a database for the tests, `build:dev-brandings`
+ * builds for local development and `test:unit:debug` waits for a debugger. None claims what its
+ * role word says, and reading them as if they did is how a seed script would answer for e2e.
+ */
+const PREPARES: readonly string[] = [
+  'seed',
+  'setup',
+  'prepare',
+  'clean',
+  'dev',
+  'debug',
+  'watch',
+  'serve',
+  'start',
+]
+
+/**
+ * What a script's *name* says it does — the last part that is a role or `build`, so
+ * `test:lint:locales` claims `lint` and `test:lint:typecheck` claims `typecheck`.
+ *
+ * The second place a name decides something, and like `namedAsWriter` it decides a different
+ * question than the role: not "what does this measure" but "what would it have to be read as".
+ * It never makes a script a check. It only stops an unreadable one from being a gap.
+ */
+export function claimOf(name: string): Claim | null {
+  if (segments(name).some((segment) => PREPARES.includes(segment))) {
+    return null
+  }
+  return (
+    segments(name)
+      .toReversed()
+      .find((segment): segment is Claim => CLAIMS.includes(segment as Claim)) ?? null
+  )
+}
+
+/**
+ * Whether a table here names this tool at all. `vitest` without `run` watches and `cargo check`
+ * builds nothing — both are read, and read as not doing the job, which is an answer.
+ *
+ * Except an interpreter: `node --test` is listed, but `node scripts/build.js` runs a file, and
+ * what the file does is exactly what is not read.
+ */
+function knownTool(tool: string): boolean {
+  return (
+    !INTERPRETERS.includes(tool) &&
+    [...Object.values(ROLE_COMMANDS).flat(), ...BUILD_COMMANDS].some((entry) => entry.tool === tool)
+  )
+}
+
+/**
+ * The command this module cannot read, or `null` for one it can.
+ *
+ * Readable is everything with an answer: a tool of a role or a build, a verb, a hand-off to a
+ * script (followed elsewhere), a package manager's own subcommand, a helper that only moves
+ * files, and a run that never hands back a verdict (`judges`). What is left runs something no table here knows — `tsup` before it was listed, a
+ * `node scripts/build.js`, a `run-s build:*` whose targets nobody follows. That is not nothing,
+ * and calling it nothing is what made those ships violate a quest they might well meet.
+ */
+export function unreadCommand(command: string): string | null {
+  const tool = toolOf(command)
+  if (
+    tool === null ||
+    !judges(command) ||
+    HELPERS.includes(tool) ||
+    RUNNERS.includes(tool) ||
+    knownTool(tool) ||
+    buildsArtifact(command) ||
+    commandRoles([command]).length > 0
+  ) {
+    return null
+  }
+  return command
 }

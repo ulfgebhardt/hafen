@@ -19,9 +19,8 @@
 
 import { CONTRACT_SCRIPTS, readWorkflows } from './contract'
 import { SHIP_TRAITS } from './quest'
-import { bodyBuilds } from './role'
 
-import type { Contract, ContractPorts } from './contract'
+import type { Contract, ContractPorts, Unread } from './contract'
 import type { Quest, QuestCheck, ShipTrait } from './quest'
 import type { CheckRole } from './role'
 import type { ForgeStats } from './stats'
@@ -146,6 +145,16 @@ function filling(contract: Contract, wanted: CheckRole): readonly string[] {
   )
 }
 
+/**
+ * The unread scripts as evidence: what claims the role, and the command that could not be read.
+ * The command and not just the tool, because `node scripts/build.js` says more than `node`.
+ */
+function unreadNote(unread: readonly Unread[]): string {
+  return unread
+    .map((one) => `${one.script}${one.dir === '.' ? '' : ` (${one.dir})`} → ${one.command}`)
+    .join(', ')
+}
+
 function manifestNote(contract: Contract): string {
   const count = contract.members.length
   return count === 1 ? '1 Manifest' : `${String(count)} Manifeste`
@@ -232,6 +241,15 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
           null,
         )
       }
+      const unread = contract.unread.filter((one) => one.claims === wanted)
+      if (!contract.scripts[wanted] && !inCi && unread.length > 0) {
+        return say(
+          `irgendetwas misst die Rolle ${wanted}`,
+          `${manifestNote(contract)}, ${workflowNote(facts)}`,
+          `nicht lesbar: ${unreadNote(unread)}`,
+          null,
+        )
+      }
       return say(
         `irgendetwas misst die Rolle ${wanted}`,
         `${manifestNote(contract)}, ${workflowNote(facts)}`,
@@ -253,6 +271,15 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
           `ein CI-Workflow ruft ${wanted} auf`,
           '.github/workflows',
           'keine Workflows — ob eine CI das misst, sagt dieses Repository nicht',
+          null,
+        )
+      }
+      const unread = contract.unread.filter((one) => one.claims === wanted && one.inCi)
+      if (!contract.inCi.includes(wanted) && unread.length > 0) {
+        return say(
+          `ein CI-Workflow ruft ${wanted} auf`,
+          `.github/workflows (${workflowNote(facts)})`,
+          `ein Schritt ruft auf, was nicht lesbar ist: ${unreadNote(unread)}`,
           null,
         )
       }
@@ -402,6 +429,15 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       if (contract.members.length === 0) {
         return say('ein Skript baut ein Artefakt', 'nirgends', 'kein Manifest zu lesen', null)
       }
+      const unread = contract.unread.filter((one) => one.claims === 'build')
+      if (!contract.builds && unread.length > 0) {
+        return say(
+          'ein Skript baut ein Artefakt',
+          `package.json (${manifestNote(contract)})`,
+          `nicht lesbar: ${unreadNote(unread)}`,
+          null,
+        )
+      }
       return say(
         'ein Skript baut ein Artefakt',
         `package.json (${manifestNote(contract)})`,
@@ -414,7 +450,8 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
      * And whether a workflow runs one — the other half of "somebody goes the whole way".
      *
      * Read out of the `run:` steps rather than by looking for the word `build`, which stands in
-     * half the job names on this fleet without anything being built.
+     * half the job names on this fleet without anything being built — and read by
+     * `detectContract`, which follows a step into the script it runs (`Contract.buildsInCi`).
      */
     case 'baut-in-ci': {
       if (facts.workflows.length === 0) {
@@ -425,17 +462,20 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
           null,
         )
       }
-      const hit = facts.workflows.some((body) =>
-        body
-          .split('\n')
-          .filter((line) => line.includes('run:'))
-          .some((line) => bodyBuilds(line.slice(line.indexOf('run:') + 4))),
-      )
+      const unread = contract.unread.filter((one) => one.claims === 'build' && one.inCi)
+      if (!contract.buildsInCi && unread.length > 0) {
+        return say(
+          'ein Workflow baut',
+          `.github/workflows (${workflowNote(facts)})`,
+          `ein Schritt ruft auf, was nicht lesbar ist: ${unreadNote(unread)}`,
+          null,
+        )
+      }
       return say(
         'ein Workflow baut',
         `.github/workflows (${workflowNote(facts)})`,
-        hit ? 'ein Schritt baut' : 'kein Schritt baut',
-        hit,
+        contract.buildsInCi ? 'ein Schritt baut' : 'kein Schritt baut',
+        contract.buildsInCi,
       )
     }
 

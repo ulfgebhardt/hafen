@@ -4,9 +4,12 @@ import {
   bodyBuilds,
   bodyRoles,
   buildsArtifact,
+  claimOf,
   delegationOf,
   namedAsWriter,
   nameProximity,
+  toolOf,
+  unreadCommand,
 } from './role'
 
 describe(bodyRoles, () => {
@@ -103,6 +106,14 @@ describe(bodyRoles, () => {
 
   it('reads the roles in a fixed order, so a survey reads the same twice', () => {
     expect(bodyRoles('vitest run && eslint .')).toStrictEqual(['lint', 'unit'])
+  })
+
+  /** The verb rule for checks: lint and typecheck by subcommand, never `test`. */
+  it('takes a lint or typecheck subcommand at its word, whatever the tool', () => {
+    expect(bodyRoles('make lint')).toStrictEqual(['lint'])
+    expect(bodyRoles('nuxi typecheck')).toStrictEqual(['typecheck'])
+    expect(bodyRoles('somerunner test')).toStrictEqual([])
+    expect(bodyRoles('pnpm lint')).toStrictEqual([])
   })
 
   it('finds nothing in a command that reports on no code', () => {
@@ -215,5 +226,98 @@ describe(buildsArtifact, () => {
   it('reads a whole body, however many commands it holds', () => {
     expect(bodyBuilds('rimraf dist && vite build')).toBe(true)
     expect(bodyBuilds('eslint . && vitest run')).toBe(false)
+  })
+
+  /** Measured on 02.10.2026: Leuchtturm, Leitstand.example and vuepress-plugin-bilder built unseen. */
+  it('knows the builders the fleet runs without a subcommand', () => {
+    expect(buildsArtifact('tsc')).toBe(true)
+    expect(buildsArtifact('tsc -p tsconfig.build.json')).toBe(true)
+    expect(buildsArtifact('tsup src/index.ts --format esm')).toBe(true)
+    expect(buildsArtifact('unbuild')).toBe(true)
+  })
+
+  /** The open rule: a tool no list knows, asked by its subcommand to build. */
+  it('takes a build subcommand at its word, whatever the tool', () => {
+    expect(buildsArtifact('vuepress build docs')).toBe(true)
+    expect(buildsArtifact('storybook build -o storybook-static')).toBe(true)
+    expect(buildsArtifact('npx vuepress build docs')).toBe(true)
+    expect(buildsArtifact('cross-env NODE_ENV=production vike build')).toBe(true)
+    expect(buildsArtifact('vuepress dev docs')).toBe(false)
+  })
+
+  /** Only where the tool does the work itself — elsewhere `build` is a script, a file or text. */
+  it('does not take a build that only names something else for one', () => {
+    expect(buildsArtifact('npm run build')).toBe(false)
+    expect(buildsArtifact('pnpm build')).toBe(false)
+    expect(buildsArtifact('run-s build')).toBe(false)
+    expect(buildsArtifact('node build')).toBe(false)
+    expect(buildsArtifact('echo build')).toBe(false)
+  })
+
+  /** The verbs are a closed table, and a word from an object's prototype is not in it. */
+  it('reads no verb out of a word the table does not hold', () => {
+    expect(buildsArtifact('vuepress constructor')).toBe(false)
+  })
+})
+
+describe(toolOf, () => {
+  it('reads past wrappers and assignments to the tool itself', () => {
+    expect(toolOf('vuepress build docs')).toBe('vuepress')
+    expect(toolOf('npx -y vue-tsc --noEmit')).toBe('vue-tsc')
+    expect(toolOf('NODE_ENV=production cross-env A=1 ./node_modules/.bin/tsup.js')).toBe('tsup')
+  })
+
+  it('finds none in a command that only sets up', () => {
+    expect(toolOf('FOO=1')).toBeNull()
+  })
+})
+
+describe(claimOf, () => {
+  it('reads the last part of a name that is a role or a build', () => {
+    expect(claimOf('build')).toBe('build')
+    expect(claimOf('docs:build')).toBe('build')
+    expect(claimOf('test:lint:locales')).toBe('lint')
+    expect(claimOf('test:lint:typecheck')).toBe('typecheck')
+  })
+
+  it('claims nothing for a name that says nothing', () => {
+    expect(claimOf('dev')).toBeNull()
+    expect(claimOf('rebuild')).toBeNull()
+  })
+
+  /** Measured: `e2e:seed`, `build:dev-brandings`, `test:unit:debug` prepare a run and are none. */
+  it('claims nothing for a name that prepares a run', () => {
+    expect(claimOf('e2e:seed')).toBeNull()
+    expect(claimOf('build:dev-brandings')).toBeNull()
+    expect(claimOf('test:unit:debug')).toBeNull()
+  })
+})
+
+describe(unreadCommand, () => {
+  /** Measured on 02.10.2026, before `tsup` was listed: Leitstand.example's backend build. */
+  it('names a command no table here knows', () => {
+    expect(unreadCommand('mytool --out dist')).toBe('mytool --out dist')
+    expect(unreadCommand('node scripts/build.js')).toBe('node scripts/build.js')
+    expect(unreadCommand('run-s build:*')).toBe('run-s build:*')
+  })
+
+  /** Read is everything with an answer, including the answer "this does not do it". */
+  it('reads a known tool, a verb, a hand-off and a helper', () => {
+    expect(unreadCommand('vite build')).toBeNull()
+    expect(unreadCommand('vitest')).toBeNull()
+    expect(unreadCommand('vuepress build docs')).toBeNull()
+    expect(unreadCommand('npm run build')).toBeNull()
+    expect(unreadCommand('rimraf dist')).toBeNull()
+  })
+
+  it('finds nothing unread in a command that only sets up', () => {
+    expect(unreadCommand('FOO=1')).toBeNull()
+  })
+
+  /** No verdict is an answer too, and `pretty-quick` without `--check` is a writer it knows. */
+  it('reads a run that hands back no verdict', () => {
+    expect(unreadCommand('node --inspect-brk ./node_modules/jest/bin/jest.js')).toBeNull()
+    expect(unreadCommand('pretty-quick --staged')).toBeNull()
+    expect(bodyRoles('pretty-quick --check')).toStrictEqual(['lint'])
   })
 })

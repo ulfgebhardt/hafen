@@ -1,16 +1,18 @@
 import {
   bodyBuilds,
   CHECK_ROLES,
+  claimOf,
   commandRoles,
   delegationOf,
   judges,
   nameProximity,
   namedAsWriter,
   splitCommands,
+  unreadCommand,
 } from './role'
 
 import type { FsPort, Ports } from './ports'
-import type { CheckRole } from './role'
+import type { CheckRole, Claim } from './role'
 
 /**
  * What Werft calls the four checks in its own repos.
@@ -109,6 +111,38 @@ export interface Contract {
    * every repository that publishes its TypeScript as source — which owes no build at all.
    */
   builds: boolean
+  /**
+   * Whether a CI workflow builds one — straight from a step, or through the script it runs.
+   *
+   * Read here and not in the probe, because it is the same reading as `inCi`. Until 02.10.2026
+   * the probe matched each line holding `run:` on its own, and that lost both halves of what
+   * `inCi` already knew: a `run: |` block keeps its commands on the lines below, and
+   * `npm run build` hands off to a script instead of naming a tool. Measured over the fleet, nine
+   * ships had a workflow running their build and were told none did.
+   */
+  buildsInCi: boolean
+  /**
+   * Scripts whose name claims a role or a build and whose command nothing here can read.
+   *
+   * The fifth verdict, carried to where it is needed. Until 02.10.2026 such a script counted as
+   * nothing, and a ship running `"build": "tsup …"` was told it built nothing — the measurement
+   * claimed a gap where it only had a blind spot. Now the quest says `nicht messbar` and names
+   * the command, which is also how the closed tables in `role.ts` learn what to add.
+   */
+  unread: readonly Unread[]
+}
+
+/** One script whose name says what it does and whose command does not let us check. */
+export interface Unread {
+  /** The member it stands in, `.` for the root. */
+  dir: string
+  script: string
+  /** What the name claims. */
+  claims: Claim
+  /** The first command nothing could read — shown as evidence, so it names the tool. */
+  command: string
+  /** Whether a workflow step runs this script. */
+  inCi: boolean
 }
 
 /** Where a single-package repo tends to keep its app, used only when git has no answer. */
@@ -578,6 +612,75 @@ function readCiRoles(
 }
 
 /**
+ * Whether any CI step builds, read and resolved exactly like `readCiRoles`.
+ *
+ * Without `judges`, for the reason `bodyBuilds` gives: a build is not a judge, so there is no
+ * verdict for a flag to withhold.
+ */
+function readCiBuilds(
+  workflows: readonly string[],
+  scriptBuilds: (name: string) => boolean,
+): boolean {
+  return workflows.some((raw) =>
+    runSteps(raw).some((step) =>
+      splitCommands(step).some((command) => {
+        if (bodyBuilds(command)) {
+          return true
+        }
+        const delegation = delegationOf(command)
+        return delegation !== null && scriptBuilds(delegation.script)
+      }),
+    ),
+  )
+}
+
+/** Every script name a CI step hands off to — the names, resolved nowhere. */
+function readCiScripts(workflows: readonly string[]): ReadonlySet<string> {
+  return new Set(
+    workflows.flatMap((raw) =>
+      runSteps(raw).flatMap((step) =>
+        splitCommands(step).flatMap((command) => delegationOf(command)?.script ?? []),
+      ),
+    ),
+  )
+}
+
+/**
+ * The scripts that claim something by name, deliver nothing readable and run something unread.
+ *
+ * All three, and in that order. A `test:unit` that runs `vitest run` delivers and is no
+ * question, and neither does a house name. A `unit` running bare `vitest` is read — it watches, which is an answer — and
+ * stays a gap. Only a command no table knows is unread. A writer (`lint:fix`) claims nothing:
+ * it is not a check under any name.
+ */
+function readUnread(
+  manifests: readonly ManifestScripts[],
+  ciScripts: ReadonlySet<string>,
+): readonly Unread[] {
+  return manifests.flatMap((manifest) =>
+    Object.entries(manifest.scripts).flatMap(([script, body]) => {
+      const claims = claimOf(script)
+      if (claims === null || namedAsWriter(script)) {
+        return []
+      }
+      const { commands } = reachedCommands(manifests, manifest.dir, script, body)
+      // The house name is a check whatever it runs (`measure`), so it has nothing left to ask.
+      const delivered =
+        houseRole(script) === claims ||
+        (claims === 'build'
+          ? commands.some((command) => bodyBuilds(command))
+          : commandRoles(commands).includes(claims))
+      const command = delivered
+        ? null
+        : (commands.map(unreadCommand).find((one) => one !== null) ?? null)
+      return command === null
+        ? []
+        : [{ dir: manifest.dir, script, claims, command, inCi: ciScripts.has(script) }]
+    }),
+  )
+}
+
+/**
  * Every workflow file of a ship, as text.
  *
  * Exported because two questions need the same bytes: which roles the CI runs (`inCi`, here) and
@@ -647,6 +750,21 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
     return house !== null && declared.has(name) ? [...new Set([house, ...reached])] : reached
   }
 
+  /** Whether a script of that name builds, wherever it is declared — the build twin of the above. */
+  const scriptBuilds = (name: string): boolean =>
+    manifests.some((manifest) => {
+      const body = manifest.scripts[name]
+      return (
+        body !== undefined &&
+        reachedCommands(manifests, manifest.dir, name, body).commands.some((command) =>
+          bodyBuilds(command),
+        )
+      )
+    })
+
+  const workflows = await readWorkflows(fs, shipPath)
+  const unread = readUnread(manifests, readCiScripts(workflows))
+
   return {
     kind,
     scripts,
@@ -654,8 +772,17 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
     builds: manifests.some((manifest) =>
       Object.values(manifest.scripts).some((body) => bodyBuilds(body)),
     ),
+    buildsInCi: readCiBuilds(workflows, scriptBuilds),
     devEntry,
-    inCi: readCiRoles(await readWorkflows(fs, shipPath), rolesOfScript),
-    gaps: kind === 'other' ? [] : CHECK_ROLES.filter((role) => !scripts[role]),
+    inCi: readCiRoles(workflows, rolesOfScript),
+    // A role an unread script claims is not a gap but a question: `fehlt` would say the
+    // measurement found nothing, and it found something it cannot read.
+    gaps:
+      kind === 'other'
+        ? []
+        : CHECK_ROLES.filter(
+            (role) => !scripts[role] && !unread.some((one) => one.claims === role),
+          ),
+    unread,
   }
 }
