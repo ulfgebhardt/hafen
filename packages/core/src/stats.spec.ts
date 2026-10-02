@@ -300,6 +300,7 @@ describe(statsFor, () => {
     pulls: 0,
     language: null,
     guard: null,
+    forkedFrom: null,
   })
 
   /** By `origin` and by slug — what was asked for and what is read back cannot drift apart. */

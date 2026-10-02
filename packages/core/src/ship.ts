@@ -4,6 +4,7 @@ import { mergeCatalogs, readShipCatalog } from './catalog'
 import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
 import { forgeOf } from './forge'
+import { measureLineage } from './lineage'
 import { measureQuests } from './probe'
 import { EMPTY_REGISTER } from './register'
 import { statsFor } from './stats'
@@ -16,6 +17,7 @@ import type { Branch } from './branches'
 import type { QuestResult } from './chain'
 import type { Contract } from './contract'
 import type { Forge } from './forge'
+import type { Lineage } from './lineage'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
 import type { Register } from './register'
@@ -65,6 +67,15 @@ export interface Ship {
    * applies here" would be exactly the status field the architecture contract forbids.
    */
   remotes: readonly Remote[]
+  /**
+   * What each remote besides `origin` **is**: a mirror, an absorbed history, or undecidable.
+   *
+   * Beside `remotes` and never inside them, for the same reason the local marks stand beside the
+   * contract: a remote is an address this repository has, and what it holds is a second question
+   * with a second answer and its own evidence. Empty where there is only one remote — then there
+   * is nothing to compare against, which is 77 of 92 repositories on this fleet.
+   */
+  lineage: readonly Lineage[]
   branch: string | null
   /** Whether anything at all is open. Derived from `working` — see `hasOpenWork`. */
   dirty: boolean
@@ -550,6 +561,15 @@ export async function inspectShip(
       : await git(ports, path, ['branch', '--merged', defaultBranch, '--format=%(refname:short)'])
   const localBranches = parseBranches(refs, contained)
   const tenders = parseSubmodules(modules, moduleUrls)
+  /*
+   * And what the further remotes are, measured only where there are any.
+   *
+   * After the readings above rather than inside the big `Promise.all`, because it needs the parsed
+   * remotes and because 77 of 92 repositories on this fleet skip it entirely — a repository with
+   * only `origin` has nothing to compare against. See `lineage.ts`: until now every one of these
+   * was called a mirror, and for the Ocelot upstreams that said the opposite of the truth.
+   */
+  const lineage = await measureLineage(ports, path, parseRemotes(remotes), defaultBranch)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
   // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
@@ -594,6 +614,7 @@ export async function inspectShip(
     org,
     path,
     remotes: parseRemotes(remotes),
+    lineage,
     branch,
     dirty,
     working,

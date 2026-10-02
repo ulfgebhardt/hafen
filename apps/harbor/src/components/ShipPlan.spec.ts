@@ -16,6 +16,7 @@ const forge = (issues: number, pulls: number): ForgeStats => ({
   pulls,
   language: null,
   guard: null,
+  forkedFrom: null,
 })
 
 const subject = ship({

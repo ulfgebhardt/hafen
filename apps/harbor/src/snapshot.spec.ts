@@ -417,6 +417,7 @@ describe(adopt, () => {
       enlisted: false,
       lines: null,
       roots: [],
+      lineage: [],
     })
   })
 

@@ -3,6 +3,7 @@
     contractChecks,
     hasChecks,
     localTasks,
+    lineageOf,
     mirrorsOf,
     originOf,
     pointLines,
@@ -15,6 +16,7 @@
   import { isQuest } from './chosen'
   import { bindingQuests, ageLabel, orderedQuests } from './fleet'
   import ForgeFacts from './ForgeFacts.vue'
+  import { tell } from './kinship'
   import PointValue from './PointValue.vue'
   import QuestRow from './QuestRow.vue'
   import ShipMarks from './ShipMarks.vue'
@@ -79,7 +81,22 @@
     ship.quests.filter((quest) => quest.verdict === 'notApplicable'),
   )
   const origin = computed(() => originOf(ship.remotes))
-  const mirrors = computed(() => mirrorsOf(ship.remotes))
+  /*
+   * Every remote besides origin, each with what it *is* beside it.
+   *
+   * The list used to be called `mirrors` and every entry carried the word "(Spiegel)". Measured on
+   * this fleet that was wrong for 17 of 21: six are foreign histories merged in, and eleven are a
+   * different repository of the same line — four of those confirmed forks of
+   * `Ocelot-Social-Community/Ocelot-Social-Deploy-Rebranding`. Calling an upstream a mirror said
+   * the opposite of the truth: a mirror holds the same work and may be ignored, an origin is where
+   * a change belongs.
+   */
+  const others = computed(() =>
+    mirrorsOf(ship.remotes).map((remote) => ({
+      ...remote,
+      told: tell(lineageOf(ship.lineage, remote.name), stats, remote.url),
+    })),
+  )
   const checks = computed(() => contractChecks(ship.contract))
   const points = computed(() => shipPoints(ship))
 
@@ -426,14 +443,25 @@
         </p>
         <p class="text-[11px] text-slate-600">Forge: {{ origin.forge }}</p>
       </template>
-      <!-- Mirrors are shown and never asked: they hold the same work. -->
-      <p
-        v-for="mirror in mirrors"
-        :key="mirror.name"
-        class="font-mono text-xs break-all text-slate-500"
-      >
-        {{ mirror.name }} · {{ mirror.url }} <span class="text-slate-600">(Spiegel)</span>
-      </p>
+      <!--
+        Each further remote with what it is, and the measurement under it.
+        A word alone would be a kept status field again: the counts are what makes it checkable,
+        and `ungewiss` with its reason is a better answer than a confident wrong one.
+      -->
+      <div v-for="other in others" :key="other.name" class="mt-1">
+        <p class="font-mono text-xs break-all text-slate-500">
+          {{ other.name }} · {{ other.url }}
+          <span
+            v-if="other.told !== null"
+            :class="other.told.fromForge ? 'text-sky-500' : 'text-slate-600'"
+          >
+            {{ other.told.mark }} {{ other.told.word }}
+          </span>
+        </p>
+        <p v-if="other.told !== null" class="text-[11px] text-slate-600">
+          {{ other.told.because }}
+        </p>
+      </div>
     </section>
 
     <section class="border-b border-slate-800 px-4 py-3">

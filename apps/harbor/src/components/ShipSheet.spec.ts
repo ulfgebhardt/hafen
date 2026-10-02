@@ -39,14 +39,30 @@ describe('shipSheet', () => {
     expect(mount(ShipSheet, { props: { ship: ship({ dirty: true }) } }).text()).toContain('*')
   })
 
-  /** Mirrors are shown and never asked: they hold the same work. */
-  it('names the leading remote and marks the rest as mirrors', () => {
+  /**
+   * Every further remote carries what it *is*, and the measurement under it.
+   *
+   * It used to say "(Spiegel)" beside all of them unconditionally. Measured on this fleet that was
+   * wrong for 17 of 21 remotes: six are foreign histories merged in and eleven a different
+   * repository of the same line. A word without a reading behind it is the kept status field
+   * again, so now there is no word where nothing was measured.
+   */
+  it('names the leading remote and says what each of the rest is', () => {
     const sheet = mount(ShipSheet, {
       props: {
         ship: ship({
           remotes: [
             mockRemote('git@github.com:org/ship.git'),
-            mockRemote('https://git.it4c.dev/org/ship.git', 'mirror'),
+            mockRemote('https://git.it4c.dev/org/ship.git', 'spiegel'),
+          ],
+          lineage: [
+            {
+              remote: 'spiegel',
+              kinship: 'mirror',
+              onlyOrigin: 0,
+              onlyRemote: 0,
+              because: 'beide Adressen halten dieselben Commits',
+            },
           ],
         }),
       },
@@ -54,6 +70,29 @@ describe('shipSheet', () => {
 
     expect(sheet.text()).toContain('github')
     expect(sheet.text()).toContain('Spiegel')
+    expect(sheet.text()).toContain('beide Adressen halten dieselben Commits')
+  })
+
+  /**
+   * An older snapshot recorded no lineage, and this cannot know what it did not measure. A blank is
+   * the honest answer there; inventing "Spiegel" is what this change was made to stop.
+   */
+  it('says nothing about a remote an older measurement never judged', () => {
+    const sheet = mount(ShipSheet, {
+      props: {
+        ship: ship({
+          remotes: [
+            mockRemote('git@github.com:org/ship.git'),
+            mockRemote('git@github.com:Ocelot-Social-Community/Upstream.git', 'ocelot'),
+          ],
+          lineage: [],
+        }),
+      },
+    })
+
+    expect(sheet.text()).toContain('ocelot')
+    expect(sheet.text()).not.toContain('Spiegel')
+    expect(sheet.text()).not.toContain('ungewiss')
   })
 
   it('says a ship has no origin rather than leaving the row blank', () => {
