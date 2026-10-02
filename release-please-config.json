@@ -7,6 +7,10 @@
     ".": {
       "extra-files": [
         {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
           "type": "json",
           "path": "package.json",
           "jsonpath": "$.version"
