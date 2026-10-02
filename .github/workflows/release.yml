@@ -105,9 +105,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Ohne ihn entstehen keine .sig-Dateien, und ohne Signatur installiert der Updater
           # nichts: der Schlüssel ist nicht die Absicherung des Releases, sondern die Bedingung,
-          # dass es beim Nutzer ankommt. Fehlt er, bauen die Jobs trotzdem durch und das Release
-          # trägt Installer ohne Update-Pfad -- deshalb prüft die Quest `auslauf/aktualisierung`,
-          # dass er hier steht.
+          # dass es beim Nutzer ankommt.
+          #
+          # Fehlt er, **bricht der Build ab** -- gemessen am 02.10.2026 lokal, nachdem hier das
+          # Gegenteil gestanden hatte: `tauri build` mit `createUpdaterArtifacts` und einem
+          # pubkey endet mit "A public key has been found, but no private key". Das ist der
+          # freundliche der beiden Fehler, weil er nicht zu uebersehen ist.
           #
           # Ein Passwort gibt es nicht, und das ist eine Entscheidung. Es landete in der CI im
           # *selben* Secret-Speicher wie der Schlüssel, also schützte es dort nichts -- wer eins

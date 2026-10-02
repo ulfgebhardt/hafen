@@ -175,8 +175,15 @@ sonst für Zufall halten müsste:
 
 **Als Vertrag:** `auslauf/aktualisierung` steht im Katalog. Zwei Checks, beide `ci-nennt`:
 `includeUpdaterJson` (das Release veröffentlicht die Datei) und `TAURI_SIGNING_PRIVATE_KEY` (der
-Build signiert). Zwei unabhängige Fehler, und beide machen den Build **grün** — ein Release ohne
-Signatur sieht erfolgreich aus und aktualisiert niemanden.
+Build signiert). Hier stand, beide Fehler machten den Build grün; ein lokaler `tauri build` am
+02.10.2026 hat das widerlegt und der Unterschied ist das Interessante:
+
+- **Der fehlende Schlüssel bricht laut ab** — „A public key has been found, but no private key".
+  Mit `createUpdaterArtifacts` und einem pubkey endet der Build, statt unsignierte Installer
+  abzulegen. Der freundliche der beiden Fehler.
+- **Die fehlende `includeUpdaterJson` schweigt** — grüner Build, `.sig` neben jedem Installer,
+  keine `latest.json`, und das laufende Fenster fragt eine Adresse ab, unter der nichts steht. Es
+  meldet das nicht, weil der Hafen diesen Fehler absichtlich schluckt. **Dafür** gibt es die Quest.
 
 Dafür kam ein Merkmalswert dazu: `gilt_fuer: [tauri]`, gemessen mit
 `git ls-files '*tauri.conf.json'` und nur dann, wenn eine Quest ihn überhaupt verlangt — dieselbe
@@ -219,6 +226,17 @@ signiert werden, die ein installiertes Fenster annimmt — jede bestehende Insta
 endgültig die letzte, und ein neuer Schlüssel hilft nur Leuten, die neu installieren. Eine Kopie
 an einem zweiten Ort ist deshalb kein Luxus. Dass er hier noch einmal getauscht werden *konnte*,
 lag allein daran, dass es zu diesem Zeitpunkt kein Release gab; ab dem ersten ist das vorbei.
+
+## Gegenprobe: ein echter Bundle-Lauf
+
+Lokal am 02.10.2026, bevor der erste Release-Tag entstand: `tauri build` baut die Rust-Seite in
+4 min 42 s und bündelt **alle drei** Linux-Artefakte — `Hafen_0.0.0_amd64.deb`,
+`Hafen-0.0.0-1.x86_64.rpm`, `Hafen_0.0.0_amd64.AppImage` (100,3 MiB). Danach bricht er am
+fehlenden privaten Schlüssel ab, was genau der oben beschriebene laute Fehler ist: der Pfad ist
+vollständig bis zur Signatur, und die liegt in der CI.
+
+Was damit *nicht* geprüft ist: Windows und macOS. Die sehen wir erst am ersten Lauf, und nur dort —
+auf dieser Maschine gibt es keinen Cross-Build für `.msi` oder `.dmg`.
 
 ## Offen, und warum
 
