@@ -47,6 +47,30 @@ export const QUAY = 7
 /** Water around the whole plan, so nothing sits flush against an edge. */
 export const MARGIN = { x: 3, y: 3 } as const
 
+/** Where the water ends on each side, in plan units. */
+export interface Shore {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/**
+ * The waterline all round a plan of this size.
+ *
+ * One place, because two things need it to agree: `ground` draws the land here, and a layout that
+ * runs a walkway *to* the land has to end it on the same line — a way that stops a unit short of
+ * the drawn shore is a way into the water.
+ */
+export function shoreOf(width: number, height: number): Shore {
+  return {
+    left: MARGIN.x + QUAY,
+    top: MARGIN.y + QUAY / 2,
+    right: width - QUAY / 2,
+    bottom: height - QUAY / 2,
+  }
+}
+
 /** Clear water kept between the outermost berth and the shore behind it. */
 export const GAP = { x: 11, y: 9 } as const
 

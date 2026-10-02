@@ -3,8 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   basinOf,
+  bearingsOf,
+  berthAround,
   cellsFor,
+  endOf,
   laidUp,
+  landingsFrom,
+  latticeWays,
   nameFor,
   harbourOf,
   kindredsOf,
@@ -13,9 +18,11 @@ import {
   ringOf,
   spotOf,
   STEPS,
+  toShore,
 } from './basins'
 import { NO_ORG } from './flags'
-import { berthBox, overlaps, reachesShore } from './moorings'
+import { berthBox, cuts, overlaps, reachesShore, reachOf, shoreOf } from './moorings'
+import { BERTH } from './plan'
 import { ship } from './testing'
 
 describe(ringOf, () => {
@@ -375,5 +382,210 @@ describe(harbourOf, () => {
 
   it('takes an empty fleet as an empty harbour', () => {
     expect(harbourOf([]).moorings).toStrictEqual([])
+  })
+})
+
+/** The slope of the lattice's diagonals: half a column across for one row down. */
+const DIAGONAL = LATTICE.along / 2 / LATTICE.across
+
+/** Whether a run between two points is one of the lattice's three directions. */
+function onTheLattice(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  return Math.abs(dy) < 1e-9 || Math.abs(Math.abs(dx / dy) - DIAGONAL) < 1e-9
+}
+
+describe(latticeWays, () => {
+  /** Every edge is laid once: three directions walked from every cell, the other three are the same edges. */
+  it('joins each pair of neighbours exactly once', () => {
+    const cells = cellsFor(6)
+    const pairs = latticeWays(cells).map((one) =>
+      [`${String(one.from.q)}.${String(one.from.r)}`, `${String(one.to.q)}.${String(one.to.r)}`]
+        .sort()
+        .join('|'),
+    )
+
+    // Ring one is six cells round an empty middle: six edges round the ring, nothing across it.
+    expect(pairs).toHaveLength(6)
+    expect(new Set(pairs).size).toBe(6)
+  })
+
+  /** An outer ring that is only part full has neighbours missing, and a way to nowhere is not a way. */
+  it('leaves out an edge to a cell nobody stands in', () => {
+    expect(latticeWays(cellsFor(2))).toHaveLength(1)
+    expect(latticeWays(cellsFor(1))).toStrictEqual([])
+  })
+
+  /**
+   * The point of joining at the plank ends: every edge runs level or along the diagonal, so a berth
+   * keeps the level plank her lines, her crane and her stack were built for.
+   */
+  it('runs every edge level or along the diagonal', () => {
+    for (const edge of latticeWays(cellsFor(18))) {
+      expect(onTheLattice(endOf(edge.from, edge.fromEnd), endOf(edge.to, edge.toEnd))).toBe(true)
+    }
+  })
+})
+
+describe(toShore, () => {
+  const shore = { left: 0, top: 0, right: 100, bottom: 50 }
+
+  it('reaches whichever side of the frame comes first', () => {
+    expect(toShore({ x: 10, y: 25 }, { x: -1, y: 0 }, shore)).toBe(10)
+    expect(toShore({ x: 10, y: 25 }, { x: 1, y: 0 }, shore)).toBe(90)
+    // Down and east from near the bottom: the south shore comes before the east one.
+    expect(toShore({ x: 10, y: 45 }, { x: 1, y: 1 }, shore)).toBe(5)
+    expect(toShore({ x: 90, y: 5 }, { x: 1, y: -1 }, shore)).toBe(5)
+  })
+})
+
+describe(landingsFrom, () => {
+  const shore = { left: 0, top: 0, right: 1000, bottom: 1000 }
+  const level = (): readonly { x: number; y: number }[] => [{ x: -1, y: 0 }]
+  const down = (): readonly { x: number; y: number }[] => [{ x: 1, y: 1 }]
+
+  it('walks straight to the shore when nothing is in the way', () => {
+    const [landing] = landingsFrom([{ x: 40, y: 500 }], level, shore, [], [])
+
+    expect(landing).toStrictEqual({
+      from: { x: 40, y: 500 },
+      to: { x: 0, y: 500 },
+      channel: null,
+      length: 40,
+    })
+  })
+
+  /** A ray through a berth is a line drawn over a ship, not a way. */
+  it('drops a ray that would cross something', () => {
+    const berth = { x: 10, y: 490, width: 10, height: 20 }
+
+    expect(landingsFrom([{ x: 40, y: 500 }], level, shore, [], [berth])).toStrictEqual([])
+  })
+
+  /**
+   * The first channel crossed is where the spur ends. Allowed to fly on, a diagonal reached the
+   * south shore across a whole row of basins, because that was shorter on paper.
+   */
+  it('ends at the first channel it crosses, and counts the run to the nearer shore', () => {
+    const channels = [{ y: 600 }, { y: 400 }, { y: 520 }]
+    const [landing] = landingsFrom([{ x: 100, y: 500 }], down, shore, channels, [])
+
+    expect(landing?.channel).toStrictEqual({ y: 520 })
+    expect(landing?.to).toStrictEqual({ x: 120, y: 520 })
+    // The spur itself, and the channel's run west to the shore at x 0.
+    expect(landing?.length).toBeCloseTo(Math.hypot(20, 20) + 120)
+  })
+
+  it('puts the shortest walk first', () => {
+    const lengths = landingsFrom(
+      [
+        { x: 300, y: 500 },
+        { x: 40, y: 500 },
+      ],
+      level,
+      shore,
+      [],
+      [],
+    ).map((one) => one.length)
+
+    expect(lengths).toStrictEqual([40, 300])
+  })
+})
+
+describe(bearingsOf, () => {
+  /** Outward only, so no spur starts back across the plank it belongs to. */
+  it('leaves a plank end away from its own plank', () => {
+    expect(bearingsOf('west').every((one) => one.x < 0)).toBe(true)
+    expect(bearingsOf('east').every((one) => one.x > 0)).toBe(true)
+  })
+})
+
+describe('a basin harbour, walked', () => {
+  const fleetOf = (sizes: Readonly<Record<string, number>>) =>
+    Object.entries(sizes).flatMap(([org, count]) =>
+      Array.from({ length: count }, (_, index) =>
+        ship({ org, name: `${org}-${String(index)}`, path: `/repos/${org}/${String(index)}` }),
+      ),
+    )
+  /** Enough kindreds for several rows, so some basins are inland and have to use a channel. */
+  const sizes = Object.fromEntries(
+    Array.from({ length: 14 }, (_, index) => [`org${String(index)}`, 1 + ((index * 5) % 9)]),
+  )
+  const harbour = harbourOf(fleetOf(sizes))
+  const spots = new Map(harbour.quays.map((quay) => [quay.id, quay.spot]))
+  const runs = harbour.ways.map((way) => ({
+    way,
+    from: spots.get(way.from) ?? { x: Number.NaN, y: Number.NaN },
+    to: spots.get(way.to) ?? { x: Number.NaN, y: Number.NaN },
+  }))
+  /** Each berth as `scene.ts` hits it, with her plank's two ends, which are allowed to touch it. */
+  const berths = harbour.moorings.map((mooring) => {
+    const middle = { x: mooring.spot.x + BERTH.pitch / 2, y: mooring.spot.y - BERTH.laneCentre }
+    return {
+      box: berthAround(middle),
+      ends: [
+        { x: middle.x - BERTH.pitch / 2, y: middle.y },
+        { x: middle.x + BERTH.pitch / 2, y: middle.y },
+      ],
+    }
+  })
+  const same = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+    Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9
+
+  it('reaches the shore from every berth, on planks and not by boat', () => {
+    expect(reachesShore(harbour)).toBe(true)
+    expect(harbour.ways.filter((way) => way.kind === 'tender')).toStrictEqual([])
+  })
+
+  /** The honeycomb, and the spurs and channels too: nothing in the harbour leaves the lattice's three directions. */
+  it('runs every way level or along the diagonal', () => {
+    for (const run of runs) {
+      expect(onTheLattice(run.from, run.to)).toBe(true)
+    }
+  })
+
+  /**
+   * The measurement `SLACK.along` was widened for: a way may end on a berth's plank and must not
+   * pass through anybody's hull or caption on the way.
+   */
+  it('clears a berth with every lattice way', () => {
+    const crossing = runs.flatMap((run) =>
+      berths
+        .filter((berth) => !berth.ends.some((end) => same(end, run.from) || same(end, run.to)))
+        .filter((berth) => cuts(run.from, run.to, berth.box))
+        .map((berth) => ({ run: [run.from, run.to], berth: berth.box })),
+    )
+
+    expect(crossing).toStrictEqual([])
+  })
+
+  /**
+   * Her plank is a tree way and her lines are measured to it, so they are the length of the lane
+   * and not the distance to some diagonal — which is what hung a hull far below her plank before.
+   */
+  it('hangs every ship off her own level plank', () => {
+    for (const mooring of harbour.moorings) {
+      expect(reachOf(harbour, mooring)).toBeCloseTo(BERTH.laneCentre)
+    }
+  })
+
+  /** Inland basins drop into a channel, and every walk to land ends on the drawn shore. */
+  it('lands on the shore the ground is drawn with', () => {
+    const shore = shoreOf(harbour.width, harbour.height)
+    const roots = harbour.quays.filter((quay) => quay.rank === 'root')
+
+    expect(roots.length).toBeGreaterThan(1)
+
+    for (const root of roots) {
+      const onEdge =
+        Math.abs(root.spot.x - shore.left) < 1e-9 ||
+        Math.abs(root.spot.x - shore.right) < 1e-9 ||
+        Math.abs(root.spot.y - shore.top) < 1e-9 ||
+        Math.abs(root.spot.y - shore.bottom) < 1e-9
+
+      expect(onEdge).toBe(true)
+    }
+
+    expect(harbour.quays.some((quay) => quay.rank === 'stub')).toBe(true)
   })
 })
