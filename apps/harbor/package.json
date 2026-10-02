@@ -13,8 +13,8 @@
     "test:lint:typecheck": "vue-tsc --noEmit",
     "test:unit": "vitest run --coverage",
     "tauri": "tauri",
-    "app": "HAFEN_CLI='pnpm --filter @hafen/cli exec tsx src/index.ts' tauri dev",
-    "app:build": "HAFEN_CLI='pnpm --filter @hafen/cli exec tsx src/index.ts' tauri build",
+    "app": "tauri dev",
+    "app:build": "tauri build",
     "measure": "mkdir -p \"${XDG_CACHE_HOME:-$HOME/.cache}/hafen\" && pnpm --filter @hafen/cli exec tsx src/index.ts schnappschuss > \"${XDG_CACHE_HOME:-$HOME/.cache}/hafen/snapshot.json\""
   },
   "dependencies": {

@@ -15,9 +15,10 @@ Daran misst sich der Rest. Jeder Punkt unten, der das nicht näher bringt, ist n
 
 ## Der Blocker, und die Entscheidung dagegen
 
-Das Fenster liest `snapshot.json` und *misst* über `$HAFEN_CLI`, sonst über `hafen` auf dem PATH.
-Auf einem fremden Rechner existiert beides nicht: ein geladenes Binary zeigt heute einen Fehler
-mit einer Umgebungsvariable darin.
+Das Fenster las `snapshot.json` und *maß* über `$HAFEN_CLI`, sonst über `hafen` auf dem PATH.
+Auf einem fremden Rechner existiert beides nicht: ein geladenes Binary zeigte einen Fehler mit
+einer Umgebungsvariable darin. (Vergangenheit seit Baustelle 1 — die CLI-Brücke ist am 02.10.2026
+mit 333 Zeilen Rust gefallen, weil nichts sie mehr rief.)
 
 Zwei Wege standen zur Wahl. Gewählt ist der zweite.
 
