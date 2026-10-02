@@ -26,31 +26,41 @@ unterscheidet sich zwischen einer Rust-Crate, einem Nuxt-Mirror und einer Tauri-
 am Ende ein Artefakt herauskommen muss, nicht. Sie fragt nicht nach einem Skriptnamen und nicht
 nach einem Werkzeug — sie fragt, ob überhaupt jemand den Weg bis zum Ende geht.
 
-## Warum beide Prüfungen heute von Hand sind
+## Wie gemessen wird
 
-`CheckRole` kennt vier Rollen — `lint`, `typecheck`, `unit`, `e2e` (`role.ts`). Eine fünfte für
-den Bau gibt es nicht, also kann diese Quest heute kein `pruef: rolle` stellen, und ohne die
-Rolle auch kein `pruef: rolle-in-ci`. Dasselbe Muster wie bei den zwei Handprüfungen in
-`lint-standard`: der Blindfleck wird benannt statt simuliert, und die Messung liegt in einem
-eigenen Auftrag.
+Beide Prüfungen messen, keine ist mehr von Hand. Der Bau ist dabei **keine fünfte Rolle**: eine
+Rolle urteilt über den Quelltext und darf den Baum nicht ändern (`judges` in `role.ts`), ein Bau
+schreibt in den Baum, `dist/` und `target/`. Deshalb hat er eine eigene Tabelle neben den Rollen
+(`BUILD_COMMANDS`) und `judges` wird auf ihn nicht angewandt — ein Bau ist kein Richter.
 
-Dabei ist die Frage nicht bloß „noch eine Rolle dazu". Ein Bau ist der Grenzfall der Regel, die
-`judges` und `namedAsWriter` in `role.ts` ziehen: ein Check darf den Baum nicht ändern, damit er
-grün wird — und ein Bau **schreibt** in den Baum, `dist/` und `target/`. Der Unterschied ist, dass
-er keine Quelldatei umschreibt, sondern neben sie legt; ob diese Unterscheidung messbar ist oder
-ob der Bau eine eigene Kategorie neben den vier Rollen braucht, ist genau das, was der Auftrag zu
-entscheiden hat.
+- `baut` liest die Befehle der Skripte, nicht ihre Namen: `"bundle": "vite build"` baut,
+  `"build": "turbo build"` übergibt nur. Ein Werkzeug, das keine Tabelle kennt, verrät sich am
+  Unterbefehl (`vuepress build`, `storybook build`); und behauptet ein Skript per Namen einen
+  Bau, läuft aber etwas Ungelesenes (`tsx esbuild.config.ts`), ist die Prüfung `nicht messbar`
+  und nennt den Befehl — kein erfundenes `verletzt`.
+- `baut-in-ci` liest die `run:`-Schritte, `run: |`-Blöcke eingeschlossen, und folgt einem
+  `npm run build` in das Skript, das er aufruft (`Contract.buildsInCi`). Bis 02.10.2026 las sie
+  jede Zeile für sich und bescheinigte neun Schiffen, die ihren Build in der CI laufen ließen,
+  keinen zu haben.
 
 ## Was `gilt_fuer` hier noch nicht sagen kann
 
-`SHIP_TRAITS` kennt `node` und `rust`, und keines der beiden heißt „hat ein Artefakt". Eine
-Bibliothek, die als TypeScript-Quelle veröffentlicht wird, und ein Helmfile-Repo schulden hier
-nichts — beide sind aber `node`. Solange die Prüfungen von Hand sind, kostet das nichts: eine
-manuelle Antwort ist `nicht messbar` und damit ausdrücklich **nicht** `verletzt`, sie erzeugt
-also keinen Kandidaten in der Rangliste (`contractCandidates` liest nur `violatedQuests`). Sobald
-die Rolle da ist, muss dieselbe Frage beantwortet sein, sonst behauptet die Quest bei jedem
-Repo ohne Artefakt eine Lücke — dieselbe Pauschale, gegen die der ganze Abschnitt „Quests"
-geschrieben wurde.
+`SHIP_TRAITS` kennt kein Merkmal „hat ein Artefakt", und `node` heißt es nicht. Solange beide
+Prüfungen von Hand waren, kostete das nichts: eine manuelle Antwort ist `nicht messbar`. Diese
+Datei sagte voraus, was mit der Messung kommen würde — die Quest behauptet bei jedem Repo ohne
+Artefakt eine Lücke. Gemessen am 02.10.2026 ist das eingetreten, in zwei Formen:
+
+- **Nichts zu bauen.** `funkspruch-archiv` läuft als `node index.js` aus dem
+  Quelltext, `lib_tween` ist eine PHP-Bibliothek mit einem Manifest daneben. Beide bekommen
+  „kein Skript baut" und schulden doch kein Artefakt — das ist die falsche Lücke.
+- **Gebaut wird nur in der CI.** Die sechs Leuchtturm-Rebrandings (`Leuchtturm-…`, `windstaerke`,
+  `lernwerk`, `Brise-Net-…`, `Kutter-…`, `Lotsenverein-…`) tragen ein `package.json`
+  ohne Skripte als Konfiguration und bauen ihr Docker-Image im Workflow. Das ist ein Bau, aber keiner, den jemand lokal anstoßen
+  kann — ob das die Forderung erfüllt, ist eine Entscheidung und keine Messung.
+
+Was fehlt, ist die Messung „dieses Schiff liefert etwas aus" — ein Merkmal, wie `tauri` eines ist
+—, nicht eine Liste der Repos, denen der Bau erlassen wird. Bis dahin steht eine Befreiung im
+Register, an einer Stelle und von Hand.
 
 ## Der Befund, der sie ausgelöst hat
 
