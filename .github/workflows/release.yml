@@ -31,7 +31,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-  # Gebaut wird erst, wenn ein Release wirklich entstanden ist: vier Tauri-Builds
+  # Gebaut wird erst, wenn ein Release wirklich entstanden ist: fünf Tauri-Builds
   # auf jeden Push wären Minuten für ein Artefakt, das niemand lädt.
   build-tauri:
     needs: release-please
@@ -50,6 +50,11 @@ jobs:
             args: "--target x86_64-apple-darwin"
           - platform: ubuntu-22.04
             args: ""
+          # Linux arm64 auf dem eigenen Runner statt kreuzkompiliert: webkit2gtk und die
+          # Bundler (deb, rpm, AppImage) wollen ein arm64-System, und 22.04 wie beim x64-Build,
+          # damit beide gegen dieselbe glibc gebaut sind.
+          - platform: ubuntu-22.04-arm
+            args: ""
           - platform: windows-latest
             args: ""
 
@@ -58,7 +63,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -123,7 +128,7 @@ jobs:
           projectPath: apps/harbor
           tagName: ${{ needs.release-please.outputs.tag_name }}
           args: ${{ matrix.args }}
-          # Die Datei, die ein laufendes Binary fragt. Jeder der vier Jobs ergänzt seine
+          # Die Datei, die ein laufendes Binary fragt. Jeder der fünf Jobs ergänzt seine
           # Plattform in derselben `latest.json` -- sie wird gelesen und zurückgeschrieben,
           # nicht überschrieben, sonst kennte das Release nur die Plattform, die zuletzt
           # fertig wurde.

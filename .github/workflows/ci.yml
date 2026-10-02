@@ -49,17 +49,18 @@ jobs:
   rust:
     strategy:
       fail-fast: false
-      # Drei Plattformen, weil für drei released wird. Der Rust-Teil ist reines std —
-      # es gibt keinen #[cfg]-Zweig, der nur auf einer davon kompiliert, und genau das
-      # ist die Aussage, die hier nachgewiesen wird.
+      # Jede Plattform, für die released wird. Der Rust-Teil ist reines std — es gibt
+      # keinen #[cfg]-Zweig, der nur auf einer davon kompiliert, und genau das ist die
+      # Aussage, die hier nachgewiesen wird. Linux arm64 steht hier, damit der erste Build
+      # auf ARM nicht der im Release ist.
       matrix:
-        platform: [ubuntu-22.04, windows-latest, macos-latest]
+        platform: [ubuntu-22.04, ubuntu-22.04-arm, windows-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
