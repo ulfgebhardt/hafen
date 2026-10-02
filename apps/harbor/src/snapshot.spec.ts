@@ -8,7 +8,6 @@ import {
   loadForge,
   loadSnapshot,
   measuring,
-  NOTHING_RUNNING,
   openForge,
   refetchForge,
   remeasure,
@@ -20,6 +19,7 @@ import {
   stopMeasuring,
 } from './snapshot'
 
+import type { Progress } from './components/measuring'
 import type { Forge, Snapshot } from './snapshot'
 import type { Ship } from '@hafen/core'
 
@@ -135,11 +135,37 @@ function ship(path: string, name = path.split('/').at(-1) ?? ''): unknown {
  * result.
  */
 function asAppWith(replies: Record<string, unknown>): ReturnType<typeof vi.fn> {
-  const invoke = vi.fn<(command: string) => Promise<unknown>>(async (command) =>
-    Promise.resolve(replies[command]),
+  const invoke = vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>(
+    async (command, args) =>
+      await Promise.resolve(
+        typeof replies[command] === 'function'
+          ? (replies[command] as (a?: Record<string, unknown>) => unknown)(args)
+          : replies[command],
+      ),
   )
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
   return invoke
+}
+
+/**
+ * A window that can measure: the places, and a filesystem that answers nothing.
+ *
+ * The survey itself is `packages/core`'s and is tested there against its own mock. What is tested
+ * here is that the window drives it — where it looks, what it writes, and what it does when that
+ * fails. A repository whose git calls all come back empty is still a ship, which is what makes
+ * this a short fixture rather than a fake fleet.
+ */
+const MEASURING: Record<string, unknown> = {
+  port_places: { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] },
+  port_trees_with: ['/repos/org/a'],
+  // The root is readable and holds nothing the walk needs to see — `port_trees_with` is what
+  // finds the repositories now.
+  port_read_dir: [],
+  port_read_file: null,
+  port_is_directory: false,
+  port_real_path: (args?: Record<string, unknown>) => args?.['path'],
+  port_run: { code: 1, stdout: '', stderr: '' },
+  port_write_file: null,
 }
 
 describe('acting on the harbour', () => {
@@ -192,38 +218,38 @@ describe('acting on the harbour', () => {
   })
 
   describe(remeasure, () => {
-    it('measures everything and writes what it got', async () => {
-      const fresh = { ...SNAPSHOT, at: 'jetzt', ships: [ship('/a')] }
-      const invoke = asAppWith({
-        measure: { json: JSON.stringify(fresh), error: null },
-        store: null,
-      })
+    /**
+     * The window measures **by itself** now.
+     *
+     * It used to start the CLI — `$HAFEN_CLI`, else `hafen` on the PATH — and on a stranger's
+     * machine neither exists, so a downloaded binary measured nothing and showed an error with an
+     * environment variable in it.
+     */
+    it('measures the fleet itself and writes what it got', async () => {
+      const invoke = asAppWith(MEASURING)
 
       const after = await remeasure(SNAPSHOT)
 
       expect(after.ships).toHaveLength(1)
-      expect(invoke).toHaveBeenCalledWith('measure', { only: null })
-      expect(invoke).toHaveBeenCalledWith('store', { json: JSON.stringify(after) })
+      expect(after.ships[0]?.path).toBe('/repos/org/a')
+      // No CLI anywhere in it.
+      expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+      expect(invoke).toHaveBeenCalledWith('port_trees_with', expect.anything())
+      expect(invoke).toHaveBeenCalledWith('port_write_file', {
+        path: '/cache/snapshot.json',
+        contents: JSON.stringify(after),
+      })
     })
 
     /** The whole point of the per-project button: it must not measure the other eighty-nine. */
-    it('asks for one repository when it was given one', async () => {
-      const invoke = asAppWith({
-        measure: { json: JSON.stringify({ ...SNAPSHOT, ships: [ship('/a', 'neu')] }), error: null },
-        store: null,
-      })
+    it('reads one repository when it was given one, and searches for none', async () => {
+      const invoke = asAppWith(MEASURING)
       const before = { ...SNAPSHOT, ships: [ship('/a'), ship('/b')] } as Snapshot
 
       const after = await remeasure(before, '/a')
 
-      expect(invoke).toHaveBeenCalledWith('measure', { only: '/a' })
-      expect(after.ships.map((one) => one.name)).toStrictEqual(['neu', 'b'])
-    })
-
-    it('reports what the measurement said rather than an empty harbour', async () => {
-      asAppWith({ measure: { json: null, error: 'hafen nicht ausführbar' } })
-
-      await expect(remeasure(SNAPSHOT as Snapshot)).rejects.toThrow('hafen nicht ausführbar')
+      expect(invoke).not.toHaveBeenCalledWith('port_trees_with', expect.anything())
+      expect(after.ships.map((one) => one.path)).toStrictEqual(['/a', '/b'])
     })
 
     /**
@@ -231,12 +257,19 @@ describe('acting on the harbour', () => {
      * would not be, and only one of those two is visible from here.
      */
     it('says when the cache could not be written', async () => {
-      asAppWith({
-        measure: { json: JSON.stringify(SNAPSHOT), error: null },
-        store: 'Platte voll',
-      })
+      asAppWith({ ...MEASURING, port_write_file: 'Platte voll' })
 
       await expect(remeasure(SNAPSHOT as Snapshot)).rejects.toThrow('Platte voll')
+    })
+
+    /** A machine nobody has told where to look has no roots — an empty harbour, not a guess. */
+    it('measures nothing where no root has been named', async () => {
+      asAppWith({
+        ...MEASURING,
+        port_places: { store: '/store', snapshot: '/cache/snapshot.json', roots: [] },
+      })
+
+      await expect(remeasure(SNAPSHOT as Snapshot)).resolves.toHaveProperty('ships', [])
     })
 
     it('refuses in a window that has no shell', async () => {
@@ -253,19 +286,16 @@ describe('acting on the harbour', () => {
      * that was just written is the kept status field the whole tool exists to avoid.
      */
     it('writes the register and then measures that repository again', async () => {
-      const invoke = asAppWith({
-        register: null,
-        measure: { json: JSON.stringify({ ...SNAPSHOT, ships: [ship('/a', 'neu')] }), error: null },
-        store: null,
-      })
+      const invoke = asAppWith({ ...MEASURING, register: null })
       const before = { ...SNAPSHOT, ships: [ship('/a')] } as Snapshot
 
       const after = await setRegister(before, 'archivieren', '/a')
 
       expect(invoke).toHaveBeenCalledWith('register', { action: 'archivieren', path: '/a' })
-      expect(invoke).toHaveBeenCalledWith('measure', { only: '/a' })
-      // `adopt` fills what an older snapshot never recorded, so the ship comes back filled out.
-      expect(after.ships[0]).toMatchObject(ship('/a', 'neu') as object)
+      // That one repository and no search: the register decides, the ship carries, and the answer
+      // comes back from measuring it again.
+      expect(invoke).not.toHaveBeenCalledWith('port_trees_with', expect.anything())
+      expect(after.ships.map((one) => one.path)).toStrictEqual(['/a'])
     })
 
     it('does not measure when the register refused', async () => {
@@ -545,44 +575,42 @@ describe('watching a measurement', () => {
     vi.unstubAllGlobals()
   })
 
-  it('asks the shell how far it has got', async () => {
-    asApp({ at: 12, of: 94, path: '/repos/org/ship', running: true, stopped: false })
-
-    await expect(measuring()).resolves.toStrictEqual({
-      at: 12,
-      of: 94,
-      path: '/repos/org/ship',
-      running: true,
-      stopped: false,
+  /**
+   * The progress is the window's own now.
+   *
+   * It used to be a *process* with a progress file that this side polled through a command. A
+   * window that measures by itself has neither a process nor a file, and asking a command for a
+   * number this module already holds would be the longer way round to the same answer.
+   */
+  it('counts the fleet and then the repositories as they land', async () => {
+    const seen: Progress[] = []
+    asAppWith({
+      ...MEASURING,
+      port_trees_with: ['/repos/org/a', '/repos/org/b'],
+      port_run: () => {
+        seen.push(measuring())
+        return { code: 1, stdout: '', stderr: '' }
+      },
     })
+
+    await remeasure(SNAPSHOT)
+
+    // Counted before the first repository was read, and running while it was.
+    expect(seen.some((one) => one.of === 2 && one.running)).toBe(true)
+    // And still when it is over: the bar is put away by the caller, not by a stale reading.
+    expect(measuring().running).toBe(false)
   })
 
-  /** An older shell that does not know the command yet answers less than the shape asks for. */
-  it('fills in what the shell left out', async () => {
-    asApp({ at: 3 })
+  /**
+   * Stopping keeps what was measured.
+   *
+   * It was a signal to a separate process; it is a flag the survey reads before each repository
+   * now. A reading already taken is true whether or not the rest followed, and throwing it away
+   * because the rest did not is the one thing a measurement must never do.
+   */
+  it('stops the survey and keeps what it had', () => {
+    stopMeasuring()
 
-    await expect(measuring()).resolves.toStrictEqual({ ...NOTHING_RUNNING, at: 3 })
-  })
-
-  it('says nothing is running where there is no shell at all', async () => {
-    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
-
-    await expect(measuring()).resolves.toStrictEqual(NOTHING_RUNNING)
-  })
-
-  it('stops the survey, and says so when that failed', async () => {
-    asApp(null)
-
-    await expect(stopMeasuring()).resolves.toBeUndefined()
-
-    asApp('Abbruch fehlgeschlagen: kein Prozess')
-
-    await expect(stopMeasuring()).rejects.toThrow('kein Prozess')
-  })
-
-  it('has nothing to stop in a browser', async () => {
-    vi.stubGlobal('__TAURI_INTERNALS__', undefined)
-
-    await expect(stopMeasuring()).resolves.toBeUndefined()
+    expect(measuring().stopped).toBe(true)
   })
 })

@@ -904,7 +904,8 @@ pub fn run() {
             ports::port_real_path,
             ports::port_trees_with,
             ports::port_write_file,
-            ports::port_host
+            ports::port_host,
+            ports::port_places
         ])
         .run(tauri::generate_context!())
         .expect("error while running Hafen");

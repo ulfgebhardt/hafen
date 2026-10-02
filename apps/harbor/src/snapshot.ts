@@ -14,13 +14,16 @@
  * file rather than by this comment.
  */
 
-import { slugOf } from '@hafen/core'
+import { inspectShip, slugOf } from '@hafen/core'
 
+import { tauriPorts } from './adapters/tauri'
 import { NOTHING_RUNNING } from './components/measuring'
 import { TOOLS } from './components/tools'
+import { demandsOf, identities, registerIn, surveyInWindow } from './survey'
 
 import type { Progress } from './components/measuring'
 import type { ToolName } from './components/tools'
+import type { Places } from './survey'
 import type { ForgeStats, Ship, Slug } from '@hafen/core'
 
 export interface Snapshot {
@@ -77,6 +80,28 @@ export function adopt(snapshot: Snapshot): Snapshot {
       }
     }),
   }
+}
+
+/**
+ * How far the measurement has got, and whether somebody has asked it to stop.
+ *
+ * Kept here because the measuring now happens here. It used to be a *process* with a progress file
+ * and a kill signal; a window that measures by itself has neither, and polling a command for a
+ * number this module already holds would be the longer way round to the same answer.
+ */
+let running: Progress = NOTHING_RUNNING
+let asked = false
+
+/**
+ * A file next to another one.
+ *
+ * The forge reading is placed *beside* the snapshot and never derived from a cache key: an
+ * override names a **file**, and rebuilding its name would throw the override's own filename
+ * away. The Rust half keeps the same rule — one placement, two readers.
+ */
+function beside(path: string, name: string): string {
+  const cut = path.lastIndexOf('/')
+  return cut < 0 ? name : `${path.slice(0, cut)}/${name}`
 }
 
 /** What the Rust side answers: the path either way, the contents or the reason. */
@@ -215,30 +240,88 @@ export function spliceShip(snapshot: Snapshot, fresh: Snapshot): Snapshot {
  * Only in Tauri. In a browser there is nothing to run, and a button that failed in the click would
  * be worse than no button — which is why `canMeasure` exists and the bar asks it first.
  */
+/**
+ * One repository, measured on its own — what the per-ship button asks for.
+ *
+ * A full survey is ninety repositories and some seconds, and asking for all of them to learn what
+ * one of them just did is the reason refreshing felt like something to avoid. The shape of the
+ * answer is the same either way, so the caller splices by path and needs no second format.
+ */
+async function inspectInWindow(
+  places: Places,
+  path: string,
+  forge: readonly ForgeStats[],
+): Promise<{ ships: readonly Ship[] }> {
+  const [catalog, register, ownEmails] = await Promise.all([
+    demandsOf(places.store),
+    registerIn(places.store),
+    identities(),
+  ])
+  return {
+    ships: [
+      await inspectShip(tauriPorts, path, {
+        catalog: catalog.quests,
+        ownEmails,
+        archived: register.archived.includes(path),
+        forge,
+      }),
+    ],
+  }
+}
+
 export async function remeasure(current: Snapshot, only?: string): Promise<Snapshot> {
   const invoke = caller()
   if (invoke === null) {
     throw new Error('In diesem Fenster laesst sich nicht messen — es laeuft ohne Hafen-Huelle.')
   }
 
-  const measured = (await invoke('measure', { only: only ?? null })) as {
-    json: string | null
-    error: string | null
-  }
-  if (measured.json === null) {
-    throw new Error(measured.error ?? 'Messung ohne Antwort')
-  }
+  const places = (await invoke('port_places')) as Places
+  running = { at: 0, of: only === undefined ? 0 : 1, path: '', running: true, stopped: false }
+  asked = false
 
-  const fresh = adopt(JSON.parse(measured.json) as Snapshot)
-  const next = only === undefined ? fresh : spliceShip(current, fresh)
+  try {
+    /*
+     * What the forge said, read off the disk — **a file, never a request**.
+     *
+     * The survey asks nobody anything, here as in the CLI: this is what `hafen forge` wrote
+     * earlier, with its own timestamp. Without it the quests that can only be answered from a
+     * forge stay `nicht messbar`, which is the fifth verdict doing its job.
+     */
+    const cached = await tauriPorts.fs.readFile(beside(places.snapshot, 'forge.json'))
+    const forge = cached === null ? [] : (JSON.parse(cached) as Forge).stats
+    const measured =
+      only === undefined
+        ? await surveyInWindow(places, {
+            forge,
+            watching: {
+              onCount: (total) => {
+                running = { ...running, of: total }
+              },
+              onShip: (ship) => {
+                running = { ...running, at: running.at + 1, path: ship.path }
+              },
+            },
+            stop: () => asked,
+          })
+        : await inspectInWindow(places, only, forge)
 
-  const failure = (await invoke('store', { json: JSON.stringify(next) })) as string | null
-  if (failure !== null) {
-    // Said and not swallowed: the picture is right, the next start would not be, and only one of
-    // those two is visible from here.
-    throw new SnapshotError(failure, '(Cache)', 'hafen schnappschuss')
+    const fresh = adopt({
+      at: new Date().toISOString(),
+      root: places.roots.join(', '),
+      ships: measured.ships,
+    })
+    const next = only === undefined ? fresh : spliceShip(current, fresh)
+
+    const failure = await tauriPorts.fs.writeFile(places.snapshot, JSON.stringify(next))
+    if (failure !== null) {
+      // Said and not swallowed: the picture is right, the next start would not be, and only one of
+      // those two is visible from here.
+      throw new SnapshotError(failure, places.snapshot, 'hafen schnappschuss')
+    }
+    return next
+  } finally {
+    running = { ...running, running: false }
   }
-  return next
 }
 
 /** The four things the register can be told. The CLI's own words — one vocabulary, not a mapping. */
@@ -419,28 +502,19 @@ export async function openForge(url: string): Promise<void> {
 export type { Progress } from './components/measuring'
 export { NOTHING_RUNNING } from './components/measuring'
 
-export async function measuring(): Promise<Progress> {
-  const invoke = caller()
-  if (invoke === null) {
-    return NOTHING_RUNNING
-  }
-  return { ...NOTHING_RUNNING, ...((await invoke('measure_progress')) as Partial<Progress>) }
+export function measuring(): Progress {
+  return running
 }
 
 /**
  * Stop measuring.
  *
- * The survey is a separate process that reads repositories and writes nothing, so stopping it
- * leaves nothing half-done: the cache still holds the last complete measurement, which is exactly
- * what the header goes on saying.
+ * It was a signal to a separate process; the window measures by itself now, so it is a flag the
+ * survey reads before each repository. What has been measured is **kept** — the cache still holds
+ * the last complete measurement, which is exactly what the header goes on saying, and a reading
+ * already taken is true whether or not the rest followed.
  */
-export async function stopMeasuring(): Promise<void> {
-  const invoke = caller()
-  if (invoke === null) {
-    return
-  }
-  const failure = (await invoke('measure_cancel')) as string | null
-  if (failure !== null) {
-    throw new Error(failure)
-  }
+export function stopMeasuring(): void {
+  asked = true
+  running = { ...running, stopped: true }
 }
