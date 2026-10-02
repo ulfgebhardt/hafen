@@ -114,6 +114,11 @@ hängt, und zeigt eine Zeile, wenn ja — sonst nichts. Kein Update ist keine Na
 Fehler beim Nachsehen auch nicht: wer offline ist, hat kein Problem mit dem Hafen. Installiert wird
 nur, was mit dem privaten Gegenstück des Schlüssels in `tauri.conf.json` signiert wurde.
 
+**Terminal und Shell sind deine.** Die Knöpfe am Datenblatt (Terminal, lazygit, Agent) öffnen das
+Terminal aus `$HAFEN_TERMINAL`, sonst aus `$TERMINAL` — die Variable, die z. B. eine `.xinitrc`
+setzt —, sonst das erste installierte von `alacritty`, `kitty`, `wezterm`, `foot`, `konsole`,
+`urxvt`, `xterm`. Die Shell darin ist `$HAFEN_SHELL`, sonst die Login-Shell aus `/etc/passwd`.
+
 Im Checkout startet die App ohne Installation:
 
 ```sh
