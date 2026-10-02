@@ -26,6 +26,7 @@ const stats = (stars: number): ForgeStats => ({
   pulls: 0,
   language: null,
   guard: null,
+  forkedFrom: null,
 })
 
 const reading = (over: Partial<ReturnType<typeof readingsOf>> = {}) => ({

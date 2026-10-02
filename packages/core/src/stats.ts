@@ -95,6 +95,20 @@ export interface ForgeStats {
    * guards it" — the difference between `nicht messbar` and an invented gap.
    */
   guard: Guard | null
+  /**
+   * Where this repository came from, if the forge says it is a fork — `owner/name`, else `null`.
+   *
+   * The one fact the repository itself cannot hold. `lineage.ts` can see that a remote is of the
+   * same line and counts how far apart they are, and that reading is identical for the upstream of
+   * a fork and for a mirror somebody abandoned: `Kutter-…-Rebranding` is 75 commits ahead of
+   * `leuchtturm/master`, and `stimme.example` is 7 ahead of its old gogs address. Which of them is the
+   * origin is in the forge's own record and nowhere in git, so it arrives here with the forge
+   * reading — with the forge's timestamp, and `null` where nobody was asked.
+   *
+   * Only GitHub answers it. Gitea has the field but is asked over REST here, and a fork it does
+   * not report stays `null` rather than becoming "not a fork": unasked is not absent.
+   */
+  forkedFrom: string | null
 }
 
 /** What stands between a push and the default branch. */
@@ -131,6 +145,8 @@ const QUERY = `query($owner:String!,$repo:String!){
   repository(owner:$owner,name:$repo){
     stargazerCount
     forkCount
+    isFork
+    parent{nameWithOwner}
     watchers{totalCount}
     primaryLanguage{name}
     issues(states:OPEN){totalCount}
@@ -149,6 +165,8 @@ interface GraphAnswer {
     repository?: {
       stargazerCount?: number
       forkCount?: number
+      isFork?: boolean
+      parent?: { nameWithOwner?: string } | null
       watchers?: { totalCount?: number }
       primaryLanguage?: { name?: string } | null
       issues?: { totalCount?: number }
@@ -243,6 +261,11 @@ function fromGraph(slug: Slug, raw: string): ForgeStats | null {
     pulls: repo.pullRequests?.totalCount ?? 0,
     language: repo.primaryLanguage?.name ?? null,
     guard: guardOf(repo),
+    /*
+     * Only when the forge says *both*: a `parent` without `isFork` would be the network of a
+     * repository that was never forked, and a name without the flag is not the claim this makes.
+     */
+    forkedFrom: repo.isFork === true ? (repo.parent?.nameWithOwner ?? null) : null,
   }
 }
 
@@ -272,6 +295,8 @@ function fromGitea(slug: Slug, raw: string): ForgeStats | null {
     // Not asked of Gitea: it keeps branch protection somewhere else entirely, and an answer of
     // "nothing guards it" that was never asked for is the invented gap this whole field avoids.
     guard: null,
+    // Gitea reports a fork, but over REST and not asked for here: unasked is not absent.
+    forkedFrom: null,
   }
 }
 

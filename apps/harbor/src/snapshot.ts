@@ -62,6 +62,7 @@ const ADDED: Partial<Ship> = {
   enlisted: false,
   lines: null,
   roots: [],
+  lineage: [],
 }
 
 /**

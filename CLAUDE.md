@@ -49,6 +49,7 @@ englische Fachbegriffe — keine Erfindungen, und **nicht abweichen**.
 | Aktiv / Ruhend / Archiviert | `active` / `dormant` / `archived` | Werftkapazität | `capacity` |
 | Reederei (Orga-Gruppe) | `fleetlet` | Sippe (verwandte Reedereien) | `kindred` |
 | Familie (dasselbe Projekt) | `family` | Beiboot (Submodul) | `tender` |
+| Spiegel / eingebaut / ungewiss | `mirror` / `absorbed` / `uncertain` | Herkunft (vom Fork-Original) | `forkedFrom` |
 
 `dock` hieß in Werft der Worktree und ist hier **frei** — die Worktree-Verwaltung ist genau der
 Teil, der nicht mitkam. Der Name wurde für dieses Projekt erwogen und verworfen: der Hafen *ist*
@@ -78,6 +79,21 @@ Technik, das Werkzeug ist der Hafen; kein Konflikt.
   verfehlt jeden interessanten Fall: acht Repos in sechs Orgas teilen Wurzel `c0ffee11`.
   Gemeinsame *Autoren* wurde erwogen und verworfen: bei einer eigenen Flotte sagt das Signal „ich
   habe an beidem gearbeitet", und das haben alle gemeinsam.
+- **Ein zweiter Remote ist nicht automatisch ein Spiegel** (`lineage.ts`). Bis 02.10.2026 hieß jeder
+  Remote außer `origin` so, und das war ein Wort für drei Dinge: gemessen über 21 solche Remotes sind
+  **vier** Spiegel (beide Adressen halten dieselben Commits), **sechs** eingebaut (fremde Wurzel, per
+  subtree hereingemischt) und **elf** dieselbe Linie bei anderem Repo. Für die Leuchtturm-Rebrandings sagte
+  „Spiegel" das Gegenteil der Wahrheit: ein Spiegel hält dieselbe Arbeit und darf ignoriert werden,
+  eine Herkunft ist der Ort, an den eine Änderung gehört.
+  **Die Richtung steht nicht im Repository.** `kutter` liegt 75 Commits vor `leuchtturm/master` und
+  `stimme.example` 7 vor seiner alten gogs-Adresse — lokal ist das dieselbe Lesung. Deshalb gibt es kein
+  lokales `origin`-Urteil, sondern `ungewiss`, und `isFork { parent }` in der GraphQL-Abfrage liefert
+  die Richtung mit dem Zeitstempel der Forge. **Die Forge überstimmt nur in eine Richtung**
+  (`kinship.ts`): ein gemessener Spiegel bleibt einer, denn dass GitHub dieses Repo einen Fork nennt,
+  macht die andere Adresse nicht zu anderer Arbeit.
+  Zwei Fehler hat erst die Flottenmessung gefunden: die Reihenfolge der Prüfungen (die Wurzel *vor*
+  den Zählern zu verlangen verlor zwei sichere Spiegel auf Gitea-Origins ohne `origin/HEAD`) und der
+  verschenkte Messwert (`defaultBranch` lag schon da).
 - **Die Sippe ordnet, sie gruppiert nicht** (`kindredOf` in `flags.ts`). Nach *Familie* gruppiert
   wären 92 Schiffe 72 Gruppen — strung out statt kompakt, weil fast jede Familie ein Repo ist.
   Eine Ebene höher sind 25 Orgas 15 Sippen, die größte mit neun. Die Orga bleibt das Dock; die

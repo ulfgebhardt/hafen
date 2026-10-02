@@ -179,6 +179,8 @@ export { deferred, mockChecks, mockContract, mockPorts, mockRemote } from './moc
 export type { ForgeReading, ForgeStats, Slug, Unread } from './stats'
 export { familiesOf, addressesOf } from './kin'
 export type { Family } from './kin'
+export { judge, lineageOf, measureLineage } from './lineage'
+export type { Kinship, Lineage } from './lineage'
 export { forgeLinks, isRead, readStats, slugOf, slugsOf } from './stats'
 
 /**
