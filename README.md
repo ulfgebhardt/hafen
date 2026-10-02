@@ -67,7 +67,8 @@ Ohne Argument steht die Hilfe da. Die Wurzel ist als zweites Argument überschre
 
 | Plattform           | Download                                           |
 | ------------------- | -------------------------------------------------- |
-| Linux               | [AppImage][appimage] · [deb][deb] · [rpm][release] |
+| Linux x64           | [AppImage][appimage] · [deb][deb] · [rpm][release] |
+| Linux arm64         | [am Release][release] — ab der nächsten Version    |
 | macOS Apple Silicon | [dmg][dmg-arm]                                     |
 | macOS Intel         | [dmg][dmg-intel]                                   |
 | Windows             | [Installer (exe)][exe] · [msi][msi]                |
@@ -297,20 +298,20 @@ pnpm test:unit   # vitest mit Coverage-Schwellen
 Tests liegen neben der Datei, die sie prüft (`x.ts` / `x.spec.ts`). Die Schwellen in den
 `vitest.config.ts` sind gemessene Werte ohne Luft: ein Punkt Spielraum ist ein Punkt erlaubter
 Verfall, und sie zu heben ist ein eigener Commit. Dieselben beiden Kommandos laufen in der CI,
-dazu `cargo fmt`, `cargo clippy` und `cargo test` auf Linux, macOS und Windows — der Rust-Teil
-ist reines `std`, und dass er auf allen dreien baut, ist eine Aussage, die geprüft wird statt
-behauptet.
+dazu `cargo fmt`, `cargo clippy` und `cargo test` auf Linux (x64 und arm64), macOS und Windows —
+der Rust-Teil ist reines `std`, und dass er auf allen baut, ist eine Aussage, die geprüft wird
+statt behauptet.
 
 ## Releases
 
 Die Version entsteht aus den Commits, nicht aus der Erinnerung: `release-please` liest die
 [Conventional Commits](https://www.conventionalcommits.org/) auf `master`, schlägt den nächsten
-Stand als Pull Request vor, und beim Merge entstehen Tag, Changelog und die vier Tauri-Builds.
+Stand als Pull Request vor, und beim Merge entstehen Tag, Changelog und die fünf Tauri-Builds.
 Deshalb muss ein PR-Titel einem Commit-Typ folgen (`feat:`, `fix:`, `chore:` …) — ein Squash-Merge
 mit dem Titel „fixes" landet sonst in keiner Changelog-Zeile.
 
 Am Release hängt neben den Installern eine `latest.json` — die Datei, die ein laufendes Fenster
-fragt. Jeder der vier Builds schreibt seine Plattform hinein, gelesen und zurückgeschrieben statt
+fragt. Jeder der fünf Builds schreibt seine Plattform hinein, gelesen und zurückgeschrieben statt
 überschrieben; sonst kennte das Release nur die Plattform, die zuletzt fertig wurde. Dass beides
 zusammenkommt — die Datei **und** die Signatur, ohne die der Updater nichts annimmt — prüft die
 Quest `auslauf/aktualisierung`, denn beide Fehler lassen den Build grün durchlaufen.
