@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0](https://github.com/ulfgebhardt/hafen/compare/v1.0.0...v1.1.0) (2026-10-02)
+
+
+### Features
+
+* **ui:** Flotte ohne Archiv, Zoom bleibt beim Wechsel, die Seite folgt dem Schiff ([#7](https://github.com/ulfgebhardt/hafen/pull/7))
+
+
+### Bug Fixes
+
+* **app:** Waben zwischen den Stegenden, und jedes Becken geht zum naechsten Ufer ([#6](https://github.com/ulfgebhardt/hafen/pull/6))
+* **release:** Cargo.lock zieht die Version mit ([#4](https://github.com/ulfgebhardt/hafen/pull/4))
+* **tauri:** das Terminal des Nutzers, und beendete Kinder werden eingesammelt ([#8](https://github.com/ulfgebhardt/hafen/pull/8))
+* **ui:** der Zoom bleibt auch beim Reiterwechsel ([#9](https://github.com/ulfgebhardt/hafen/pull/9))
+* **ui:** die Kopfzeile rechnet vor, woraus deine Punkte bestehen ([#10](https://github.com/ulfgebhardt/hafen/pull/10))
+* **ui:** Waben zwischen den Stegenden, und jedes Becken geht zum nächsten Ufer ([#6](https://github.com/ulfgebhardt/hafen/pull/6))
+
 ## 1.0.0 (2026-10-02)
 
 
