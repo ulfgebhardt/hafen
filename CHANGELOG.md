@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.1.0](https://github.com/ulfgebhardt/hafen/compare/v1.0.0...v1.1.0) (2026-10-02)
+
+
+### Features
+
+* **ui:** Flotte ohne Archiv, Zoom bleibt beim Wechsel, die Seite folgt dem Schiff ([d6c2a70](https://github.com/ulfgebhardt/hafen/commit/d6c2a7090d1169217cc07ab488c777b21b8c97a3))
+* **ui:** Flotte ohne Archiv, Zoom bleibt beim Wechsel, die Seite folgt dem Schiff ([02b8fe6](https://github.com/ulfgebhardt/hafen/commit/02b8fe62d2ce6e450be9c4d0bc5c1b0d0d3597d5))
+
+
+### Bug Fixes
+
+* **app:** Waben zwischen den Stegenden, und jedes Becken geht zum naechsten Ufer ([9662f60](https://github.com/ulfgebhardt/hafen/commit/9662f6006edbe5f7e511d9b592b3d9eb1a5d815f))
+* **release:** Cargo.lock zieht die Version mit ([96b810f](https://github.com/ulfgebhardt/hafen/commit/96b810fa270a8b09b92a71e5e4e31cb7cfd743e9))
+* **release:** Cargo.lock zieht die Version mit ([ee2ad08](https://github.com/ulfgebhardt/hafen/commit/ee2ad0895da6a28d5843ec09da3d7f8121df27f8))
+* **tauri:** das Terminal des Nutzers, und beendete Kinder werden eingesammelt ([eb38ec9](https://github.com/ulfgebhardt/hafen/commit/eb38ec9a17e1ec2e7a0457efd95f5bb382ea9505))
+* **tauri:** das Terminal des Nutzers, und beendete Kinder werden eingesammelt ([3400097](https://github.com/ulfgebhardt/hafen/commit/34000979842e1ed1c9a945a7f88307bf976a8834))
+* **ui:** der Zoom bleibt auch beim Reiterwechsel ([7e17f59](https://github.com/ulfgebhardt/hafen/commit/7e17f59fdaee633db585f3cbe9d920ddf3b94507))
+* **ui:** der Zoom bleibt auch beim Reiterwechsel ([facc4b1](https://github.com/ulfgebhardt/hafen/commit/facc4b1e550eabf5ae221bc6aabee6c434755d7b))
+* **ui:** die Kopfzeile rechnet vor, woraus deine Punkte bestehen ([d3057d7](https://github.com/ulfgebhardt/hafen/commit/d3057d73e0418471c588f65abdc8d3efe501562d))
+* **ui:** die Kopfzeile rechnet vor, woraus deine Punkte bestehen ([7b607a7](https://github.com/ulfgebhardt/hafen/commit/7b607a7242c2489697ba51ac8cc6a2d153998767))
+* **ui:** Waben zwischen den Stegenden, und jedes Becken geht zum nächsten Ufer ([0b7f7ea](https://github.com/ulfgebhardt/hafen/commit/0b7f7ea450a75825c293115fa5ec065861576a3e))
+
 ## 1.0.0 (2026-10-02)
 
 
