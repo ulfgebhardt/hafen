@@ -275,6 +275,51 @@ describe('acting on a ship', () => {
   })
 
   /**
+   * A tab within a view keeps the ship where she stood and how large, the same as the view switch.
+   *
+   * The tabs set the page directly at first, so the fleet sheet and the one with the archive came
+   * up at "everything fits" — the ship still marked, and a speck.
+   */
+  it('carries where the ship stood across a tab within the fleet', async () => {
+    bridge({ ...MEASURES, snapshot: read })
+    // A different answer every time, so the hold the new sheet gets is provably the one asked at
+    // the tab and not one left over from the view switch before it.
+    let asked = 0
+    const page = mount(App, {
+      global: {
+        stubs: {
+          HarborScene: {
+            ...stubs.HarborScene,
+            methods: {
+              where: () => {
+                asked += 1
+                return { x: asked, y: 80, scale: 1.8 }
+              },
+            },
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    const scene = () =>
+      page.findComponent({ name: 'HarborScene' }).vm as unknown as {
+        $emit: (event: string, ...args: readonly unknown[]) => void
+        hold: unknown
+      }
+    const button = (label: RegExp) => page.findAll('button').find((one) => label.test(one.text()))
+
+    await button(/^Flotte/)?.trigger('click')
+    scene().$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+    const before = asked
+    await button(/^mit Archiv/)?.trigger('click')
+    await flushPromises()
+
+    expect(scene().hold).toStrictEqual({ x: before + 1, y: 80, scale: 1.8 })
+  })
+
+  /**
    * A measurement that moves the ship moves the page with her.
    *
    * Archived here, because that is a band change one click can make: the register is written, the
