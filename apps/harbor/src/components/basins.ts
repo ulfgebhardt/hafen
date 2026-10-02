@@ -15,6 +15,13 @@
  * neighbours, so the ways are not designed at all: they are the edges between berths that happen
  * to be next to each other.
  *
+ * **Between the ends of the planks, not the middles of the cells.** A ship lies along her plank,
+ * and her mooring lines, her crane and her stack all assume that plank runs level with her. Joined
+ * at the middle, two thirds of the edges arrived at a slant and the berth hung off a diagonal it
+ * was never built for. Joined at the ends, every berth keeps a level plank, the diagonals run in
+ * the water between two berths, and the network reads as what it is: a honeycomb, two level edges
+ * and four slanted ones to every cell.
+ *
  * **Stretched, because a ship is not round.** A hull is drawn axis-aligned — `scene.ts` sets
  * `body.rotation` from `yawOf` alone, a degree or two of list — so a berth is four times wider
  * than it is deep. The lattice is stretched to match: a column is one berth pitch, a row is half a
@@ -29,11 +36,11 @@
 import { familiesOf, shipPoints } from '@hafen/core'
 
 import { NO_ORG } from './flags'
-import { GAP, TRUNK_X } from './lanes'
-import { MARGIN, QUAY, trimmed } from './moorings'
+import { GAP } from './lanes'
+import { cuts, MARGIN, QUAY, shoreOf } from './moorings'
 import { BERTH, BLOCK } from './plan'
 
-import type { Dock, Harbour, Mooring, Quay, Rank, Way } from './moorings'
+import type { Box, Dock, Harbour, Mooring, Quay, Rank, Shore, Way } from './moorings'
 import type { Side, Spot } from './plan'
 import type { Ship } from '@hafen/core'
 
@@ -128,10 +135,15 @@ export function cellsFor(count: number): readonly Cell[] {
  * visible water between two of them or "these are ninety-two separate repositories" is something
  * the picture contradicts.
  *
- * Across more than along, because that is where it was worse: a column already carries a whole
- * caption between two hulls, and a row carried only the plank.
+ * Across, because that is where it was worse: a column already carries a whole caption between two
+ * hulls, and a row carried only the plank.
+ *
+ * Along, because the diagonal ways run **between** two berths of a row (see `latticeWays`): from
+ * one plank's end down past her caption to the plank below. At 1.3 the gap was a third of what
+ * that run needs and the way cut the neighbour's caption; 1.5 is the first round figure that
+ * clears it (`clears a berth with every lattice way` measures it).
  */
-export const SLACK = { along: 1.3, across: 1.5 } as const
+export const SLACK = { along: 1.5, across: 1.5 } as const
 
 /**
  * How far apart two cells stand, in world units.
@@ -291,19 +303,6 @@ export interface Kindred {
   ships: readonly Ship[]
 }
 
-/**
- * The ranks a basin harbour uses, mapped onto the shared four.
- *
- * The same four jobs in the same order as the fan's root/limb/stub/plank, so the drawing asks
- * "how wide is this and whose is it" once. A third vocabulary for a third arrangement would be
- * three answers to one question.
- */
-const AS: Record<'trunk' | 'spur' | 'edge', Rank> = {
-  trunk: 'limb',
-  spur: 'stub',
-  edge: 'plank',
-}
-
 /** The candidate widths a layout is searched over, as a count of the widest basin. */
 const LANES = [1, 2, 3, 4, 5]
 
@@ -335,125 +334,437 @@ export const MOAT = { along: 1.4, across: 1.2 } as const
  */
 const SIDE: Side = 1
 
-function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: number): Harbour {
-  const left = MARGIN.x + QUAY + GAP.x
-  const quays: Quay[] = []
-  const ways: Way[] = []
-  const moorings: Mooring[] = []
-  const blocks: Dock[] = []
+/** The two ends of a cell's plank, and which way is which. */
+type End = 'west' | 'east'
 
-  quays.push({ id: 0, spot: { x: TRUNK_X, y: MARGIN.y }, rank: 'root', org: null })
+/**
+ * Which plank ends a lattice edge joins, for the three directions that point down or east.
+ *
+ * The other three are the same edges seen from the far cell, so walking these three from every
+ * cell lays each edge exactly once.
+ *
+ * - Due east: this plank's east end to the neighbour's west end, level.
+ * - Down and east: east end to east end. The way leaves past her bow and drops through the water
+ *   between her and her east neighbour — the west end would have taken it across her own hull.
+ * - Down and west: west end to west end, the mirror of that.
+ */
+export const JOINS: readonly { step: Cell; from: End; to: End }[] = [
+  { step: { q: 1, r: 0 }, from: 'east', to: 'west' },
+  { step: { q: 0, r: 1 }, from: 'east', to: 'east' },
+  { step: { q: -1, r: 1 }, from: 'west', to: 'west' },
+]
 
-  const extend = (from: number, spot: Spot, rank: keyof typeof AS, org: string | null): number => {
-    const id = quays.length
-    quays.push({ id, spot, rank: AS[rank], org })
-    ways.push({ from, to: id, kind: 'tree', org })
-    return id
+/** One end of a cell's plank, in the basin's own coordinates. */
+export function endOf(cell: Cell, end: End): Spot {
+  const middle = spotOf(cell)
+  return { x: middle.x + ((end === 'east' ? 1 : -1) * BERTH.pitch) / 2, y: middle.y }
+}
+
+/**
+ * The lattice edges among these cells, as pairs of plank ends.
+ *
+ * Only between cells that are both there: a part-filled outer ring has neighbours missing, and an
+ * edge to an empty cell would be a way to nowhere.
+ */
+export function latticeWays(
+  cells: readonly Cell[],
+): readonly { from: Cell; fromEnd: End; to: Cell; toEnd: End }[] {
+  const key = (cell: Cell): string => `${String(cell.q)}.${String(cell.r)}`
+  const present = new Set(cells.map((cell) => key(cell)))
+  const out: { from: Cell; fromEnd: End; to: Cell; toEnd: End }[] = []
+  for (const cell of cells) {
+    for (const join of JOINS) {
+      const other = { q: cell.q + join.step.q, r: cell.r + join.step.r }
+      if (present.has(key(other))) {
+        out.push({ from: cell, fromEnd: join.from, to: other, toEnd: join.to })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * What a berth occupies, measured from her cell's middle: plank, hull and caption.
+ *
+ * The same rectangle `scene.ts` gives her as a hit area, so "a way does not cross a berth" and "a
+ * click on a way does not land on a ship" are one statement.
+ */
+export function berthAround(middle: Spot): Box {
+  return {
+    x: middle.x - BERTH.pitch / 2,
+    y: middle.y - BERTH.pier,
+    width: BERTH.pitch,
+    height: BERTH.pier + BERTH.lane + BERTH.caption,
+  }
+}
+
+/**
+ * The directions a way may leave a plank end towards the shore: the lattice's own three.
+ *
+ * Level, or along one of the two diagonals — a spur at any other angle is the line the honeycomb
+ * stops at. Outward only: a west end leaves westward, an east end eastward, so no spur starts back
+ * across the plank it belongs to.
+ */
+export function bearingsOf(end: End): readonly Spot[] {
+  const sign = end === 'east' ? 1 : -1
+  return [
+    { x: sign, y: 0 },
+    { x: (sign * LATTICE.along) / 2, y: -LATTICE.across },
+    { x: (sign * LATTICE.along) / 2, y: LATTICE.across },
+  ]
+}
+
+/**
+ * How far a ray goes before it reaches the shore, in multiples of its bearing.
+ *
+ * The shore is a frame round the whole picture, so every ray reaches it somewhere; what this picks
+ * is the side it reaches first.
+ */
+export function toShore(from: Spot, bearing: Spot, shore: Shore): number {
+  const reach = (edge: number, at: number, by: number): number =>
+    by === 0 ? Number.POSITIVE_INFINITY : (edge - at) / by
+  const across = bearing.x > 0 ? shore.right : shore.left
+  const down = bearing.y > 0 ? shore.bottom : shore.top
+  return Math.min(reach(across, from.x, bearing.x), reach(down, from.y, bearing.y))
+}
+
+/**
+ * A channel of open water across the whole harbour, between two rows of basins.
+ *
+ * Every basin in a row is hung from the row's top, so below the deepest of them and above the next
+ * row lies a strip that nothing stands in from shore to shore. A spur that cannot reach land
+ * directly reaches one of these, and the channel carries it on.
+ */
+export interface Channel {
+  y: number
+}
+
+/** One way ashore a basin could take, before the shortest is chosen. */
+export interface Landing {
+  /** Where the spur leaves the basin. */
+  from: Spot
+  /** Where it ends: on the shore, or on a channel's line. */
+  to: Spot
+  /** The channel it ends on, if it does not reach land itself. */
+  channel: Channel | null
+  /** The whole walk to land: the spur, and the channel's run to its nearer end. */
+  length: number
+}
+
+/**
+ * Every way ashore from these plank ends that crosses nothing, shortest first.
+ *
+ * "From the nearest waypoint to the nearest shore", made exact: each plank end, each of its three
+ * outward bearings, the ray followed until it meets land or a channel. A ray that passes through a
+ * berth — her own basin's or anybody else's — or through another basin's water is not a way, it
+ * is a line drawn over something.
+ *
+ * Ending on a channel costs the run along it as well, to whichever shore is nearer. So a basin on
+ * the outside of the harbour goes straight to the land beside it, and one in the middle drops into
+ * the channel below or above it.
+ */
+export function landingsFrom(
+  ends: readonly Spot[],
+  bearingsAt: (index: number) => readonly Spot[],
+  shore: Shore,
+  channels: readonly Channel[],
+  blocked: readonly Box[],
+): readonly Landing[] {
+  const out: Landing[] = []
+  ends.forEach((from, index) => {
+    for (const bearing of bearingsAt(index)) {
+      const ashore = toShore(from, bearing, shore)
+      /*
+       * The first channel the ray crosses is where it ends: that channel *is* the nearest
+       * waypoint. Allowed to fly on, the shortest walk was sometimes a diagonal across a whole
+       * row of basins to the south shore — shorter on paper, and a line through the harbour.
+       */
+      let end: { at: number; channel: Channel | null } = { at: ashore, channel: null }
+      if (bearing.y !== 0) {
+        for (const channel of channels) {
+          const at = (channel.y - from.y) / bearing.y
+          if (at > 0 && at < end.at) {
+            end = { at, channel }
+          }
+        }
+      }
+      const to = { x: from.x + bearing.x * end.at, y: from.y + bearing.y * end.at }
+      if (blocked.some((box) => cuts(from, to, box))) {
+        continue
+      }
+      const spur = Math.hypot(to.x - from.x, to.y - from.y)
+      const run = end.channel === null ? 0 : Math.min(to.x - shore.left, shore.right - to.x)
+      out.push({ from, to, channel: end.channel, length: spur + run })
+    }
+  })
+  return out.sort((a, b) => a.length - b.length)
+}
+
+/**
+ * Which ways are the tree and which are extra, decided by walking out from the land.
+ *
+ * A plank is one place with two ends, so it is walked as one: reaching either end reaches both,
+ * and the plank itself is always part of the tree. Walked end by end instead, the plank came out
+ * `round` whenever both its ends were first reached by diagonals — and the plank is what her lines
+ * are measured to and what is drawn under her.
+ */
+function treeOf(
+  quays: readonly Quay[],
+  ways: readonly { from: number; to: number; org: string | null; plank: boolean }[],
+  unitOf: ReadonlyMap<number, number>,
+): readonly Way[] {
+  const unit = (node: number): number => unitOf.get(node) ?? node
+  const touching = new Map<number, number[]>()
+  ways.forEach((way, index) => {
+    if (way.plank) {
+      return
+    }
+    for (const end of [unit(way.from), unit(way.to)]) {
+      touching.set(end, [...(touching.get(end) ?? []), index])
+    }
+  })
+
+  const reached = new Set<number>()
+  const tree = new Set<number>()
+  const queue = quays.filter((one) => one.rank === 'root').map((one) => unit(one.id))
+  for (const root of queue) {
+    reached.add(root)
+  }
+  // The queue grows while it is walked, and an array iterator sees what is appended to it.
+  for (const here of queue) {
+    for (const index of touching.get(here) ?? []) {
+      const way = ways[index]
+      if (way === undefined) {
+        continue
+      }
+      const there = unit(way.from) === here ? unit(way.to) : unit(way.from)
+      if (!reached.has(there)) {
+        reached.add(there)
+        tree.add(index)
+        queue.push(there)
+      }
+    }
   }
 
+  return ways.map((way, index) => ({
+    from: way.from,
+    to: way.to,
+    org: way.org,
+    kind: way.plank || tree.has(index) ? 'tree' : 'round',
+  }))
+}
+
+function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: number): Harbour {
+  const left = MARGIN.x + QUAY + GAP.x
+
+  /*
+   * First where every basin stands, and only then the ways.
+   *
+   * A spur runs to the nearest shore, and the east and south shores are where they are only once
+   * the last basin is placed. Laid in one pass, the first basin would have to guess them.
+   */
+  const placed: { kindred: Kindred; basin: Basin; west: number; top: number; row: number }[] = []
+  const rows: { top: number; height: number }[] = []
   let x = left
   let y = MARGIN.y + GAP.y
-  let laneTop = y
-  let laneHeight = 0
-  let lastTrunk = 0
   let far = left
-
   kindreds.forEach((kindred, index) => {
     const basin = basins[index]
     if (basin === undefined || basin.cells.length === 0) {
       return
     }
-
-    if (x !== left && x + basin.width > left + room) {
+    const current = rows.at(-1)
+    if (current === undefined || (x !== left && x + basin.width > left + room)) {
+      if (current !== undefined) {
+        y = current.top + current.height + LATTICE.across * MOAT.across
+      }
       x = left
-      y = laneTop + laneHeight + LATTICE.across * MOAT.across
-      laneTop = y
-      laneHeight = 0
+      rows.push({ top: y, height: 0 })
     }
-    const west = x
-    const top = y
-    const org = kindred.orgs[0] ?? null
+    const row = rows.length - 1
+    const at = rows[row]
+    if (at !== undefined) {
+      at.height = Math.max(at.height, basin.height)
+    }
+    placed.push({ kindred, basin, west: x, top: y, row })
+    far = Math.max(far, x + basin.width)
+    x += basin.width + LATTICE.along * MOAT.along
+  })
 
-    /*
-     * One node down the shore for this basin, and one spur from it.
-     *
-     * The trunk is a chain along the quay so every spur leaves it at its own depth: a single node
-     * with spurs fanning out of it would run each of them diagonally across whatever lies between.
-     */
-    lastTrunk = extend(lastTrunk, { x: TRUNK_X, y: top }, 'trunk', null)
+  const last = rows.at(-1)
+  const width = Math.max(1, far + MARGIN.x)
+  const height = Math.max(
+    1,
+    (last === undefined ? MARGIN.y : last.top + last.height) +
+      LATTICE.across * MOAT.across +
+      MARGIN.y,
+  )
+  const shore = shoreOf(width, height)
+  // The middle of the moat below every row but the last, whose moat is the south shore's water.
+  const channels: Channel[] = rows
+    .slice(0, -1)
+    .map((row) => ({ y: row.top + row.height + (LATTICE.across * MOAT.across) / 2 }))
 
-    /*
-     * A mooring post per cell, and a **way per lattice edge**.
-     *
-     * This is the part the hexagon was chosen for. Nothing here decides where a walkway goes: two
-     * berths that are neighbours on the lattice are joined, and that is the whole network. The
-     * first edge to reach a cell is its `tree` way — so the graph is spanning by construction, in
-     * the order the cells are dealt, which is outward from the middle — and every further edge is
-     * a `round` way, an extra path that nothing depends on.
-     */
-    const post = new Map<string, number>()
+  const middleOf = (one: (typeof placed)[number], cell: Cell): Spot => {
+    const spot = spotOf(cell)
+    return { x: one.west + one.basin.middle.x + spot.x, y: one.top + one.basin.middle.y + spot.y }
+  }
+  const filled = (one: (typeof placed)[number]): readonly Cell[] =>
+    one.basin.cells.slice(0, one.kindred.ships.length)
+  const berths = placed.map((one) => filled(one).map((cell) => berthAround(middleOf(one, cell))))
+  const waters = placed.map((one): Box => ({
+    x: one.west,
+    y: one.top,
+    width: one.basin.width,
+    height: one.basin.height,
+  }))
+
+  const quays: Quay[] = []
+  const ways: { from: number; to: number; org: string | null; plank: boolean }[] = []
+  const moorings: Mooring[] = []
+  const blocks: Dock[] = []
+  const quay = (spot: Spot, rank: Rank, org: string | null): number => {
+    quays.push({ id: quays.length, spot, rank, org })
+    return quays.length - 1
+  }
+  /** Which plank ends belong to one cell, so the tree below can treat a plank as one place. */
+  const unitOf = new Map<number, number>()
+  const onChannel = new Map<Channel, { node: number; x: number }[]>()
+
+  placed.forEach((one, index) => {
+    const org = one.kindred.orgs[0] ?? null
+    const ends = new Map<string, { west: number; east: number }>()
     const key = (cell: Cell): string => `${String(cell.q)}.${String(cell.r)}`
-    const at = (cell: Cell): Spot => {
-      const spot = spotOf(cell)
-      return { x: west + basin.middle.x + spot.x, y: top + basin.middle.y + spot.y }
-    }
 
-    basin.cells.forEach((cell, index2) => {
-      const ship = kindred.ships[index2]
+    filled(one).forEach((cell, index2) => {
+      const ship = one.kindred.ships[index2]
       if (ship === undefined) {
         return
       }
-      const spot = at(cell)
-      let node = post.get(key(cell))
-      if (node === undefined) {
-        const joined = STEPS.map((step) =>
-          post.get(key({ q: cell.q + step.q, r: cell.r + step.r })),
-        ).filter((one): one is number => one !== undefined)
-        node =
-          joined[0] !== undefined
-            ? extend(joined[0], spot, 'edge', org)
-            : extend(lastTrunk, spot, 'spur', org)
-        post.set(key(cell), node)
-        // Every other neighbour already standing is an extra way round.
-        for (const other of joined.slice(1)) {
-          ways.push({ from: other, to: node, kind: 'round', org })
-        }
-      }
+      const middle = middleOf(one, cell)
+      const west = quay({ x: middle.x - BERTH.pitch / 2, y: middle.y }, 'plank', org)
+      const east = quay({ x: middle.x + BERTH.pitch / 2, y: middle.y }, 'plank', org)
+      unitOf.set(west, west)
+      unitOf.set(east, west)
+      ends.set(key(cell), { west, east })
+      ways.push({ from: west, to: east, org, plank: true })
 
       moorings.push({
         ship,
         org: ship.org === '' ? NO_ORG : ship.org,
-        spot: { x: spot.x - BERTH.pitch / 2, y: spot.y + SIDE * BERTH.laneCentre },
+        spot: { x: middle.x - BERTH.pitch / 2, y: middle.y + SIDE * BERTH.laneCentre },
         side: SIDE,
-        node,
+        /*
+         * The east end, because her own plank is the only way there that passes near her: the
+         * west end also carries the diagonal to the row below, which runs closer to her stern than
+         * her plank does, and `reachOf` would have hung her lines off it.
+         */
+        node: east,
         angle: 0,
       })
     })
 
+    for (const edge of latticeWays(filled(one))) {
+      const a = ends.get(key(edge.from))
+      const b = ends.get(key(edge.to))
+      if (a !== undefined && b !== undefined) {
+        ways.push({ from: a[edge.fromEnd], to: b[edge.toEnd], org, plank: false })
+      }
+    }
+
     blocks.push({
-      org: kindred.name,
-      at: { x: west, y: top },
-      width: basin.width,
-      height: basin.height,
+      org: one.kindred.name,
+      at: { x: one.west, y: one.top },
+      width: one.basin.width,
+      height: one.basin.height,
       angle: 0,
-      label: { x: west + basin.label.x, y: top + basin.label.y },
-      room: basin.room,
+      label: { x: one.west + one.basin.label.x, y: one.top + one.basin.label.y },
+      room: one.basin.room,
     })
 
-    x += basin.width + LATTICE.along * MOAT.along
-    far = Math.max(far, west + basin.width)
-    laneHeight = Math.max(laneHeight, basin.height)
+    /*
+     * One spur ashore, from whichever plank end has the shortest clear walk to land.
+     *
+     * Blocked by every berth in the harbour and by every *other* basin's water: a spur through a
+     * neighbour's ring would be a way that seems to belong to it.
+     */
+    const starts = [...ends.values()].flatMap((pair) => [
+      { node: pair.west, end: 'west' as const },
+      { node: pair.east, end: 'east' as const },
+    ])
+    const blocked = [...berths.flat(), ...waters.filter((_, other) => other !== index)]
+    const spots = starts.map((start) => quays[start.node]?.spot ?? { x: 0, y: 0 })
+    const landings = landingsFrom(
+      spots,
+      (at) => bearingsOf(starts[at]?.end ?? 'east'),
+      shore,
+      channels,
+      blocked,
+    )
+    /*
+     * There is always one. Every basin in a row hangs from the row's top, so her topmost berth
+     * stands on that line with nothing of any basin above it, and a diagonal up from either end of
+     * her plank meets the channel above or the north shore in open water. `reaches the shore from
+     * every berth, on planks and not by boat` holds that up; this guard is for the type checker.
+     */
+    const best = landings[0]
+    const start = best === undefined ? undefined : starts[spots.indexOf(best.from)]
+    if (best === undefined || start === undefined) {
+      return
+    }
+    if (best.channel === null) {
+      const land = quay(best.to, 'root', null)
+      unitOf.set(land, land)
+      ways.push({ from: land, to: start.node, org: null, plank: false })
+    } else {
+      const corner = quay(best.to, 'stub', null)
+      unitOf.set(corner, corner)
+      ways.push({ from: corner, to: start.node, org: null, plank: false })
+      onChannel.set(best.channel, [
+        ...(onChannel.get(best.channel) ?? []),
+        { node: corner, x: best.to.x },
+      ])
+    }
   })
 
-  return trimmed({
+  /*
+   * Each channel carries its spurs to the nearer shore, each to the next waypoint on the way.
+   *
+   * Not one way from shore to shore: a channel with two spurs near its west end would then run the
+   * whole width of the harbour to an east shore nobody on it is going to. Sorted by distance, so a
+   * spur joins the next one out instead of laying its own line beside it.
+   */
+  for (const [channel, corners] of onChannel) {
+    const middle = (shore.left + shore.right) / 2
+    const west = corners.filter((one) => one.x <= middle).sort((a, b) => a.x - b.x)
+    const east = corners.filter((one) => one.x > middle).sort((a, b) => b.x - a.x)
+    for (const [side, run] of [
+      [shore.left, west],
+      [shore.right, east],
+    ] as const) {
+      const first = run[0]
+      if (first === undefined) {
+        continue
+      }
+      const land = quay({ x: side, y: channel.y }, 'root', null)
+      unitOf.set(land, land)
+      let behind = land
+      for (const corner of run) {
+        ways.push({ from: behind, to: corner.node, org: null, plank: false })
+        behind = corner.node
+      }
+    }
+  }
+
+  return {
     quays,
-    ways,
+    ways: treeOf(quays, ways, unitOf),
     moorings,
     blocks,
-    width: Math.max(1, far + MARGIN.x),
-    height: Math.max(1, laneTop + laneHeight + LATTICE.across * MOAT.across + MARGIN.y),
-    root: { x: TRUNK_X, y: MARGIN.y },
-  })
+    width,
+    height,
+    root: quays.find((one) => one.rank === 'root')?.spot ?? { x: shore.left, y: shore.top },
+  }
 }
 
 /**
