@@ -21,4 +21,3 @@ apps/harbor/public/forge.json
 # `git add .` danach. Ein veröffentlichter privater Schlüssel lässt sich nicht zurückziehen --
 # jeder, der ihn hat, signiert Updates, die jedes installierte Fenster annimmt.
 *.key
-*.key.password

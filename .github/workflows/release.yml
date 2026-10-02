@@ -91,13 +91,18 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Ohne diese beiden entstehen keine .sig-Dateien, und ohne Signatur installiert der
-          # Updater nichts: der Schlüssel ist nicht die Absicherung des Releases, sondern die
-          # Bedingung, dass es beim Nutzer ankommt. Fehlt er, bauen die Jobs trotzdem durch und
-          # das Release trägt Installer ohne Update-Pfad -- deshalb prüft die Quest
-          # `auslauf/aktualisierung`, dass beides hier steht.
+          # Ohne ihn entstehen keine .sig-Dateien, und ohne Signatur installiert der Updater
+          # nichts: der Schlüssel ist nicht die Absicherung des Releases, sondern die Bedingung,
+          # dass es beim Nutzer ankommt. Fehlt er, bauen die Jobs trotzdem durch und das Release
+          # trägt Installer ohne Update-Pfad -- deshalb prüft die Quest `auslauf/aktualisierung`,
+          # dass er hier steht.
+          #
+          # Ein Passwort gibt es nicht, und das ist eine Entscheidung. Es landete in der CI im
+          # *selben* Secret-Speicher wie der Schlüssel, also schützte es dort nichts -- wer eins
+          # lesen kann, liest beide. Lokal hätte es nur geschützt, wenn es nicht neben dem
+          # Schlüssel liegt, und dann wäre es eine zweite verlierbare Hälfte an etwas, das sich
+          # nicht ersetzen lässt. `tauri signer sign` nimmt ein leeres Passwort ausdrücklich an.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           # Die Tauri-App liegt nicht im Repo-Wurzelverzeichnis, sondern ist eine von zweien.
           projectPath: apps/harbor

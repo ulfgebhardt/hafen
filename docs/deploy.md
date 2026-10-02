@@ -194,22 +194,31 @@ benannt in der Quest statt als falsches `verletzt` in einer Messung.
 kostet nichts, Notarisierung einen Apple-Developer-Account — eine Entscheidung des Menschen, die
 hier offen bleibt.
 
-**Der Schlüssel ist erzeugt** (02.10.2026). Der öffentliche Teil steht in
-`apps/harbor/src-tauri/tauri.conf.json` und ist dafür gedacht, dort zu stehen: er prüft Signaturen
-und erzeugt keine. Der private liegt in `~/.tauri/hafen.key`, das Passwort in
-`~/.tauri/hafen.key.password`, beide `0600` und beide ausserhalb jedes Repositories — ein
-Signaturschlüssel im Baum ist einen `git add .` von der Veröffentlichung entfernt.
+**Der Schlüssel ist erzeugt** (02.10.2026), **ohne Passwort, und das ist eine Entscheidung.** Der
+öffentliche Teil steht in `apps/harbor/src-tauri/tauri.conf.json` und ist dafür gedacht, dort zu
+stehen: er prüft Signaturen und erzeugt keine. Der private liegt in `~/.tauri/hafen.key`, `0600`
+und ausserhalb jedes Repositories — ein Signaturschlüssel im Baum ist einen `git add .` von der
+Veröffentlichung entfernt.
 
-Was ein Mensch noch tun muss: beide Dateien als Secrets im Repository hinterlegen,
-`TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Dass das Passwort im
-**selben** Secret-Speicher liegt wie der Schlüssel, ist bewusst und keine Nachlässigkeit: es
-schützt die Kopie auf der eigenen Platte, nicht die in der CI — wer dort ein Secret lesen kann,
-liest beide. Der Schutz der CI-Kopie ist, dass niemand sie lesen kann.
+Zuerst stand daneben ein Passwort, und zwar in `~/.tauri/hafen.key.password`. Das war Komplexität
+ohne Gegenwert, und die Begründung dafür hielt in keiner der beiden Richtungen:
+
+- **In der CI** liegt es im *selben* Secret-Speicher wie der Schlüssel. Wer eins lesen kann, liest
+  beide — der Schutz der CI-Kopie ist, dass niemand sie liest, und nicht das Passwort.
+- **Lokal** lag es neben dem Schlüssel. Was die eine Datei lesen kann, liest auch die andere. Es
+  hätte nur in einem Passwortmanager etwas geschützt, und dann wäre es eine zweite verlierbare
+  Hälfte an etwas, das sich nicht ersetzen lässt.
+
+`tauri signer sign` nimmt ein leeres Passwort ausdrücklich an („assuming an empty password") —
+gegengeprüft, bevor der alte Schlüssel gelöscht wurde. Ein Secret statt zwei.
+
+Was ein Mensch noch tun muss: `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/hafen.key`.
 
 Und: **dieser Schlüssel ist nicht ersetzbar.** Geht er verloren, kann keine künftige Fassung mehr
 signiert werden, die ein installiertes Fenster annimmt — jede bestehende Installation ist dann
 endgültig die letzte, und ein neuer Schlüssel hilft nur Leuten, die neu installieren. Eine Kopie
-an einem zweiten Ort ist deshalb kein Luxus.
+an einem zweiten Ort ist deshalb kein Luxus. Dass er hier noch einmal getauscht werden *konnte*,
+lag allein daran, dass es zu diesem Zeitpunkt kein Release gab; ab dem ersten ist das vorbei.
 
 ## Offen, und warum
 
