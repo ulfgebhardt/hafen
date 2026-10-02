@@ -193,12 +193,22 @@ benannt in der Quest statt als falsches `verletzt` in einer Messung.
 kostet nichts, Notarisierung einen Apple-Developer-Account — eine Entscheidung des Menschen, die
 hier offen bleibt.
 
-**Was jetzt noch fehlt, kann nur ein Mensch tun:** `pnpm tauri signer generate`, den privaten Teil
-nach `secrets.TAURI_SIGNING_PRIVATE_KEY` (und das Passwort nach
-`secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), den öffentlichen anstelle des Platzhalters
-`HIER-DEN-OEFFENTLICHEN-SCHLUESSEL-EINSETZEN` in `apps/harbor/src-tauri/tauri.conf.json`. Der
-Platzhalter steht absichtlich als Wort und nicht als leerer String: ein leeres Feld sähe aus wie
-eine Voreinstellung, dieses sieht aus wie eine offene Aufgabe.
+**Der Schlüssel ist erzeugt** (02.10.2026). Der öffentliche Teil steht in
+`apps/harbor/src-tauri/tauri.conf.json` und ist dafür gedacht, dort zu stehen: er prüft Signaturen
+und erzeugt keine. Der private liegt in `~/.tauri/hafen.key`, das Passwort in
+`~/.tauri/hafen.key.password`, beide `0600` und beide ausserhalb jedes Repositories — ein
+Signaturschlüssel im Baum ist einen `git add .` von der Veröffentlichung entfernt.
+
+Was ein Mensch noch tun muss: beide Dateien als Secrets im Repository hinterlegen,
+`TAURI_SIGNING_PRIVATE_KEY` und `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Dass das Passwort im
+**selben** Secret-Speicher liegt wie der Schlüssel, ist bewusst und keine Nachlässigkeit: es
+schützt die Kopie auf der eigenen Platte, nicht die in der CI — wer dort ein Secret lesen kann,
+liest beide. Der Schutz der CI-Kopie ist, dass niemand sie lesen kann.
+
+Und: **dieser Schlüssel ist nicht ersetzbar.** Geht er verloren, kann keine künftige Fassung mehr
+signiert werden, die ein installiertes Fenster annimmt — jede bestehende Installation ist dann
+endgültig die letzte, und ein neuer Schlüssel hilft nur Leuten, die neu installieren. Eine Kopie
+an einem zweiten Ort ist deshalb kein Luxus.
 
 ## Offen, und warum
 
