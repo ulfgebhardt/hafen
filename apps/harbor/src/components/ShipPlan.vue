@@ -12,7 +12,6 @@
    * the basin cannot disagree about what this ship looks like.
    */
 
-  import { shipPoints } from '@hafen/core'
   import { computed } from 'vue'
 
   import { isForge, isMark, isPier, isQuest, PIER } from './chosen'
@@ -47,7 +46,7 @@
 
   const emit = defineEmits<{ pick: [Chosen | null] }>()
 
-  const hull = computed(() => hullOf(ship, shipPoints(ship).project))
+  const hull = computed(() => hullOf(ship))
   const cargo = computed(() => cargoOf(ship, hull.value))
   const landed = computed(() => landedOf(ship, hull.value))
   const bridge = computed(() => bridgeOf(ship, hull.value))

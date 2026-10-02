@@ -369,7 +369,9 @@ describe(adopt, () => {
   it('fills a field inside a list the same way', () => {
     const old = {
       ...SNAPSHOT,
-      ships: [{ path: '/a', name: 'a', submodules: [{ path: 'lib', state: 'aboard', at: 'aaaa' }] }],
+      ships: [
+        { path: '/a', name: 'a', submodules: [{ path: 'lib', state: 'aboard', at: 'aaaa' }] },
+      ],
     } as unknown as Snapshot
 
     expect(adopt(old).ships[0]?.submodules[0]).toStrictEqual({

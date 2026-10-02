@@ -778,17 +778,6 @@ function shipState(ship: Ship, hull: Hull): Graphics {
 }
 
 /**
- * A ship's project score, for how long her hull is drawn.
- *
- * `shipPoints` and not a sum of its own: the number written under a ship and the number that made
- * her that long have to be one number, or the drawing contradicts its own caption. It is also what
- * `bySize` orders the harbour by, so the rows step down from the left for a visible reason.
- */
-function scoreOf(ship: Ship): number {
-  return shipPoints(ship).project
-}
-
-/**
  * What is met, as containers on the deck.
  *
  * A grid is countable at a glance and comparable across a whole basin without counting anything,
@@ -1438,7 +1427,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       slot.position.set(flat.x, flat.y)
 
       const traits = traitsOf(readingsOf(berth.ship, statsOf(berth.ship)))
-      const hull = hullOf(berth.ship, scoreOf(berth.ship))
+      const hull = hullOf(berth.ship)
       const offset = offsetOf(berth.ship)
       /*
        * How far her planking is, asked of the graph rather than taken from the berth arithmetic.

@@ -39,20 +39,33 @@ import type { QuestResult, Ship } from '@hafen/core'
  * length so the proportion stays a ship's rather than a plank's.
  */
 export const SIZE = {
-  minLength: 20,
+  /**
+   * The range a hull may be, and it was far too narrow.
+   *
+   * Measured over this fleet: the readings span **18 447 to one** in commits and 488 to one in
+   * authors, and the drawing turned that into a length range of 1.69 and a beam range of 1.29 —
+   * two hundred times less variation than there is. Ninety-two ships came out looking like
+   * ninety-two of the same ship.
+   *
+   * Widened at the **floor** and not at the ceiling, which is what the berth allows. A hull at her
+   * widest still leaves a metre of water to the pier — `BERTH.laneCentre` is 4.6 and half of
+   * `maxBeam` is 3.6 — and that promise is older than this change. The small end had no such
+   * reason to be where it was.
+   */
+  minLength: 9,
   maxLength: 34,
-  minBeam: 5.6,
+  minBeam: 2.6,
   maxBeam: 7.2,
 } as const
 
 /**
- * Where a project score stops buying length.
+ * Where a history stops buying length.
  *
- * Read with a logarithm, so this is the score at which a hull is *full length* rather than the
- * point where a linear ramp is cut off. The busiest repository on this fleet scores 26 831, so a
- * ceiling there means the longest ship in the harbour is the longest ship there is.
+ * Read with a logarithm, so this is the count at which a hull is *full length* rather than the
+ * point where a linear ramp is cut off. The longest history on this fleet is 18 447 commits, so a
+ * ceiling just above it means the longest ship in the harbour is the longest ship there is.
  */
-export const LENGTH_CEILING = 27000
+export const LENGTH_CEILING = 20000
 
 export interface Hull {
   /** Stem to transom. */
@@ -90,29 +103,30 @@ export function outlineOf(length: number, beam: number): readonly Spot[] {
 }
 
 /**
- * Where a hull starts growing at all.
+ * Where a hull starts growing at all: one commit, which every repository has.
  *
- * The smallest repository on this fleet scores 21, so without a floor the bottom third of the
- * length range is spent on scores nothing has — and the whole fleet bunches above it. With one,
- * the shortest ship in the harbour is the shortest ship there is, the longest is the longest, and
- * everything between has somewhere to be.
+ * It was 20 *points* and the length came off the project score — commits, authors, checks and CI
+ * added together. That score is commit-dominated anyway, so the length was almost this reading
+ * already, only muddied by three others that have their own place in the drawing.
  */
-export const LENGTH_FLOOR = 20
+export const LENGTH_FLOOR = 1
 
 /**
- * Where a hull starts and stops getting **wider**, in lines of text.
+ * Where a hull starts and stops getting **wider**, in people.
  *
- * Her length is what the repository has *done*; her beam is how much of it there *is*. Two
- * readings that must be able to disagree: a repository can be enormous and quiet, or small and
- * busy, and until now both came off the same number — so every ship in the harbour had exactly
- * one shape, scaled.
+ * Her length is what has been *done* here; her beam is how many it was done by. Two readings that
+ * must be able to disagree, and this pairing is the second attempt at that.
  *
- * Measured over this fleet: 1 line at the bottom, 17 305 at the median, 174 624 at the ninetieth
- * percentile and 3 663 532 at the top. Heavy-tailed like everything else here, so logarithmic
- * like everything else here.
+ * The first took the beam off *lines of text*, and the fleet said plainly that bulk is not
+ * crowdedness: the widest ship in the harbour became `addons/AddOns` — 3 663 532 lines, **68
+ * commits, one author** — a folder of downloaded game addons drawn as the broadest hull in the
+ * basin. Authors cannot do that: a reading of people only grows when people turn up.
+ *
+ * Measured over this fleet: 1 at the bottom, 3 at the median, 8 at the third quartile and 488 at
+ * the top. Heavy-tailed like everything else here, so logarithmic like everything else here.
  */
-export const BEAM_FLOOR = 100
-export const BEAM_CEILING = 1_000_000
+export const BEAM_FLOOR = 1
+export const BEAM_CEILING = 500
 
 /**
  * Her share of the beam range, 0 … 1 — and `null` lines sit at the bottom rather than nowhere.
@@ -121,20 +135,20 @@ export const BEAM_CEILING = 1_000_000
  * the drawing does with an absent reading: it says "nothing known" by looking like nothing much,
  * never by inventing a middle.
  */
-export function beamShare(lines: number | null): number {
-  if (lines === null) {
+export function beamShare(authors: number | null): number {
+  if (authors === null) {
     return 0
   }
   const low = Math.log1p(BEAM_FLOOR)
   const high = Math.log1p(BEAM_CEILING)
-  return Math.min(1, Math.max(0, (Math.log1p(Math.max(lines, 0)) - low) / (high - low)))
+  return Math.min(1, Math.max(0, (Math.log1p(Math.max(authors, 0)) - low) / (high - low)))
 }
 
 /** Her share of the length range, 0 … 1 — logarithmic between the floor and the ceiling. */
-export function lengthShare(points: number): number {
+export function lengthShare(commits: number): number {
   const low = Math.log1p(LENGTH_FLOOR)
   const high = Math.log1p(LENGTH_CEILING)
-  const worth = Math.log1p(Math.max(points, 0))
+  const worth = Math.log1p(Math.max(commits, 0))
   return Math.min(1, Math.max(0, (worth - low) / (high - low)))
 }
 
@@ -148,9 +162,10 @@ export function lengthShare(points: number): number {
  * none. The same correction the stars and the crew carry: these are heavy-tailed counts, and a
  * root over one is a scale for its tail.
  */
-export function hullOf(ship: Ship, points: number): Hull {
-  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * lengthShare(points)
-  const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * beamShare(ship.lines ?? null)
+export function hullOf(ship: Ship): Hull {
+  const work = ship.ledger.total
+  const length = SIZE.minLength + (SIZE.maxLength - SIZE.minLength) * lengthShare(work.commits)
+  const beam = SIZE.minBeam + (SIZE.maxBeam - SIZE.minBeam) * beamShare(work.authors)
   return { length, beam, outline: outlineOf(length, beam) }
 }
 
@@ -219,20 +234,55 @@ export function mooringOf(
 export const BAYS_ACROSS = 3
 
 /**
- * One container, in plan units.
+ * One container, **as a share of the hull it stands on**.
  *
- * `across` is fixed and `along` is not: the bays are squeezed to fit the deck they have, so a
- * short hull with nine demands keeps all nine aboard instead of stowing three over the side.
+ * It was absolute — 1.3 across, whatever the ship — and that was the quiet reason every hull in
+ * the harbour was nearly the same size. Three bays and two gaps need 4.5 units across, a deck is
+ * `beam * 0.86` wide where the cargo stands, so no hull narrower than 5.3 could carry its own
+ * containers. The same held fore and aft for the deckhouse. The minima were not chosen; they were
+ * what the furniture left, and they capped the length range at 1.69 and the beam range at 1.29
+ * against readings that span 18 447 to one.
+ *
+ * A share instead, so a small ship is a small ship with small containers on it. `along` is still
+ * squeezed to the deck it has, so a short hull with nine demands keeps all nine aboard instead of
+ * stowing three over the side.
  */
 export const CONTAINER = {
-  across: 1.3,
-  /** Between two boxes abreast. */
-  gap: 0.3,
-  /** The full length of a bay before it has to be squeezed. */
-  maxAlong: 4.4,
-  /** Between two bays. */
-  gapAlong: 0.5,
+  /** How much of her beam the stack may use, across. The rest is deck to walk on. */
+  deck: 0.86,
+  /** Between two boxes abreast, of the beam — but never less than `SEAM`. */
+  gap: 0.045,
+  /** The full length of a bay before it has to be squeezed, of the length. */
+  maxAlong: 0.13,
+  /** Between two bays, of the length — but never less than `SEAM`. */
+  gapAlong: 0.0147,
 } as const
+
+/**
+ * The smallest gap between two crates that is still a gap, in plan units.
+ *
+ * A share alone was not enough and the small ships showed it: at a beam of 2.6 the share came to
+ * four hundredths of a unit, which at any honest zoom is no gap at all — three boxes drawn as one
+ * block, and a reader counting demands off a hull counts one. A floor costs the boxes a little
+ * width on a small ship and buys the thing the boxes are *for*: being countable.
+ */
+export const SEAM = 0.26
+
+/**
+ * What one container measures on this hull: the gap first, the box with what is left.
+ *
+ * In that order on purpose. Sizing the box and then the gap lets the two add up to more than the
+ * deck, which is how a stack ends up over the side; sizing the gap first makes "there is always
+ * visible water between two crates" true by construction, and the boxes take the remainder.
+ */
+export function boxOn(hull: Hull): { across: number; gap: number } {
+  const gap = Math.max(SEAM, hull.beam * CONTAINER.gap)
+  const room = hull.beam * CONTAINER.deck
+  return {
+    across: Math.max(0.2, (room - (BAYS_ACROSS - 1) * gap) / BAYS_ACROSS),
+    gap,
+  }
+}
 
 /** Where cargo may stand, as fractions of the length: clear of the house aft and the taper forward. */
 export const DECK = { from: 0.26, to: 0.82 } as const
@@ -268,19 +318,21 @@ export function cargoOf(ship: Ship, hull: Hull): readonly Container[] {
   const from = hull.length * DECK.from
   const usable = hull.length * (DECK.to - DECK.from)
   const bays = Math.ceil(quests.length / BAYS_ACROSS)
-  const pitch = Math.min(CONTAINER.maxAlong + CONTAINER.gapAlong, usable / bays)
-  const along = Math.max(0.6, pitch - CONTAINER.gapAlong)
+  const gapAlong = Math.max(SEAM, hull.length * CONTAINER.gapAlong)
+  const pitch = Math.min(hull.length * CONTAINER.maxAlong + gapAlong, usable / bays)
+  const along = Math.max(hull.length * 0.018, pitch - gapAlong)
 
-  const spread = BAYS_ACROSS * CONTAINER.across + (BAYS_ACROSS - 1) * CONTAINER.gap
-  const first = -spread / 2 + CONTAINER.across / 2
+  const box = boxOn(hull)
+  const spread = BAYS_ACROSS * box.across + (BAYS_ACROSS - 1) * box.gap
+  const first = -spread / 2 + box.across / 2
 
   return quests.map((quest, index) => ({
     quest,
     along,
-    across: CONTAINER.across,
+    across: box.across,
     spot: {
       x: from + Math.floor(index / BAYS_ACROSS) * pitch + along / 2,
-      y: first + (index % BAYS_ACROSS) * (CONTAINER.across + CONTAINER.gap),
+      y: first + (index % BAYS_ACROSS) * (box.across + box.gap),
     },
   }))
 }
@@ -566,7 +618,10 @@ export interface Bridge {
  */
 export function bridgeOf(ship: Ship, hull: Hull): Bridge {
   const binding = bindingQuests(ship.quests).length
-  const along = 2 + Math.min(binding, 12) * 0.16
+  // A share of her length, for the reason `CONTAINER` gives: a deckhouse of fixed size is a floor
+  // under how short a hull may be, and that floor was most of why they all looked alike. It still
+  // grows with what she is held to — it just does so within the ship rather than against her.
+  const along = hull.length * (0.09 + Math.min(binding, 12) * 0.0068)
   return {
     along,
     across: hull.beam * 0.72,
