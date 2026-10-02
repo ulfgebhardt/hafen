@@ -12,7 +12,7 @@
  * past. That is the trade this adapter was chosen for; it is not a side effect of it.
  */
 
-import type { CommandResult, Ports } from '@hafen/core'
+import type { CommandResult, DirEntry, Ports } from '@hafen/core'
 
 /** Tauri's `invoke`, or nothing in a browser. */
 function invoker(): ((command: string, args?: Record<string, unknown>) => Promise<unknown>) | null {
@@ -71,8 +71,8 @@ export const tauriPorts: Ports = {
   fs: {
     readFile: async (path): Promise<string | null> =>
       (await demand()('port_read_file', { path })) as string | null,
-    readDir: async (path): Promise<readonly string[] | null> =>
-      (await demand()('port_read_dir', { path })) as readonly string[] | null,
+    readDir: async (path): Promise<readonly DirEntry[] | null> =>
+      (await demand()('port_read_dir', { path })) as readonly DirEntry[] | null,
     isDirectory: async (path): Promise<boolean> =>
       (await demand()('port_is_directory', { path })) as boolean,
     realPath: async (path): Promise<string | null> =>

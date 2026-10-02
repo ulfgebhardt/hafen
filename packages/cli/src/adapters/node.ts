@@ -57,7 +57,30 @@ export const nodePorts: Ports = {
   },
   fs: {
     readFile: async (path) => await readFile(path, 'utf8').catch(() => null),
-    readDir: async (path) => await readdir(path).catch(() => null),
+    readDir: async (path) => {
+      const entries = await readdir(path, { withFileTypes: true }).catch(() => null)
+      if (entries === null) {
+        return null
+      }
+      /*
+       * A link to a directory is a directory here, which a dirent does not say.
+       *
+       * `withFileTypes` reports the *link's* own kind, so five of this machine's repositories —
+       * the ones reachable only through a symbolic link — would simply vanish from the survey.
+       * One `stat` per link and none per ordinary entry, which is the whole saving kept.
+       */
+      return await Promise.all(
+        entries.map(async (entry) => ({
+          name: entry.name,
+          directory: entry.isDirectory()
+            ? true
+            : entry.isSymbolicLink() &&
+              (await stat(`${path}/${entry.name}`)
+                .then((it) => it.isDirectory())
+                .catch(() => false)),
+        })),
+      )
+    },
     isDirectory: async (path) =>
       await stat(path)
         .then((entry) => entry.isDirectory())

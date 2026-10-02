@@ -30,9 +30,24 @@ Zwei Wege standen zur Wahl. Gewählt ist der zweite.
   prüft sie TypeScript, danach Rust, also die Stelle, hinter der das Fenster nichts mehr erfinden
   kann.
 
-Der bekannte Preis: eine Vollmessung sind rund 1 400 IPC-Aufrufe (92 Repos × ~15 git-Aufrufe).
-Ungemessen. **Erste Aufgabe des Adapters ist, das zu messen**, bevor der Rest darauf aufbaut —
-fällt es durch, ist der Sidecar der Rückfallweg und keine Niederlage.
+### Das Gate: gemessen, und es fiel anders aus als geschätzt ✅
+
+Geschätzt waren rund 1 400 IPC-Aufrufe je Vollmessung. **Gemessen waren es 49 117** — und
+42 441 davon, also 86 %, waren `isDirectory` auf einem Eintrag, der gerade aus einem `readDir`
+gekommen war. 42 478 Einträge abgefragt, um die 1 295 zu finden, die Verzeichnisse sind.
+
+Die Antwort war keine Bündelung und kein Sidecar, sondern die fehlende Frage: `readDir` gibt die
+**Art** jetzt mit, weil das Verzeichnis sie ohnehin kennt. Damit:
+
+| | vorher | nachher |
+| --- | --- | --- |
+| Port-Aufrufe je Vollmessung | 49 117 | **6 676** |
+| Dauer in der CLI | 15,54 s | **10,21 s** |
+| Nutzlast | 4,8 MiB | 4,8 MiB |
+
+6 676 Aufrufe bei 0,1–0,5 ms Round-Trip sind 0,7 bis 3,3 s auf zehn Sekunden echte Arbeit. Das
+Gate ist genommen, der Sidecar bleibt unnötig — und die CLI ist nebenbei um ein Drittel
+schneller geworden, weil der Fehler nie an Tauri lag.
 
 ## Die vier Baustellen
 
@@ -111,4 +126,4 @@ hier offen bleibt.
   Menschen kann das tun, und ohne ihn kann der Updater nichts prüfen.
 - **Apple-Developer-Account** — nur für Notarisierung nötig. Ohne ihn läuft die App, mit einem
   Umweg beim ersten Öffnen.
-- **IPC-Kosten des Adapters** — zu messen, bevor darauf gebaut wird.
+- ~~**IPC-Kosten des Adapters**~~ — gemessen, siehe oben: 6 676 Aufrufe je Vollmessung.

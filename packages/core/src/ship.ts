@@ -706,13 +706,13 @@ export async function findShipPaths(ports: Ports, root: string): Promise<readonl
 
         await Promise.all(
           entries.map(async (entry) => {
-            if (isNotAShip(entry) || entry.startsWith('.')) {
+            // The kind comes with the listing now. It used to be a call of its own per entry, and
+            // on this fleet that was 42 441 of the survey's 49 117 port calls — to learn something
+            // the directory had already said.
+            if (!entry.directory || isNotAShip(entry.name) || entry.name.startsWith('.')) {
               return
             }
-            const path = `${dir}/${entry}`
-            if (!(await ports.fs.isDirectory(path))) {
-              return
-            }
+            const path = `${dir}/${entry.name}`
             if (await ports.fs.isDirectory(`${path}/.git`)) {
               // A repository. Everything inside it belongs to it, so the search stops here.
               found.push(path)

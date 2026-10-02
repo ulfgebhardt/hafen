@@ -45,7 +45,9 @@ export function mockPorts(setup: MockSetup = {}): Ports {
     },
     fs: {
       readFile: async (path) => files[path] ?? null,
-      readDir: async (path) => dirs[path] ?? null,
+      readDir: async (path) =>
+        dirs[path]?.map((name) => ({ name, directory: Object.hasOwn(dirs, `${path}/${name}`) })) ??
+        null,
       isDirectory: async (path) => Object.hasOwn(dirs, path),
       // Nothing is a link unless a test says so: a mock that resolved paths of its own would be
       // answering a question the test never asked.
