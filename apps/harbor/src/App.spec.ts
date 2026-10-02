@@ -131,13 +131,35 @@ describe('app', () => {
  * Stubbed at the bridge and not at `snapshot.ts`, for the reason `answersWith` is: this exercises
  * the branch the packaged window actually takes.
  */
+/**
+ * What a fixture that said nothing answers.
+ *
+ * `undefined` is "this test has no opinion", `null` is an answer — a write that succeeded, a file
+ * that is not there, **a program that is not installed**. Folding the two together is how a test
+ * about something else ended up drawing the missing-git view.
+ */
+function answered(given: unknown, command: string): unknown {
+  if (given !== undefined) {
+    return given
+  }
+  // A machine has its tools unless a test says otherwise.
+  return command === 'port_which' ? '/usr/bin/git' : null
+}
+
 function bridge(replies: Record<string, unknown>): ReturnType<typeof vi.fn> {
   const invoke = vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>(
     async (command, args) =>
       await Promise.resolve(
         typeof replies[command] === 'function'
           ? (replies[command] as (a?: Record<string, unknown>) => unknown)(args)
-          : replies[command],
+          : // Only where a test is silent, never instead of an answer it gave: `null` is a real
+            // reply here — a write that succeeded, a file that is not there — and `??` would eat
+            // both. A machine has its tools unless a test says otherwise, because `port_which`
+            // answering `null` means "not installed" and the window then draws the missing-git
+            // view instead of whatever the test is about.
+            Object.hasOwn(replies, command)
+            ? replies[command]
+            : answered(undefined, command),
       ),
   )
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
@@ -250,6 +272,42 @@ describe('acting on a ship', () => {
     )
 
     expect(wrote(written)).toContain(String(snapshot.ships[0]?.path))
+  })
+})
+
+describe('a machine without the tools', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const read = {
+    path: '/cache/hafen/snapshot.json',
+    json: JSON.stringify(snapshot),
+    error: null,
+  }
+
+  /**
+   * Without git every reading comes back empty, and a harbour of nothing looks exactly like a
+   * machine with no repositories on it. Two different sentences, and ninety-two silent failures
+   * are not a measurement.
+   */
+  it('says git is missing instead of drawing an empty harbour', async () => {
+    bridge({ ...MEASURES, snapshot: read, port_which: null })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    expect(page.text()).toContain('git fehlt')
+    expect(page.text()).not.toContain('neu messen')
+  })
+
+  /** The harbour draws while the answer is on its way — a check must not hold the picture back. */
+  it('draws the harbour where the tools are there', async () => {
+    bridge({ ...MEASURES, snapshot: read })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    expect(page.text()).not.toContain('git fehlt')
+    expect(page.text()).toContain('neu messen')
   })
 })
 
@@ -563,17 +621,27 @@ describe('a snapshot older than the window', () => {
  * A bridge that answers per command, because the forge tests need two different answers out of
  * one command: `snapshot` reads the survey or the forge file depending on `which`.
  */
+
 function bridgeBy(reply: (command: string, args?: unknown) => unknown): void {
   const invoke = vi.fn<(command: string, args?: unknown) => Promise<unknown>>(
-    async (command, args) => Promise.resolve(reply(command, args)),
+    async (command, args) =>
+      // Same rule as the other two: a machine has its tools unless the test answers for itself.
+      await Promise.resolve(answered(reply(command, args), command)),
   )
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
 }
 
 /** The same, when the test also wants to see what was asked. */
+/**
+ * A window on a machine that has its tools, unless a test says otherwise.
+ *
+ * `port_which` answering `null` means "not installed", and the window then draws the missing-git
+ * view instead of the harbour — which is exactly what it is for, and exactly wrong as a default
+ * for every test that is about something else.
+ */
 function watchedBridge(reply: (command: string, args?: unknown) => unknown) {
   const invoke = vi.fn<(command: string, args?: unknown) => Promise<unknown>>(
-    async (command, args) => Promise.resolve(reply(command, args)),
+    async (command, args) => await Promise.resolve(answered(reply(command, args), command)),
   )
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
   return invoke
@@ -644,6 +712,37 @@ describe('the forge, from the window', () => {
     unread: [],
   }
 
+  /**
+   * What `gh api graphql` prints, which is what the window now reads.
+   *
+   * The forge query went through the CLI, so on a machine without `hafen` the button failed for a
+   * reason that had nothing to do with the forge. It runs here now, through the port — and the
+   * allow list in `ports.rs` lets exactly this one call out.
+   */
+  const GRAPHQL = JSON.stringify({
+    data: {
+      repository: {
+        stargazerCount: 1743,
+        forkCount: 210,
+        watchers: { totalCount: 64 },
+        primaryLanguage: { name: 'JavaScript' },
+        issues: { totalCount: 442 },
+        pullRequests: { totalCount: 53 },
+        viewerPermission: 'READ',
+        defaultBranchRef: { name: 'main', branchProtectionRule: null },
+        rulesets: { nodes: [] },
+      },
+    },
+  })
+
+  /** A window that can ask: `gh` is on the PATH and answers. */
+  const ASKS: Record<string, unknown> = {
+    port_which: '/usr/bin/gh',
+    port_run: { code: 0, stdout: GRAPHQL, stderr: '' },
+    port_places: { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] },
+    port_write_file: null,
+  }
+
   /** The ship the reading is about: matched on `origin`, which is the only thing that matches. */
   const withOrigin = {
     ...snapshot,
@@ -659,17 +758,17 @@ describe('the forge, from the window', () => {
       if (command === 'snapshot') {
         return which(args) === 'forge' ? { json: null } : cached(withOrigin)
       }
-      if (command === 'forge') {
-        return { json: JSON.stringify(READING), error: null }
+      if (command in ASKS) {
+        return ASKS[command]
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
     // Nothing asked on start: drawing the harbour must not wait on somebody else's server.
-    expect(invoke).not.toHaveBeenCalledWith('forge', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('port_run', expect.anything())
 
     await clicking(page, 'Forge fragen')
     await pick(page, withOrigin.ships[0])
@@ -685,23 +784,22 @@ describe('the forge, from the window', () => {
    * "gefragt" over a reading missing a sixth of the fleet is the quiet kind of lie.
    */
   it('says how many went unanswered, and what the first one said', async () => {
-    const unread = {
-      ...READING,
-      unread: [
-        {
-          slug: { host: 'git.seefahrt.example', owner: 'org', repo: 'zu' },
-          reason: 'HAFEN_GITEA_TOKEN setzen',
-        },
-      ],
+    /* A Gitea repository whose server refuses: `curl --fail` comes back non-zero. */
+    const gitea = {
+      ...snapshot,
+      ships: [{ ...ship(), remotes: [{ name: 'origin', url: 'git@git.seefahrt.example:org/zu.git' }] }],
     }
     bridgeBy((command, args) => {
       if (command === 'snapshot') {
-        return which(args) === 'forge' ? { json: null } : cached(snapshot)
+        return which(args) === 'forge' ? { json: null } : cached(gitea)
       }
-      if (command === 'forge') {
-        return { json: JSON.stringify(unread), error: null }
+      if (command === 'port_places') {
+        return { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] }
       }
-      return command === 'tools' ? [] : null
+      if (command === 'port_run') {
+        return { code: 22, stdout: '', stderr: '401 Unauthorized' }
+      }
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
@@ -709,25 +807,32 @@ describe('the forge, from the window', () => {
     await clicking(page, 'Forge fragen')
 
     expect(page.text()).toContain('1 Repositories konnten nicht gefragt werden')
-    expect(page.text()).toContain('HAFEN_GITEA_TOKEN setzen')
   })
 
-  it('shows what a failed query said instead of an empty panel', async () => {
+  /**
+   * A missing tool is said **once, up front** rather than ninety-two times as a verdict.
+   *
+   * That the reading itself answers "gh ist nicht installiert" is `readStats`' own promise and is
+   * tested where it lives. What belongs here is the line that names the cause before anybody has
+   * pressed anything: a reader who sees "nicht messbar" on every forge quest has no way to get
+   * from there to a missing program.
+   */
+  it('names a missing forge tool before anything is asked', async () => {
     bridgeBy((command, args) => {
       if (command === 'snapshot') {
-        return which(args) === 'forge' ? { json: null } : cached(snapshot)
+        return which(args) === 'forge' ? { json: null } : cached(withOrigin)
       }
-      if (command === 'forge') {
-        return { json: null, error: 'gh ist nicht installiert' }
+      // Everything is on the PATH except the one that reads GitHub.
+      if (command === 'port_which') {
+        return (args as { command?: string } | undefined)?.command === 'gh' ? null : '/usr/bin/git'
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
     await flushPromises()
-    await clicking(page, 'Forge fragen')
 
-    expect(page.text()).toContain('gh ist nicht installiert')
+    expect(page.text()).toContain('gh fehlt')
   })
 
   /** The host is checked in Rust against a closed list; a refusal from there is shown as one. */
@@ -739,7 +844,7 @@ describe('the forge, from the window', () => {
       if (command === 'open_url') {
         return 'kein bekannter Forge-Host'
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
@@ -798,7 +903,7 @@ describe('deleting one branch, from the window', () => {
       if (command === 'port_real_path') {
         return (args as { path?: string } | undefined)?.path
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
@@ -829,7 +934,7 @@ describe('deleting one branch, from the window', () => {
       if (command === 'branch_delete') {
         return "error: the branch 'feat/old' is not fully merged"
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
 
     const page = mount(App, { global: { stubs } })
@@ -865,7 +970,7 @@ describe('the catalog page, from the window', () => {
       if (command === 'snapshot') {
         return which(args) === 'forge' ? { json: null } : cached(catalog)
       }
-      return command === 'tools' ? [] : null
+      return command === 'tools' ? [] : undefined
     })
     const page = mount(App, { global: { stubs } })
     await flushPromises()

@@ -125,7 +125,7 @@ könnte, wäre keiner. Sonst das Register. Beides leer heißt **nichts**, und da
 einmal, statt eine leere Flotte zu zeichnen: die beiden sehen gleich aus, und nur eine davon hat
 eine Abhilfe.
 
-### 3. Bordmittel (Ziel 5)
+### 3. Bordmittel (Ziel 5) ✅
 
 Einmal beim Start geprüft, an einer Stelle gesagt:
 
@@ -135,6 +135,13 @@ Einmal beim Start geprüft, an einer Stelle gesagt:
   tut der Hafen heute schon richtig; es wird nur nirgends gesagt.
 - **kein `claude`** — wird vom Hafen nicht gebraucht. Der `AgentPort` stammt aus Werft und hat
   hier keinen Aufrufer; `tools()` zeichnet fehlende Werkzeuge ohnehin nicht.
+
+Gebaut. Dabei kam heraus, dass die Forge-Abfrage noch über die CLI lief — die Bordmittel-Zeile
+hätte also „gh ist da" gesagt, während der Knopf aus einem ganz anderen Grund scheiterte. Sie
+läuft jetzt im Fenster über `readStats`, und die Erlaubnisliste in `ports.rs` trägt dafür die
+beiden Aufrufe, die die CLI-Liste von Anfang an hatte: `gh api graphql -f query=query(` und
+`curl --silent --fail`. Beides GETs — eine GraphQL-*Query* hat per Definition keine Nebenwirkung,
+und `curl` bekommt weder Methode noch Body.
 
 ### 4. Updater und Release (Ziele 1, 2, 4)
 

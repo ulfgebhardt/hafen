@@ -13,17 +13,21 @@
 
 import {
   EMPTY_REGISTER,
+  isRead,
   mergeCatalogs,
   parseRegister,
   readQuestCatalog,
+  readStats,
   renderRegister,
+  slugsOf,
   surveyHarbor,
 } from '@hafen/core'
 
 import { tauriPorts } from './adapters/tauri'
 import { builtInCatalog } from './catalog'
 
-import type { ForgeStats, Quest, Register, Ship } from '@hafen/core'
+import type { Bordmittel } from './components/bordmittel'
+import type { ForgeReading, ForgeStats, Quest, Register, Ship, Unread } from '@hafen/core'
 
 /** Where the window's own files live, as the Rust half resolves them. */
 export interface Places {
@@ -179,4 +183,47 @@ export async function askForRoot(): Promise<string | null> {
     options: { directory: true, multiple: false, title: 'Wo liegen deine Projekte?' },
   })
   return typeof chosen === 'string' && chosen !== '' ? chosen : null
+}
+
+/**
+ * What this machine has, asked once.
+ *
+ * Three `which` calls and no more: the harbour behaves correctly without any of them — it just
+ * never said why it was empty.
+ */
+export async function bordmittel(): Promise<Bordmittel> {
+  const [git, gh, curl] = await Promise.all([
+    tauriPorts.proc.which('git'),
+    tauriPorts.proc.which('gh'),
+    tauriPorts.proc.which('curl'),
+  ])
+  return { git: git !== null, gh: gh !== null, curl: curl !== null }
+}
+
+/**
+ * Asks the forges, here, in this window.
+ *
+ * It went through the CLI, so on a machine without `hafen` the button failed for a reason that had
+ * nothing to do with the forge. `readStats` already answers honestly where a tool is missing —
+ * "gh ist nicht installiert" is a *reading* and not an error — so the two halves of this now agree:
+ * what the capability line says and what the button does have one cause.
+ *
+ * Still **one request per repository and only when somebody presses it**. The survey asks nobody
+ * anything; this is the one place in the tool that leaves the machine, and it does so on purpose.
+ */
+export async function askForges(
+  ships: readonly Ship[],
+  token: string | null,
+): Promise<ForgeReading> {
+  const stats: ForgeStats[] = []
+  const unread: Unread[] = []
+  for (const slug of slugsOf(ships)) {
+    const answer = await readStats(tauriPorts, slug, token)
+    if (isRead(answer)) {
+      stats.push(answer)
+    } else {
+      unread.push(answer)
+    }
+  }
+  return { at: new Date().toISOString(), stats, unread }
 }

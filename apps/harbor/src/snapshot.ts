@@ -19,7 +19,14 @@ import { inspectShip, setArchived, setEnlisted, setRoot, slugOf } from '@hafen/c
 import { tauriPorts } from './adapters/tauri'
 import { NOTHING_RUNNING } from './components/measuring'
 import { TOOLS } from './components/tools'
-import { demandsOf, identities, registerIn, surveyInWindow, writeRegister } from './survey'
+import {
+  askForges,
+  demandsOf,
+  identities,
+  registerIn,
+  surveyInWindow,
+  writeRegister,
+} from './survey'
 
 import type { Progress } from './components/measuring'
 import type { ToolName } from './components/tools'
@@ -497,16 +504,19 @@ export async function refetchForge(): Promise<Forge> {
     throw new Error('In diesem Fenster laesst sich keine Forge fragen.')
   }
 
-  const measured = (await invoke('forge')) as { json: string | null; error: string | null }
-  if (measured.json === null) {
-    throw new Error(measured.error ?? 'Die Forge-Abfrage kam ohne Antwort zurueck.')
-  }
-
-  const reading = JSON.parse(measured.json) as Forge
-  const failure = (await invoke('store', {
-    json: measured.json,
-    which: 'forge',
-  })) as string | null
+  /*
+   * Asked here, in this window.
+   *
+   * It went through the CLI, so on a machine without `hafen` the button failed for a reason that
+   * had nothing to do with the forge. `readStats` answers honestly where a tool is missing — "gh
+   * ist nicht installiert" is a *reading* and not an error — so what the capability line says and
+   * what this button does now have one cause.
+   */
+  const places = (await invoke('port_places')) as Places
+  const current = await loadSnapshot()
+  const reading = await askForges(current.snapshot.ships, null)
+  const json = JSON.stringify(reading)
+  const failure = await tauriPorts.fs.writeFile(beside(places.snapshot, 'forge.json'), json)
   if (failure !== null) {
     throw new SnapshotError(failure, '(Cache)', 'hafen forge')
   }

@@ -462,6 +462,34 @@ describe('the forge reading, beside the survey and never inside it', () => {
     vi.unstubAllGlobals()
   })
 
+  /** The ship a forge reading is about: matched on `origin`, which is the only thing that matches. */
+  const WITH_ORIGIN = {
+    ...SNAPSHOT,
+    ships: [
+      {
+        ...(ship('/a') as object),
+        remotes: [{ name: 'origin', url: 'git@github.com:org/ship.git', forge: 'github' }],
+      },
+    ],
+  }
+
+  /** What `gh api graphql` prints, which is what the window now reads. */
+  const GRAPHQL = JSON.stringify({
+    data: {
+      repository: {
+        stargazerCount: 1743,
+        forkCount: 210,
+        watchers: { totalCount: 64 },
+        primaryLanguage: { name: 'TypeScript' },
+        issues: { totalCount: 442 },
+        pullRequests: { totalCount: 53 },
+        viewerPermission: 'READ',
+        defaultBranchRef: { name: 'main', branchProtectionRule: null },
+        rulesets: { nodes: [] },
+      },
+    },
+  })
+
   const READING = {
     at: '2026-09-30T08:00:00Z',
     stats: [
@@ -512,36 +540,64 @@ describe('the forge reading, beside the survey and never inside it', () => {
     await expect(refetchForge()).rejects.toThrow('keine Forge')
   })
 
-  it('asks again and keeps the answer in its own file', async () => {
+  /**
+   * Asked here, in this window.
+   *
+   * It went through the CLI, so on a machine without `hafen` the button failed for a reason that
+   * had nothing to do with the forge. It is the one thing in this tool that leaves the machine,
+   * and it still only does so when somebody presses it.
+   */
+  it('asks the forge itself and keeps the answer in its own file', async () => {
     const invoke = asAppWith({
-      forge: { json: JSON.stringify(READING), error: null },
-      store: null,
+      ...MEASURING,
+      snapshot: { path: '/cache/snapshot.json', json: JSON.stringify(WITH_ORIGIN), error: null },
+      port_which: '/usr/bin/gh',
+      port_run: { code: 0, stdout: GRAPHQL, stderr: '' },
     })
+
     const read = await refetchForge()
 
-    expect(read.unread).toHaveLength(1)
-    expect(invoke).toHaveBeenCalledWith('store', {
-      json: JSON.stringify(READING),
-      which: 'forge',
+    expect(read.stats).toHaveLength(1)
+    expect(read.stats[0]?.issues).toBe(442)
+    // No second program, and the reading lands beside the snapshot rather than under a cache key.
+    expect(invoke).not.toHaveBeenCalledWith('forge', expect.anything())
+    expect(invoke).toHaveBeenCalledWith('port_write_file', {
+      path: '/cache/forge.json',
+      contents: JSON.stringify(read),
     })
   })
 
   /**
    * A reading that arrived and could not be kept is still said out loud. Silently dropping it
-   * would mean seventeen seconds of somebody else's server asked for again on the next start.
+   * would mean somebody else's server asked again on the next start.
    */
-  it('names a reading it could not keep, and one it never got', async () => {
-    asAppWith({ forge: { json: JSON.stringify(READING), error: null }, store: 'kein Platz' })
+  it('names a reading it could not keep', async () => {
+    asAppWith({
+      ...MEASURING,
+      snapshot: { path: '/cache/snapshot.json', json: JSON.stringify(WITH_ORIGIN), error: null },
+      port_which: '/usr/bin/gh',
+      port_run: { code: 0, stdout: GRAPHQL, stderr: '' },
+      port_write_file: 'kein Platz',
+    })
 
     await expect(refetchForge()).rejects.toThrow(SnapshotError)
+  })
 
-    asAppWith({ forge: { json: null, error: 'gh nicht installiert' } })
+  /**
+   * A missing tool is a **reading**, not an error: the repository is named, the reason is named,
+   * and nothing is invented in its place.
+   */
+  it('brings back a repository it could not ask, with the reason', async () => {
+    asAppWith({
+      ...MEASURING,
+      snapshot: { path: '/cache/snapshot.json', json: JSON.stringify(WITH_ORIGIN), error: null },
+      port_which: null,
+    })
 
-    await expect(refetchForge()).rejects.toThrow('gh nicht installiert')
+    const read = await refetchForge()
 
-    asAppWith({ forge: { json: null, error: null } })
-
-    await expect(refetchForge()).rejects.toThrow('ohne Antwort')
+    expect(read.stats).toStrictEqual([])
+    expect(read.unread[0]?.reason).toContain('gh ist nicht installiert')
   })
 
   describe(statsFor, () => {
