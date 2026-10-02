@@ -54,11 +54,20 @@ const READING: &[&str] = &[
 /// `log --format=<a format with spaces in it>` is one prefix and an unknown number of words, and
 /// a per-argument rule would have to know which of them may vary.
 pub fn reading(command: &str, args: &[String]) -> bool {
-    if command != "git" {
-        return false;
-    }
     let line = args.join(" ");
-    READING.iter().any(|allowed| line.starts_with(allowed))
+    match command {
+        "git" => READING.iter().any(|allowed| line.starts_with(allowed)),
+        /*
+         * The forge, and the only two calls here that leave this machine.
+         *
+         * Both are GETs: a GraphQL **query** has no side effect by definition, and `curl` is given
+         * no method and no body. The same two the CLI's list has had from the beginning — and the
+         * survey still asks nobody anything; these run when somebody presses the button.
+         */
+        "gh" => line.starts_with("api graphql -f query=query("),
+        "curl" => line.starts_with("--silent --fail"),
+        _ => false,
+    }
 }
 
 /// What a command did, in the shape `CommandResult` has in `ports.ts`.
@@ -390,6 +399,38 @@ mod tests {
 
         assert!(!reading("sh", &args));
         assert!(!reading("rm", &args));
+    }
+
+    /// The forge, and the only two calls here that leave this machine. Both are GETs.
+    #[test]
+    fn allows_the_two_forge_readings_and_nothing_else_of_them() {
+        let query: Vec<String> = ["api", "graphql", "-f", "query=query($owner:String!){...}"]
+            .iter()
+            .map(|one| (*one).to_owned())
+            .collect();
+
+        assert!(reading("gh", &query));
+        assert!(reading(
+            "curl",
+            &[
+                "--silent".to_owned(),
+                "--fail".to_owned(),
+                "https://x/api".to_owned()
+            ]
+        ));
+        // A mutation is not a query, and `gh repo delete` is not a reading at all.
+        assert!(!reading(
+            "gh",
+            &[
+                "api".to_owned(),
+                "graphql".to_owned(),
+                "-f".to_owned(),
+                "query=mutation{...}".to_owned()
+            ]
+        ));
+        assert!(!reading("gh", &["repo".to_owned(), "delete".to_owned()]));
+        // And curl with a method is a write however it is spelled.
+        assert!(!reading("curl", &["-X".to_owned(), "POST".to_owned()]));
     }
 
     /// `branch --merged` is a reading and `branch -D` is not, and they begin with the same word.

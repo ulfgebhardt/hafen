@@ -12,12 +12,14 @@
     viewOf,
   } from './components/band'
   import BandTabs from './components/BandTabs.vue'
+  import { canSurvey, forgeNote } from './components/bordmittel'
   import { chosenKey } from './components/chosen'
   import ContractList from './components/ContractList.vue'
   import { filterByContract } from './components/contracts'
   import FirstRun from './components/FirstRun.vue'
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
+  import NoGit from './components/NoGit.vue'
   import { filterShips } from './components/search'
   import ShipSheet from './components/ShipSheet.vue'
   import {
@@ -39,9 +41,10 @@
     statsFor,
     stopMeasuring,
   } from './snapshot'
-  import { askForRoot, needsRoots, registerIn } from './survey'
+  import { askForRoot, bordmittel, needsRoots, registerIn } from './survey'
 
   import type { Layout, Page, View } from './components/band'
+  import type { Bordmittel } from './components/bordmittel'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
@@ -179,6 +182,13 @@
    */
   const unasked = ref(false)
   const places = ref<Places | null>(null)
+  /**
+   * What this machine can do. `null` until it has been asked — which is not the same as nothing.
+   *
+   * The harbour draws while the answer is on its way: a window that held its picture back for a
+   * capability check would have the priorities backwards.
+   */
+  const aboard = ref<Bordmittel | null>(null)
 
   const askWhereTheProjectsAre = async (): Promise<void> => {
     const chosen = await askForRoot()
@@ -509,6 +519,7 @@
      */
     if (inTauri()) {
       try {
+        aboard.value = await bordmittel()
         const where = await currentPlaces()
         places.value = where
         unasked.value = needsRoots(where, await registerIn(where.store))
@@ -532,8 +543,13 @@
       Before the harbour, because an empty harbour and an unasked machine look alike and only one
       of them has a remedy.
     -->
+    <!--
+      Before everything, because without git there is nothing to draw and an empty harbour would
+      say the wrong thing about this machine.
+    -->
+    <NoGit v-if="aboard !== null && !canSurvey(aboard)" :gh="aboard.gh" :curl="aboard.curl" />
     <FirstRun
-      v-if="unasked"
+      v-else-if="unasked"
       :store="places?.store ?? ''"
       :busy="busy"
       @choose="askWhereTheProjectsAre"
@@ -561,6 +577,21 @@
         @clear="contract = null"
         @view="showView"
       />
+
+      <!--
+        What this machine cannot ask, said once.
+
+        The verdicts are already right — a forge quest nobody can answer is `nicht messbar`, which
+        is the fifth verdict doing its job. What was missing is the *cause*: ninety-two readings
+        that say "not measurable" do not add up to "gh is not installed", and only one of those is
+        something a reader can act on.
+      -->
+      <p
+        v-if="forgeNote(aboard) !== null"
+        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-amber-600/80"
+      >
+        {{ forgeNote(aboard) }}
+      </p>
 
       <!--
         Said out loud, because an empty basin and a filter that matched nothing look identical —
