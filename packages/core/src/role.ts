@@ -63,6 +63,8 @@ const ROLE_COMMANDS: Record<CheckRole, readonly RoleCommand[]> = {
     { tool: 'next', needs: [/\blint\b/] },
     { tool: 'ruff', needs: [/\bcheck\b/] },
     { tool: 'clippy' },
+    // Without `--frail` remark reports and exits green, and `-o` would rewrite the markdown.
+    { tool: 'remark', needs: [/--frail\b/] },
   ],
   typecheck: [
     { tool: 'tsc', needs: [/--noEmit\b/] },
@@ -164,10 +166,137 @@ function runs(command: string, entry: RoleCommand): boolean {
   return invokes(command, entry.tool) && (entry.needs ?? []).every((need) => need.test(command))
 }
 
+/**
+ * Whatever runs *scripts*: the package managers, and the task runners that fan out.
+ *
+ * `npx` is not among them — it runs a binary, and reading `npx playwright install` as a hand-off
+ * to a script called `playwright` would be an invention.
+ */
+const RUNNERS: readonly string[] = ['npm', 'pnpm', 'yarn', 'bun', 'turbo', 'lerna']
+
+/**
+ * Words in front of the tool that only decide *how* it runs: `npx vuepress build`,
+ * `cross-env NODE_ENV=production nuxt build`. Read past, never read as the tool.
+ */
+const WRAPPERS: readonly string[] = ['npx', 'pnpx', 'bunx', 'cross-env', 'env', 'dotenv', '--']
+
+/**
+ * Whatever runs a *file* rather than doing anything itself. `node build` runs `build.js`, and
+ * what that does is not in the command — so the next word is a path and never a verb.
+ */
+const INTERPRETERS: readonly string[] = [
+  'node',
+  'tsx',
+  'ts-node',
+  'bun',
+  'deno',
+  'sh',
+  'bash',
+  'python',
+  'python3',
+]
+
+/**
+ * Tools that run *scripts* by name without being a package manager: `run-s build` runs the
+ * script `build`, so its `build` is a name and not a verb. `delegationOf` does not follow them,
+ * which leaves what they reach unread — not invented.
+ */
+const SCRIPT_CHAINS: readonly string[] = ['run-s', 'run-p', 'npm-run-all', 'concurrently']
+
+/**
+ * Tools that are known to do neither a check nor a build: they move files, print or wait.
+ *
+ * Closed like the role lists. `"build": "echo nothing to build"` builds nothing, and
+ * `"build": "mkdirp dist && ncp static dist"` copies; without this list the first would be a
+ * verb (`echo build`) and the second an unknown tool claiming a build it does not do.
+ */
+const HELPERS: readonly string[] = [
+  'echo',
+  'printf',
+  'true',
+  'false',
+  'exit',
+  'export',
+  'cd',
+  'rm',
+  'rimraf',
+  'cp',
+  'ncp',
+  'mv',
+  'mkdir',
+  'mkdirp',
+  'touch',
+  'cat',
+  'chmod',
+  'ln',
+  'sleep',
+  'wait-on',
+  'git',
+  'husky',
+  'patch-package',
+]
+
+/** Where in these words the tool stands, `-1` where nothing but set-up does. */
+function toolIndex(spoken: readonly string[]): number {
+  return spoken.findIndex(
+    (word) => !WRAPPERS.includes(word) && !word.startsWith('-') && !/^\w+=/u.test(word),
+  )
+}
+
+/**
+ * The tool a command runs, past any environment assignment and wrapper — `null` for a command
+ * that is only those.
+ *
+ * As a basename without a JavaScript extension, the same reading as `invokes`.
+ */
+export function toolOf(command: string): string | null {
+  const spoken = words(command)
+  const word = spoken[toolIndex(spoken)]
+  return word === undefined ? null : (word.split('/').pop() ?? word).replace(/\.[cm]?js$/, '')
+}
+
+/**
+ * The subcommands that say outright what a tool is asked to do.
+ *
+ * The open half of this module, and deliberately the only one. `vuepress build docs`,
+ * `storybook build` and `vike build` are the same sentence in three tools — measured on
+ * 02.10.2026, twelve role-named scripts on this fleet said it with a tool no list knew. A verb in
+ * the place of a subcommand is the project naming the action, not a guess about the tool.
+ *
+ * `test` is not among them: `playwright test` is end to end and `bun test` a unit run, so the
+ * verb does not say which role it is — the closed lists above have to.
+ */
+const VERBS: ReadonlyMap<string, CheckRole | 'build'> = new Map([
+  ['build', 'build'],
+  ['lint', 'lint'],
+  ['typecheck', 'typecheck'],
+])
+
+/**
+ * What a command's subcommand says it does, or `null`.
+ *
+ * Only for a tool that does things itself: a runner's `build` is the name of a script
+ * (`delegationOf` reads that, `SCRIPT_CHAINS` do not), an interpreter's is a file, and a
+ * helper's (`echo build`) is text.
+ */
+function verbOf(command: string): CheckRole | 'build' | null {
+  const tool = toolOf(command)
+  if (tool === null || [...RUNNERS, ...SCRIPT_CHAINS, ...INTERPRETERS, ...HELPERS].includes(tool)) {
+    return null
+  }
+  const spoken = words(command)
+  const verb = spoken.slice(toolIndex(spoken) + 1).find((word) => !word.startsWith('-'))
+  return verb === undefined ? null : (VERBS.get(verb) ?? null)
+}
+
 /** Which roles these commands measure, ignoring anything the commands delegate to. */
 export function commandRoles(commands: readonly string[]): readonly CheckRole[] {
   const found = new Set<CheckRole>()
   for (const command of commands.filter(judges)) {
+    const verb = verbOf(command)
+    if (verb !== null && verb !== 'build') {
+      found.add(verb)
+    }
     for (const role of CHECK_ROLES) {
       if (ROLE_COMMANDS[role].some((entry) => runs(command, entry))) {
         found.add(role)
@@ -196,7 +325,11 @@ export function bodyRoles(body: string): readonly CheckRole[] {
  */
 const BUILD_COMMANDS: readonly RoleCommand[] = [
   { tool: 'vite', needs: [/(^|\s)build(\s|$)/u] },
-  { tool: 'tsc', needs: [/(^|\s)(-b|--build)(\s|$)/u] },
+  // Every `tsc` that is not asked to keep quiet emits — `-b`, `-p tsconfig.json` or nothing at
+  // all. Ocelot-Social's `"build": "tsc && tsc-alias"` is the plain form, and was missed.
+  { tool: 'tsc', needs: [/^(?!.*--noEmit\b)/u] },
+  { tool: 'tsup' },
+  { tool: 'unbuild' },
   { tool: 'nuxt', needs: [/(^|\s)(build|generate)(\s|$)/u] },
   { tool: 'next', needs: [/(^|\s)build(\s|$)/u] },
   { tool: 'astro', needs: [/(^|\s)build(\s|$)/u] },
@@ -216,7 +349,7 @@ const BUILD_COMMANDS: readonly RoleCommand[] = [
 
 /** Whether this one command builds an artifact. */
 export function buildsArtifact(command: string): boolean {
-  return BUILD_COMMANDS.some((entry) => runs(command, entry))
+  return verbOf(command) === 'build' || BUILD_COMMANDS.some((entry) => runs(command, entry))
 }
 
 /** Whether anything in this script body builds one. */
@@ -235,14 +368,6 @@ export interface Delegation {
    */
   scope: 'self' | 'members'
 }
-
-/**
- * Whatever runs *scripts*: the package managers, and the task runners that fan out.
- *
- * `npx` is not among them — it runs a binary, and reading `npx playwright install` as a hand-off
- * to a script called `playwright` would be an invention.
- */
-const RUNNERS: readonly string[] = ['npm', 'pnpm', 'yarn', 'bun', 'turbo', 'lerna']
 
 /** Runners that always mean every member, whatever else stands on the line. */
 const FANOUT_RUNNERS: readonly string[] = ['turbo', 'lerna']
