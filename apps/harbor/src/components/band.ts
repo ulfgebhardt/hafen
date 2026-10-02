@@ -101,30 +101,98 @@ export const CONTRACTS = 'contracts'
  */
 export const FLEET = 'fleet'
 
-export type Page = Band | typeof CONTRACTS | typeof FLEET
+/**
+ * The same sheet with the archive on it.
+ *
+ * The fleet page leaves the archived ships off by default: they are put away by a decision in the
+ * register, and a sheet of the whole machine where half the hulls are ones nobody means to touch
+ * again is mostly archive. They are still part of the answer to "what does this organisation
+ * own", so the full sheet is one tab away rather than gone — the same reasoning that keeps the
+ * empty bands on the dock's tab bar.
+ */
+export const FLEET_ARCHIVE = 'fleetArchive'
 
-export const PAGES: readonly Page[] = [...BANDS, FLEET, CONTRACTS]
+export type Page = Band | typeof CONTRACTS | typeof FLEET | typeof FLEET_ARCHIVE
+
+export const PAGES: readonly Page[] = [...BANDS, FLEET, FLEET_ARCHIVE, CONTRACTS]
 
 export const PAGE_LABEL: Record<Page, string> = {
   ...BAND_LABEL,
   [FLEET]: 'Flotte',
+  [FLEET_ARCHIVE]: 'mit Archiv',
   [CONTRACTS]: 'Verträge',
 }
 
 export const PAGE_MEANING: Record<Page, string> = {
   ...BAND_MEANING,
-  [FLEET]: 'alle Schiffe, nach Reederei — ohne Bänder',
+  [FLEET]: 'alle Schiffe außer den archivierten, nach Reederei — ohne Bänder',
+  [FLEET_ARCHIVE]: 'alle Schiffe, auch die archivierten, nach Reederei — ohne Bänder',
   [CONTRACTS]: 'was die Flotte fordert — je Forderung statt je Schiff',
+}
+
+/** Whether this is one of the fleet sheets, with or without the archive. */
+export function isFleet(page: Page): page is typeof FLEET | typeof FLEET_ARCHIVE {
+  return page === FLEET || page === FLEET_ARCHIVE
 }
 
 /** Whether this page splits the fleet into bands at all. */
 export function isBand(page: Page): page is Band {
-  return page !== CONTRACTS && page !== FLEET
+  return page !== CONTRACTS && !isFleet(page)
+}
+
+/**
+ * The ships a page draws, out of the ones that came in.
+ *
+ * One place, because two things ask: the drawing, and the count and points beside the tab. Worked
+ * out separately they were already two answers once — the fleet tab counted demands while the
+ * sheet beside it drew hulls.
+ */
+export function shipsOn(page: Page, ships: readonly Ship[]): readonly Ship[] {
+  if (page === CONTRACTS) {
+    return []
+  }
+  if (page === FLEET_ARCHIVE) {
+    return ships
+  }
+  if (page === FLEET) {
+    return ships.filter((ship) => bandOf(ship) !== 'archived')
+  }
+  return byBand(ships)[page]
+}
+
+/**
+ * Which fleet sheet a ship is on, starting from the one last open.
+ *
+ * The same courtesy the dock switch pays with `bandOf`: the ship being read comes along, so a
+ * switch to the fleet with an archived ship held opens the sheet she is on rather than one where
+ * she is not drawn and the reader has lost her.
+ */
+export function fleetPageFor(
+  ship: Ship | null,
+  last: typeof FLEET | typeof FLEET_ARCHIVE,
+): typeof FLEET | typeof FLEET_ARCHIVE {
+  return ship !== null && bandOf(ship) === 'archived' ? FLEET_ARCHIVE : last
 }
 
 /** Whether this page draws a harbour — both kinds of page that do, and neither that does not. */
 export function draws(page: Page): boolean {
   return page !== CONTRACTS
+}
+
+/**
+ * The page a ship belongs on, seen from the page that is open.
+ *
+ * For the moment a measurement moves her: a repository committed to after months of rest is
+ * active now, and a band page that kept showing the band she left had simply lost her — the datasheet
+ * still read her, the drawing no longer carried her. So the page follows her, the same way a switch
+ * between views does. The fleet sheet without the archive follows her onto the full one when the
+ * register put her away; the full sheet and the catalog carry everyone and stay.
+ */
+export function pageFor(page: Page, ship: Ship): Page {
+  if (isBand(page)) {
+    return bandOf(ship)
+  }
+  return page === FLEET ? fleetPageFor(ship, FLEET) : page
 }
 
 /**
@@ -165,7 +233,7 @@ export const VIEW_MEANING: Record<View, string> = {
 export function pagesOf(view: View): readonly Page[] {
   switch (view) {
     case 'fleet':
-      return [FLEET]
+      return [FLEET, FLEET_ARCHIVE]
     case 'contracts':
       return [CONTRACTS]
     case 'dock':
@@ -175,7 +243,7 @@ export function pagesOf(view: View): readonly Page[] {
 
 /** Which view a page belongs to — so a page picked elsewhere can put the buttons right. */
 export function viewOf(page: Page): View {
-  return page === FLEET ? 'fleet' : page === CONTRACTS ? 'contracts' : 'dock'
+  return isFleet(page) ? 'fleet' : page === CONTRACTS ? 'contracts' : 'dock'
 }
 
 /**

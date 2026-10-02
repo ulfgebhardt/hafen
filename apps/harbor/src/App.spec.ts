@@ -273,6 +273,56 @@ describe('acting on a ship', () => {
 
     expect(wrote(written)).toContain(String(snapshot.ships[0]?.path))
   })
+
+  /**
+   * A measurement that moves the ship moves the page with her.
+   *
+   * Archived here, because that is a band change one click can make: the register is written, the
+   * one repository measured again, and she is in another band. The page used to stay on the band
+   * she had left — the datasheet still read her and the drawing no longer carried her.
+   */
+  it('follows the ship to the band a measurement put her in', async () => {
+    const files = new Map<string, string>()
+    bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_write_file: (args?: Record<string, unknown>) => {
+        files.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) => files.get(String(args?.['path'])) ?? null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    const scene = () =>
+      page.findComponent({ name: 'HarborScene' }).vm as unknown as {
+        $emit: (event: string, ...args: readonly unknown[]) => void
+        ships: readonly { path: string }[]
+        centre: { path: string; archived: boolean } | null
+      }
+    const open = () =>
+      page
+        .findAll('button')
+        .find((one) => one.attributes('aria-current') === 'page')
+        ?.text() ?? ''
+
+    expect(open()).toContain('Aktiv')
+
+    scene().$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'archivieren')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(open()).toContain('Archiviert')
+    // Still the one being read, and the fresh reading of her rather than the one from before.
+    expect(scene().centre?.path).toBe(snapshot.ships[0]?.path)
+    expect(scene().centre?.archived).toBe(true)
+    expect(scene().ships.map((one) => one.path)).toContain(snapshot.ships[0]?.path)
+  })
 })
 
 describe('a machine without the tools', () => {
