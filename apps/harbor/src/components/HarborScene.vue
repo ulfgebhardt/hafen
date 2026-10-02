@@ -6,6 +6,7 @@
   import type { Layout } from './band'
   import type { Chosen } from './chosen'
   import type { Scene } from './scene'
+  import type { Hold } from './viewport'
   import type { ForgeStats, Ship } from '@hafen/core'
 
   const {
@@ -30,7 +31,7 @@
      * Handed in because this component is keyed on the page: the drawing she was in is gone by
      * the time this one is built, so the place she occupied has to survive outside both.
      */
-    hold?: { x: number; y: number } | null
+    hold?: Hold | null
     /**
      * The ships a search found — marked in the drawing, never filtered out of it.
      *
@@ -120,7 +121,7 @@
 
   /** Where a ship stands right now — asked by the page before it swaps the drawing out. */
   defineExpose({
-    where: (ship: Ship | null): { x: number; y: number } | null => scene?.where(ship) ?? null,
+    where: (ship: Ship | null): Hold | null => scene?.where(ship) ?? null,
   })
 
   onBeforeUnmount(() => {

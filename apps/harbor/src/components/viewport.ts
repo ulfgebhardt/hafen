@@ -125,3 +125,27 @@ export function clampPan(pan: Pan, world: Extent, view: Extent, scale: number): 
 export function isPannable(world: Extent, view: Extent, scale: number): boolean {
   return world.width * scale > view.width || world.height * scale > view.height
 }
+
+/**
+ * Where a ship was on screen, and how large: what a page switch carries across.
+ *
+ * Position alone was the first version. The ship came back to the same spot and the harbour round
+ * her redrew at "everything fits" — so a reader zoomed in on one berth switched pages and found
+ * her a speck on the same pixel. Both arrangements draw in the same unit, so the same scale is the
+ * same size of ship.
+ */
+export interface Hold extends Pan {
+  scale: number
+}
+
+/**
+ * The view that puts a spot back where a hold says, at the hold's size.
+ *
+ * Clamped like a wheel turn, against the floor of the drawing it lands in: a hold from a large
+ * harbour may be further out than a small one can go, and that is not a reason to show the small
+ * one smaller than it fits.
+ */
+export function heldView(hold: Hold, spot: Pan, floor: number): { zoom: number; pan: Pan } {
+  const zoom = clampZoom(hold.scale, floor)
+  return { zoom, pan: { x: hold.x - spot.x * zoom, y: hold.y - spot.y * zoom } }
+}

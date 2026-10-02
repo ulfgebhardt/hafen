@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  heldView,
   clampPan,
   clampZoom,
   fitScale,
@@ -157,5 +158,29 @@ describe(zoomAt, () => {
 
   it('changes nothing when the scale does not', () => {
     expect(zoomAt({ x: -10, y: -20 }, 1.5, 1.5, { x: 5, y: 5 })).toStrictEqual({ x: -10, y: -20 })
+  })
+})
+
+describe(heldView, () => {
+  /** The ship comes back on the same pixel *and* at the same size — the second half was missing. */
+  it('puts the spot back where it was, at the scale it was', () => {
+    const view = heldView({ x: 400, y: 300, scale: 2 }, { x: 100, y: 50 }, MIN_ZOOM)
+
+    expect(view.zoom).toBe(2)
+    expect(view.pan.x + 100 * view.zoom).toBe(400)
+    expect(view.pan.y + 50 * view.zoom).toBe(300)
+  })
+
+  /** Clamped like a wheel turn: past the largest scale is not a size anything is legible at. */
+  it('stays within what a wheel could reach', () => {
+    expect(heldView({ x: 0, y: 0, scale: 99 }, { x: 0, y: 0 }, MIN_ZOOM).zoom).toBe(MAX_SCALE)
+    expect(heldView({ x: 0, y: 0, scale: 0.01 }, { x: 0, y: 0 }, MIN_ZOOM).zoom).toBe(MIN_ZOOM)
+  })
+
+  /** And still on the spot after clamping, because the pan is worked out from the clamped scale. */
+  it('keeps the spot under the hold when the scale had to give', () => {
+    const view = heldView({ x: 400, y: 300, scale: 99 }, { x: 100, y: 50 }, MIN_ZOOM)
+
+    expect(view.pan.x + 100 * view.zoom).toBe(400)
   })
 })
