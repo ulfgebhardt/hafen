@@ -16,30 +16,32 @@ warum: >
   Eine Web-App aktualisiert sich beim Neuladen; ein Binary tut es nie von allein. Ohne einen
   Update-Pfad ist die Fassung, die jemand einmal geladen hat, die letzte, die er hat — das Werkzeug
   altert dann beim Nutzer und nicht beim Autor, und jeder gefixte Fehler bleibt bei dem, der ihn
-  gemeldet hat, stehen. Zwei Dinge müssen dafür zusammenkommen, und beide sind leicht zu vergessen,
-  weil ihr Fehlen den Build nicht rot macht: eine Datei im Release, die sagt, was die neueste
-  Fassung ist, und eine Signatur, ohne die der Updater nichts annimmt. Ein Release, das signiert
-  ohne zu veröffentlichen, oder veröffentlicht ohne zu signieren, sieht grün aus und aktualisiert
-  niemanden.
+  gemeldet hat, stehen. Zwei Dinge müssen dafür zusammenkommen: eine Datei im Release, die sagt,
+  was die neueste Fassung ist, und eine Signatur, ohne die der Updater nichts annimmt. Der eine
+  fehlt laut, der andere still — und deshalb werden beide geprüft und nicht nur der stille.
 ---
 
 # Ein ausgeliefertes Binary kommt an seine nächste Fassung
 
 ## Warum zwei Checks und nicht einer
 
-Weil es zwei unabhängige Fehler sind und beide still passieren.
+Weil es zwei unabhängige Fehler sind — und gemessen am 02.10.2026 verhalten sie sich **nicht**
+gleich. Hier stand vorher, beide würden den Build grün lassen. Ein lokaler `tauri build` hat das
+widerlegt, und der Unterschied ist das Interessante.
 
-`includeUpdaterJson` ist die Veröffentlichung: ohne sie liegt im Release eine `.sig` neben jedem
-Installer, aber keine `latest.json`, und ein laufendes Binary fragt dann eine Adresse ab, unter der
-nichts steht. Es meldet das nicht — der Hafen schluckt genau diesen Fehler absichtlich, weil wer
-offline ist kein Problem mit dem Werkzeug hat. Also sieht ein Release ohne Update-Datei von außen
-exakt so aus wie eines, bei dem alle schon aktuell sind.
+`TAURI_SIGNING_PRIVATE_KEY` **bricht laut ab**. Mit `createUpdaterArtifacts: true` und einem
+pubkey in der Konfiguration endet der Build mit „A public key has been found, but no private key".
+Das ist der freundliche der beiden Fehler: er ist nicht zu übersehen, und niemand veröffentlicht
+versehentlich Installer ohne Signatur. Geprüft wird er trotzdem — ein roter Build ist eine
+Rückmeldung an den, der gerade releast, und kein Zustand, der im Repository aufgeschrieben steht.
+Die Quest beantwortet die andere Frage: *schuldet* dieses Repo einen Update-Pfad und hat es ihn.
 
-`TAURI_SIGNING_PRIVATE_KEY` ist die Bedingung, dass das Angebot angenommen wird. Fehlt der
-Schlüssel in der Umgebung, baut der Job **grün** durch und legt Installer ohne `.sig` ab; der
-Updater prüft die Signatur gegen den öffentlichen Schlüssel und lehnt dann jede Fassung ab. Das ist
-der unangenehmere der beiden Fehler, weil er nach einem erfolgreichen Release aussieht und erst bei
-dem auffällt, der aktualisieren wollte.
+`includeUpdaterJson` **schweigt**. Ohne die Eingabe liegt im Release eine `.sig` neben jedem
+Installer, aber keine `latest.json` — der Build ist grün, die Dateien sehen vollständig aus, und
+ein laufendes Binary fragt eine Adresse ab, unter der nichts steht. Es meldet das nicht, weil der
+Hafen genau diesen Fehler absichtlich schluckt: wer offline ist, hat kein Problem mit dem Werkzeug.
+Ein Release ohne Update-Datei sieht von außen also exakt so aus wie eines, bei dem alle schon
+aktuell sind. Das ist der Fehler, für den diese Quest existiert.
 
 ## Was hier *nicht* geprüft wird, und warum nicht
 
