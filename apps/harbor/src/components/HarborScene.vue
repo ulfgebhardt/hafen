@@ -96,9 +96,15 @@
   watch(
     () => [ships, forge, layout] as const,
     ([next, stats, kind]) => {
+      /*
+       * Where she stands *now*, asked before the redraw throws it away. `hold` is what the page
+       * switch that mounted this drawing carried, and after a measurement on the same page it
+       * put her back where she had been minutes and several zooms ago.
+       */
+      const here = scene?.where(centre) ?? hold
       scene?.draw(next, stats, kind)
       scene?.highlight(picked.value, demand.value)
-      scene?.focus(centre, hold)
+      scene?.focus(centre, here)
     },
   )
 
