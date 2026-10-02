@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { mockContract, mockPorts } from './mock'
 import { measureQuests, namedInCi, runCheck } from './probe'
@@ -36,8 +36,15 @@ function facts(overrides: Partial<QuestFacts> = {}): QuestFacts {
   }
 }
 
-function quest(checks: readonly QuestCheck[]): Quest {
-  return { id: 'q', chain: 'werft', title: 'q', requires: [], appliesTo: [], checks, why: '' }
+function quest(checks: readonly QuestCheck[], appliesTo: Quest['appliesTo'] = []): Quest {
+  return { id: 'q', chain: 'werft', title: 'q', requires: [], appliesTo, checks, why: '' }
+}
+
+/** What `git ls-files` says when a Tauri config is in the tree, NUL-separated as git writes it. */
+const LISTS_TAURI = {
+  'git ls-files -z -- *tauri.conf.json': {
+    stdout: 'apps/harbor/src-tauri/tauri.conf.json\0',
+  },
 }
 
 describe(runCheck, () => {
@@ -280,6 +287,50 @@ describe(measureQuests, () => {
     expect(measured.traits).toStrictEqual(['node', 'rust'])
     // Nothing asked for a dependency, so no manifest was parsed a second time for one.
     expect(measured.dependencies).toStrictEqual([])
+  })
+
+  /**
+   * Asked of git and not of a list of likely places: the config sits at `src-tauri/` in one
+   * repository and at `apps/<name>/src-tauri/` in the next, and a candidate list would be the
+   * guess this tool refuses everywhere else it looks for a file.
+   */
+  it('finds the bundler config wherever git says it is', async () => {
+    const measured = await measureQuests(
+      mockPorts({ commands: LISTS_TAURI }),
+      SHIP,
+      mockContract(),
+      [quest([check('ci-nennt', { text: 'includeUpdaterJson' })], ['tauri'])],
+    )
+
+    expect(measured.traits).toContain('tauri')
+  })
+
+  /**
+   * A repository with no config is not a repository with a gap. A library ships no binary and owes
+   * it no update path — `notApplicable`, which is what the trait is for.
+   */
+  it('does not call a repository without one a Tauri app', async () => {
+    const measured = await measureQuests(mockPorts(), SHIP, mockContract(), [
+      quest([check('ci-nennt', { text: 'includeUpdaterJson' })], ['tauri']),
+    ])
+
+    expect(measured.traits).not.toContain('tauri')
+  })
+
+  /**
+   * One git call per repository is nothing; eighty-odd of them for a trait no quest gates on is a
+   * cost paid for an answer nobody reads. Same discipline as the dependencies.
+   */
+  it('does not ask git at all when no quest gates on the trait', async () => {
+    const ports = mockPorts({ commands: LISTS_TAURI })
+    const run = vi.spyOn(ports.proc, 'run')
+
+    const measured = await measureQuests(ports, SHIP, mockContract(), [
+      quest([check('datei', { datei: 'README.md' })]),
+    ])
+
+    expect(measured.traits).not.toContain('tauri')
+    expect(run).not.toHaveBeenCalled()
   })
 
   it('leaves a path out of the read list when it would climb out of the ship', async () => {

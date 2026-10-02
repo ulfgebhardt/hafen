@@ -143,7 +143,7 @@ beiden Aufrufe, die die CLI-Liste von Anfang an hatte: `gh api graphql -f query=
 `curl --silent --fail`. Beides GETs — eine GraphQL-*Query* hat per Definition keine Nebenwirkung,
 und `curl` bekommt weder Methode noch Body.
 
-### 4. Updater und Release (Ziele 1, 2, 4)
+### 4. Updater und Release (Ziele 1, 2, 4) ✅
 
 Das Muster steht in `tome-of-addons` und ist vollständig nachlesbar:
 
@@ -155,17 +155,50 @@ Frontend:      check() → still bei "kein Update" und bei Fehlern, Banner nur w
 CI:            TAURI_SIGNING_PRIVATE_KEY (+ Passwort), includeUpdaterJson: true
 ```
 
-Das Release-Gerüst steht schon: release-please, vier Tauri-Builds, Upload ans Release. Es fehlen
-genau drei Dinge — der Signaturschlüssel, `createUpdaterArtifacts`, `includeUpdaterJson`.
+Alles davon steht jetzt im Baum. Vier Entscheidungen, die beim Bauen fielen und die ein Leser
+sonst für Zufall halten müsste:
 
-**Als Vertrag:** `auslauf/aktualisierung` — *ein Repository, das Binaries veröffentlicht, schuldet
-einen Weg, sie zu aktualisieren.* Messbar aus `tauri.conf.json` und dem Workflow, ohne Netz. Die
-Flotte fordert damit von sich, was sie von anderen fordert.
+- **`plugin:updater|check` über den globalen `invoke`**, nicht über `@tauri-apps/plugin-updater`.
+  Der Browser-Build trägt damit weiter keinen Tauri-Code. Der Preis ist der Fortschrittsbalken:
+  dafür bräuchte es einen `Channel` aus `@tauri-apps/api`, und ein Balken ist kein halbes SDK wert.
+- **Die laufende Fassung wird gefragt** (`plugin:app|version`), nicht beim Bauen eingebacken. Die
+  Zahl steht an vier Stellen im Baum; bei einem Werkzeug, dessen einzige Aufgabe hier der Vergleich
+  zweier Versionen ist, ist das die eine Stelle, an der man nicht raten darf.
+- **Still, wo es nichts zu melden gibt.** `checkForUpdate` schluckt jeden Fehler — wer offline ist,
+  hat kein Problem mit dem Hafen. `installUpdate` schluckt **nichts**: wer gedrückt hat, hat etwas
+  erwartet, und ein Knopf, der still nichts tut, ist schlimmer als keiner. Das sind die beiden
+  einzigen Stellen in der Anwendung, an denen ein Schluck richtig ist, und sie liegen zwei
+  Funktionen auseinander.
+- **Das Banner steht über allem**, auch über `NoGit` und `FirstRun`: eine neuere Fassung kann genau
+  die Abhilfe für den Zustand sein, den jemand gerade ansieht.
 
-**macOS** ist das erste fremde Testsystem. Eine unsignierte `.app` hält Gatekeeper an; Abhilfe
-(Rechtsklick → Öffnen, oder `xattr -d com.apple.quarantine`) gehört in die README. Ad-hoc-Signatur
+**Als Vertrag:** `auslauf/aktualisierung` steht im Katalog. Zwei Checks, beide `ci-nennt`:
+`includeUpdaterJson` (das Release veröffentlicht die Datei) und `TAURI_SIGNING_PRIVATE_KEY` (der
+Build signiert). Zwei unabhängige Fehler, und beide machen den Build **grün** — ein Release ohne
+Signatur sieht erfolgreich aus und aktualisiert niemanden.
+
+Dafür kam ein Merkmalswert dazu: `gilt_fuer: [tauri]`, gemessen mit
+`git ls-files '*tauri.conf.json'` und nur dann, wenn eine Quest ihn überhaupt verlangt — dieselbe
+Sparsamkeit wie bei den Abhängigkeiten. Gemessen über 92 Repositories: **89 nicht anwendbar**,
+zwei erfüllt (`tome-of-addons`, `hafen`), eines nicht messbar (`werft` — eine Tauri-App ohne
+Workflows). Ohne das Merkmal hätte die Forderung 89-mal eine Lücke behauptet.
+
+Ungeprüft bleibt der öffentliche Schlüssel in `tauri.conf.json`, und das ist eine Entscheidung:
+die Datei liegt bei einer App unter `src-tauri/`, im Monorepo unter `apps/<name>/src-tauri/`, und
+eine Kandidatenliste wäre die Rateliste, die dieses Werkzeug sonst überall ablehnt. Die Lücke steht
+benannt in der Quest statt als falsches `verletzt` in einer Messung.
+
+**macOS** ist das erste fremde Testsystem. Eine unsignierte `.app` hält Gatekeeper an; die Abhilfe
+(Rechtsklick → Öffnen, oder `xattr -d com.apple.quarantine`) steht in der README. Ad-hoc-Signatur
 kostet nichts, Notarisierung einen Apple-Developer-Account — eine Entscheidung des Menschen, die
 hier offen bleibt.
+
+**Was jetzt noch fehlt, kann nur ein Mensch tun:** `pnpm tauri signer generate`, den privaten Teil
+nach `secrets.TAURI_SIGNING_PRIVATE_KEY` (und das Passwort nach
+`secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), den öffentlichen anstelle des Platzhalters
+`HIER-DEN-OEFFENTLICHEN-SCHLUESSEL-EINSETZEN` in `apps/harbor/src-tauri/tauri.conf.json`. Der
+Platzhalter steht absichtlich als Wort und nicht als leerer String: ein leeres Feld sähe aus wie
+eine Voreinstellung, dieses sieht aus wie eine offene Aufgabe.
 
 ## Offen, und warum
 

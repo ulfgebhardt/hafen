@@ -23,4 +23,12 @@ tauri = { version = "2", features = [] }
 # platform's is different. It opens nothing and writes nothing — it hands back a path a human
 # chose, which is exactly the kind of thing the register holds.
 tauri-plugin-dialog = "2"
+# Wie ein ausgeliefertes Binary an seine naechste Fassung kommt.
+#
+# Ohne das ist jede Version, die jemand geladen hat, die letzte, die er hat -- und ein Werkzeug,
+# das sich nicht erneuern kann, altert beim Nutzer, nicht beim Autor.
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
+# Von `generate_context!` gebraucht, sobald die Konfiguration einen `plugins`-Abschnitt hat:
+# der eingebettete Kontext traegt dann die Plugin-Einstellungen als JSON.
+serde_json = "1"

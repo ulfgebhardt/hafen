@@ -67,14 +67,33 @@ Gebaute Pakete hängen an jedem Release: **[Releases](https://github.com/ulfgebh
 | macOS     | `.dmg` — Apple Silicon und Intel als eigene Dateien |
 | Windows   | `.msi` und `.exe` (NSIS)                            |
 
-Nichts davon ist signiert: macOS und Windows werden beim ersten Start warnen, und das ist ehrlich
-so — eine Signatur kostet ein Zertifikat, das dieses Werkzeug nicht hat.
-
-**Das Fenster misst nicht selbst, es ruft die CLI.** Die muss als `hafen` auf dem `PATH` liegen,
-oder `HAFEN_CLI` nennt den Aufruf — im Checkout etwa:
+Kein Code-Signing-Zertifikat: macOS und Windows warnen beim ersten Start, und das ist ehrlich so —
+eine Signatur kostet ein Zertifikat, das dieses Werkzeug nicht hat. Auf **macOS** hält Gatekeeper
+die `.app` an („kann nicht geöffnet werden, da der Entwickler nicht überprüft werden kann").
+Einmaliger Umweg, danach nie wieder:
 
 ```sh
-HAFEN_CLI="pnpm --filter @hafen/cli exec tsx src/index.ts" pnpm --filter @hafen/harbor app
+xattr -d com.apple.quarantine /Applications/Hafen.app
+```
+
+Oder ohne Terminal: im Finder **Rechtsklick → Öffnen**, dann im Dialog „Öffnen". Ein Doppelklick
+genügt dafür nicht — das ist Absicht von macOS und keine Eigenheit des Hafens.
+
+**Das Fenster misst selbst.** Keine CLI auf dem `PATH`, kein Node, keine Umgebungsvariable: es
+ruft `git` über dieselben Ports wie die CLI, und dort steht eine Erlaubnisliste lesender Kommandos,
+an der jeder Aufruf vorbei muss. Gebraucht wird `git`; ohne es sagt das Fenster das beim Start,
+statt einen leeren Hafen zu zeigen. `gh` und `curl` sind für die Forge-Lesung, und was ohne sie
+fehlt, steht genauso da.
+
+**Es aktualisiert sich selbst.** Beim Start sieht es einmal nach, ob am Release eine neuere Fassung
+hängt, und zeigt eine Zeile, wenn ja — sonst nichts. Kein Update ist keine Nachricht, und ein
+Fehler beim Nachsehen auch nicht: wer offline ist, hat kein Problem mit dem Hafen. Installiert wird
+nur, was mit dem privaten Gegenstück des Schlüssels in `tauri.conf.json` signiert wurde.
+
+Im Checkout startet die App ohne Installation:
+
+```sh
+pnpm --filter @hafen/harbor app
 ```
 
 ```
@@ -260,6 +279,12 @@ Die Version entsteht aus den Commits, nicht aus der Erinnerung: `release-please`
 Stand als Pull Request vor, und beim Merge entstehen Tag, Changelog und die vier Tauri-Builds.
 Deshalb muss ein PR-Titel einem Commit-Typ folgen (`feat:`, `fix:`, `chore:` …) — ein Squash-Merge
 mit dem Titel „fixes" landet sonst in keiner Changelog-Zeile.
+
+Am Release hängt neben den Installern eine `latest.json` — die Datei, die ein laufendes Fenster
+fragt. Jeder der vier Builds schreibt seine Plattform hinein, gelesen und zurückgeschrieben statt
+überschrieben; sonst kennte das Release nur die Plattform, die zuletzt fertig wurde. Dass beides
+zusammenkommt — die Datei **und** die Signatur, ohne die der Updater nichts annimmt — prüft die
+Quest `auslauf/aktualisierung`, denn beide Fehler lassen den Build grün durchlaufen.
 
 ## Lizenz
 

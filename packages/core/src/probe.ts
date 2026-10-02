@@ -616,15 +616,33 @@ async function readDependencies(
 
 /** How many workflow files there are — counted, never read. See `QuestFacts.workflows`. */
 
+/**
+ * Whether this repository bundles a desktop binary.
+ *
+ * Asked of git and not of a list of likely places. `tauri.conf.json` sits at `src-tauri/` in a
+ * single-app repository and at `apps/<name>/src-tauri/` in a monorepo, and a candidate list would
+ * be the guess that this tool refuses everywhere else it looks for a file — the same rule that
+ * finds the manifests with `git ls-files '*package.json'`.
+ *
+ * Only when the catalog asks, like the dependencies: a fleet whose quests never name the trait
+ * pays no git call for it, and on eighty-odd worktrees that is the difference that matters.
+ */
+async function bundlesBinary(ports: ContractPorts, shipPath: string): Promise<boolean> {
+  const found = await ports.proc.run('git', ['ls-files', '-z', '--', '*tauri.conf.json'], shipPath)
+  return found.code === 0 && found.stdout.replaceAll('\0', '').trim() !== ''
+}
+
 /** What the ship is, of the traits a quest may ask for. */
 async function readTraits(
   ports: ContractPorts,
   shipPath: string,
   contract: Contract,
+  asked: ReadonlySet<string>,
 ): Promise<readonly ShipTrait[]> {
   const has: Record<ShipTrait, boolean> = {
     node: contract.kind !== 'other',
     rust: (await ports.fs.readFile(`${shipPath}/Cargo.toml`)) !== null,
+    tauri: asked.has('tauri') && (await bundlesBinary(ports, shipPath)),
   }
   return SHIP_TRAITS.filter((trait) => has[trait])
 }
@@ -647,6 +665,9 @@ export async function measureQuests(
   const asksDependencies = catalog.some((quest) =>
     quest.checks.some((check) => check.probe === 'abhaengigkeit'),
   )
+  // Which traits any quest gates on at all. The cheap ones are measured regardless; the ones that
+  // cost a git call are not, and this is what tells them apart.
+  const askedTraits = new Set(catalog.flatMap((quest) => quest.appliesTo))
 
   const [files, dependencies, workflows, traits] = await Promise.all([
     Promise.all(
@@ -654,7 +675,7 @@ export async function measureQuests(
     ),
     asksDependencies ? readDependencies(ports, shipPath, contract) : Promise.resolve([]),
     readWorkflows(ports.fs, shipPath),
-    readTraits(ports, shipPath, contract),
+    readTraits(ports, shipPath, contract, askedTraits),
   ])
 
   /*
