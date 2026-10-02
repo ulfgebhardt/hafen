@@ -437,6 +437,48 @@ export function fleetPoints(ships: readonly Ship[]): FleetPoints {
   }
 }
 
+/** One line of a person's score: what it is, how it was counted, and what it brings. */
+export interface FleetLine {
+  name: string
+  /** The count and the rate behind it, so the figure can be argued with rather than believed. */
+  detail: string
+  points: number
+}
+
+/**
+ * A person's score, line by line — and the first line is the sum of the band tabs.
+ *
+ * Measured because it was asked: 23 779 in the header against 6 062 + 7 345 + 7 360 on the tabs.
+ * Both were right. The tabs count what lies in a ship, the header also counts what only a fleet
+ * has — breadth, tidiness, demands met — and nothing on screen said so. The lines add up to
+ * `total` exactly; `fleetLines` is tested on that, because a bill that does not add up is the
+ * thing it exists to answer.
+ */
+export function fleetLines(points: FleetPoints): readonly FleetLine[] {
+  return [
+    {
+      name: 'Arbeit',
+      detail: 'eigene Commits und PRs — die Summe der Reiter',
+      points: points.work,
+    },
+    {
+      name: 'Breite',
+      detail: `${String(points.active)} aktiv × ${String(BREADTH_POINTS)}`,
+      points: points.breadth,
+    },
+    {
+      name: 'Ordnung',
+      detail: `${String(points.clean)} sauber × ${String(SHIPSHAPE_POINTS)} + ${String(points.kept)} gepflegt × ${String(KEPT_POINTS)}`,
+      points: points.tidy,
+    },
+    {
+      name: 'Forderungen',
+      detail: `${String(points.met)} von ${String(points.binding)} erfüllt, gewichtet nach Breite des Repos`,
+      points: points.contracts,
+    },
+  ]
+}
+
 /** The fleet's own total, for the harbour's header. */
 export function projectPoints(ships: readonly Ship[]): number {
   return ships.reduce((sum, ship) => sum + shipPoints(ship).project, 0)
