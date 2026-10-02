@@ -87,6 +87,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # @v0 und nicht @v1, und das ist Absicht.
+      #
+      # v1 ist seit 29.06.2026 draussen und hat `includeUpdaterJson` in
+      # `uploadUpdaterJson` umbenannt. Unbekannte Eingaben verwirft GitHub Actions mit
+      # einer Warnung -- ein Upgrade der Major ohne Umbenennen wuerde also bauen,
+      # gruen sein und die `latest.json` einfach nicht hochladen. Genau der stille
+      # Fehler, gegen den die Quest `auslauf/aktualisierung` geschrieben ist, und sie
+      # faende ihn hier *nicht*: sie sucht die Zeichenkette, und die steht dann noch da.
+      #
+      # Wer auf v1 geht, benennt mit: `includeUpdaterJson` -> `uploadUpdaterJson`,
+      # `assetNamePattern` -> `releaseAssetNamePattern` (hier nicht gesetzt), und zieht
+      # den Text der Quest nach.
       - name: Build & upload binaries
         uses: tauri-apps/tauri-action@v0
         env:
