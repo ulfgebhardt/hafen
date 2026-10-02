@@ -120,6 +120,80 @@ describe(readStats, () => {
     expect(answer).toMatchObject({ reason: 'gh: Could not resolve to a Repository' })
   })
 
+  /**
+   * The fork's origin, which is the one fact the repository itself cannot hold.
+   *
+   * The payload below is the real answer GitHub gave for
+   * `kutter/Kutter-Leuchtturm-Deploy-Rebranding` on 02.10.2026, trimmed to the fields that
+   * matter here. Recorded rather than invented, because what is being checked is that *this* shape
+   * is read -- a hand-written object would only prove this test agrees with itself.
+   */
+  it('reads where a fork came from', async () => {
+    const real = JSON.stringify({
+      data: {
+        repository: {
+          stargazerCount: 1,
+          forkCount: 0,
+          isFork: true,
+          parent: { nameWithOwner: 'Leuchtturm-Verbund/Leuchtturm-Deploy-Rebranding' },
+          watchers: { totalCount: 1 },
+          primaryLanguage: { name: 'HTML' },
+          issues: { totalCount: 5 },
+          pullRequests: { totalCount: 0 },
+          viewerPermission: 'ADMIN',
+          defaultBranchRef: { name: 'master', branchProtectionRule: null },
+          rulesets: { nodes: [] },
+        },
+      },
+    })
+    const base = answering({})
+    const run = async (): Promise<{ code: number; stdout: string; stderr: string }> =>
+      Promise.resolve({ code: 0, stdout: real, stderr: '' })
+
+    const answer = await readStats({ ...base, proc: { ...base.proc, run } }, HAFEN)
+
+    expect(answer).toMatchObject({
+      forkedFrom: 'Leuchtturm-Verbund/Leuchtturm-Deploy-Rebranding',
+    })
+  })
+
+  /**
+   * A repository that was never forked has no origin to name, and a `parent` without the flag is
+   * not the claim this field makes -- GitHub fills `parent` for network members in cases where
+   * `isFork` is false, and reading it there would invent an ancestry.
+   */
+  it('names no origin where the forge says it is not a fork', async () => {
+    const base = answering({})
+    const run = async (): Promise<{ code: number; stdout: string; stderr: string }> =>
+      Promise.resolve({
+        code: 0,
+        stdout: JSON.stringify({
+          data: {
+            repository: { isFork: false, parent: { nameWithOwner: 'somebody/upstream' } },
+          },
+        }),
+        stderr: '',
+      })
+
+    const answer = await readStats({ ...base, proc: { ...base.proc, run } }, HAFEN)
+
+    expect(answer).toMatchObject({ forkedFrom: null })
+  })
+
+  /**
+   * An answer from before this field existed, or a forge that does not have it. Unasked is not
+   * absent: `null` says "nobody told me", which is what the window then shows.
+   */
+  it('says nothing about an answer that carries no fork flag', async () => {
+    const base = answering({})
+    const run = async (): Promise<{ code: number; stdout: string; stderr: string }> =>
+      Promise.resolve({ code: 0, stdout: GRAPH, stderr: '' })
+
+    const answer = await readStats({ ...base, proc: { ...base.proc, run } }, HAFEN)
+
+    expect(answer).toMatchObject({ forkedFrom: null })
+  })
+
   it('says which tool is missing rather than failing at the call', async () => {
     const answer = await readStats(answering({}, []), HAFEN)
 
