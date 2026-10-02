@@ -125,22 +125,32 @@
    */
   const lastFleet = ref<typeof FLEET | typeof FLEET_ARCHIVE>(FLEET)
 
-  const showView = (next: View): void => {
-    // Asked before the page changes, because the drawing she is in is gone a tick later.
-    // Optional all the way down: on the catalog page there is no drawing at all, and a page that
-    // is between two drawings has a ref that is not a scene yet. Neither is a reason to fail.
+  /**
+   * Open a page, keeping where the ship being read stands and how large.
+   *
+   * Every page change a reader makes goes through here. The tabs set the page directly at first,
+   * so a switch between the two fleet sheets drew the new one at "everything fits": the ship was
+   * still marked, and a speck. Asked before the page changes, because the drawing she is in is
+   * gone a tick later. Optional all the way down: on the catalog page there is no drawing at all,
+   * and a page between two drawings has a ref that is not a scene yet.
+   */
+  const goTo = (next: Page): void => {
     hold.value = harbour.value?.where?.(picked.value) ?? null
+    page.value = next
+  }
+
+  const showView = (next: View): void => {
     view.value = next
     if (next === 'fleet') {
-      page.value = fleetPageFor(picked.value, lastFleet.value)
+      goTo(fleetPageFor(picked.value, lastFleet.value))
       return
     }
     if (next === 'contracts') {
-      page.value = CONTRACTS
+      goTo(CONTRACTS)
       return
     }
     const held = picked.value
-    page.value = held === null ? firstBand(fleet.value) : bandOf(held)
+    goTo(held === null ? firstBand(fleet.value) : bandOf(held))
   }
 
   /*
@@ -653,12 +663,13 @@
         @forge="askForges"
       />
       <BandTabs
-        v-model:page="page"
         v-model:view="view"
         v-model:query="query"
+        :page="page"
         :ships="narrowed"
         :contract="contract"
         :fleet-page="fleetPageFor(picked, lastFleet)"
+        @update:page="goTo"
         @clear="contract = null"
         @view="showView"
       />
