@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nodePorts } from './adapters/node'
 import { BUILTIN_STORE, DEFAULT_ROOT, DEFAULT_STORE, main, USAGE } from './command'
 
-import type { MockSetup, Ports, ProcPort, Quest } from '@hafen/core'
+import type { MockSetup, Ports, ProcPort, Quest, Register } from '@hafen/core'
 
 const ROOT = '/repos'
 const STORE = '/store'
@@ -567,15 +567,25 @@ describe('register', () => {
     expect(stderr()).toContain('Platte voll')
   })
 
+  /**
+   * The whole register and `toStrictEqual`, so a field added to it has to be acknowledged here.
+   *
+   * It was `{ archived, enlisted }` until `roots` came with the first-run question, and this test
+   * went red the same day -- unnoticed for two days because turbo replays a cached log, so a
+   * `pnpm test:unit` that ran nothing printed "88 passed" from before the field existed. Kept
+   * strict rather than loosened to `toMatchObject`: the three keys *are* the register, and a
+   * fourth appearing silently is exactly what this should stop.
+   */
   it('answers with the register itself where asked to', async () => {
     const stdout = out()
 
     await expect(
       main(['register', 'archivieren', '/x', '--json', `--store=${STORE}`], ports()),
     ).resolves.toBe(0)
-    expect(JSON.parse(stdout()) as { archived: string[] }).toStrictEqual({
+    expect(JSON.parse(stdout()) as Register).toStrictEqual({
       archived: ['/x'],
       enlisted: [],
+      roots: [],
     })
   })
 })

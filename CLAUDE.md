@@ -259,3 +259,15 @@ pnpm test:unit   # vitest mit Coverage-Schwellen
 Tests liegen neben der Datei, die sie prüfen (`x.ts` / `x.spec.ts`). Die Schwellen in den
 `vitest.config.ts` sind gemessene Werte ohne Luft: ein Punkt Spielraum ist ein Punkt erlaubter
 Verfall, und sie zu heben ist ein eigener Commit.
+
+**Ein grünes `pnpm test:*` ist nicht unbedingt ein gelaufenes, und turbo sagt es nicht.** Es
+cacht je Paket **und spielt die gecachte Ausgabe wortgleich zurück** — eine Zeile `Tests 88 passed`
+kann aus einem Lauf von vorgestern stammen, vor dem Feld, das sie hätte finden müssen. Am
+02.10.2026 verdeckte das zwei Fehler gleichzeitig: ein `Ship`-Fixture in `render.spec.ts` ohne
+`lineage`, und `command.spec.ts`, das den Register seit `roots` (Baustelle 2, zwei Tage vorher)
+falsch vergleicht. Beide fand erst die CI, die keinen Cache hat.
+
+Deshalb gilt: **wer einen geteilten Typ anfasst, läuft `--force`.** Nur `Cached: 0 cached, N total`
+ist der Beleg, dass gemessen wurde; `N successful` allein ist keiner. Die Fehlerklasse ist
+dieselbe wie beim gepflegten Statusfeld — eine Antwort, die richtig aussieht, weil sie aus einer
+Zeit stammt, in der sie richtig war.
