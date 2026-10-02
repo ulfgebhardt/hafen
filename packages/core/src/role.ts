@@ -616,3 +616,28 @@ export function unreadCommand(command: string): string | null {
   }
   return command
 }
+
+/**
+ * The commands that build or test a Storybook — closed like every list here.
+ *
+ * Built counts as well as tested: a story that no longer renders breaks `storybook build`, so a
+ * CI that builds the stories already holds every component to rendering. `chromatic` builds and
+ * compares them; `vitest --project=storybook` is the addon that runs them as tests.
+ */
+const STORY_COMMANDS: readonly RoleCommand[] = [
+  { tool: 'storybook', needs: [/(^|\s)build(\s|$)/u] },
+  { tool: 'build-storybook' },
+  { tool: 'test-storybook' },
+  { tool: 'chromatic' },
+  { tool: 'vitest', needs: [/--project[= ]storybook\b/u] },
+]
+
+/**
+ * Whether this one command builds or tests the stories.
+ *
+ * Never a hand-off: in `pnpm --filter toolkit build-storybook` the word is a script's name, and
+ * what that script runs is a separate command the caller resolves (`Contract.ciCommands`).
+ */
+export function runsStories(command: string): boolean {
+  return delegationOf(command) === null && STORY_COMMANDS.some((entry) => runs(command, entry))
+}

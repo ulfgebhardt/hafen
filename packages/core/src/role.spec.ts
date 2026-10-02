@@ -8,6 +8,7 @@ import {
   delegationOf,
   namedAsWriter,
   nameProximity,
+  runsStories,
   toolOf,
   unreadCommand,
 } from './role'
@@ -319,5 +320,25 @@ describe(unreadCommand, () => {
     expect(unreadCommand('node --inspect-brk ./node_modules/jest/bin/jest.js')).toBeNull()
     expect(unreadCommand('pretty-quick --staged')).toBeNull()
     expect(bodyRoles('pretty-quick --check')).toStrictEqual(['lint'])
+  })
+})
+
+describe(runsStories, () => {
+  it('finds the commands that build or test a Storybook', () => {
+    expect(runsStories('storybook build -o storybook-static')).toBe(true)
+    expect(runsStories('build-storybook')).toBe(true)
+    expect(runsStories('npx test-storybook --ci')).toBe(true)
+    expect(runsStories('vitest run --project=storybook')).toBe(true)
+  })
+
+  /** `storybook dev` serves for a human and hands back nothing; plain vitest runs the unit tests. */
+  it('does not take serving or the unit run for it', () => {
+    expect(runsStories('storybook dev -p 6006')).toBe(false)
+    expect(runsStories('vitest run')).toBe(false)
+  })
+
+  /** Measured at echtzeit-stack: the script's name stood on the line, not the tool. */
+  it('does not take a hand-off for the run, only what it resolves to', () => {
+    expect(runsStories('pnpm --filter toolkit build-storybook')).toBe(false)
   })
 })

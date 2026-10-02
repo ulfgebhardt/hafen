@@ -127,6 +127,12 @@ obwohl es korrekt eine leere Norm gemessen hatte. Im Store bleibt, was eine *Ent
 Maschine* ist: `register.md` und zusätzliche Quests. Die Richtung ist dieselbe wie unten, nur eine
 Ebene höher: der mitgelieferte Katalog führt, der Store ergänzt und schwächt nie ab.
 
+**Ab welcher Größe eine Forderung gilt, ist ebenfalls eine Entscheidung** (`ab_komponenten`,
+`chain.ts`). Storybook lohnt sich bei Leuchtturms 286 Komponenten und ist bei pinne mit sechs
+Pflege ohne Gegenwert; eine Schwelle in `probe.ts` könnte niemand ohne Release verschieben.
+Darunter ist die Quest `nicht anwendbar`, nicht `verletzt`. Gezählt wird, was git verfolgt, und
+`frontend` verlangt beides: ein UI-Framework unter den Abhängigkeiten *und* Komponentendateien.
+
 **Der Katalog führt, ein Schiff darf ergänzen und nie abschwächen** (`catalog.ts`). Ein Repo
 kann in `.hafen/quests/` eigene Forderungen ablegen — `gilt_fuer` ist eine geschlossene Vokabel
 über die ganze Flotte, und „dieses eine Projekt schuldet eine DAV-Migration" hat sonst keinen

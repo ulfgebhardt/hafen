@@ -31,6 +31,7 @@ function contract(
     builds: false,
     buildsInCi: false,
     unread: [],
+    ciCommands: [],
     inCi: [],
     gaps,
   }

@@ -560,6 +560,26 @@ describe('detectContract unread scripts', () => {
   })
 })
 
+describe('detectContract CI commands', () => {
+  it('lists what a step runs and what the script it hands off to runs', async () => {
+    const ports = mockPorts({
+      commands: tracked('package.json'),
+      files: {
+        [`${SHIP}/package.json`]: manifest({ 'storybook:build': 'storybook build' }),
+        [`${SHIP}/.github/workflows/ci.yml`]:
+          'jobs:\n  x:\n    steps:\n      - run: |\n          npm ci\n          npm run storybook:build\n',
+      },
+      dirs: { [`${SHIP}/.github/workflows`]: ['ci.yml'] },
+    })
+
+    expect((await detectContract(ports, SHIP)).ciCommands).toStrictEqual([
+      'npm ci',
+      'npm run storybook:build',
+      'storybook build',
+    ])
+  })
+})
+
 describe(contractChecks, () => {
   it('pairs every declared script with the member it runs in', async () => {
     // dalben.example: `test:lint` in the members, none at the root. Offering the bare

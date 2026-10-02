@@ -32,12 +32,22 @@ function facts(overrides: Partial<QuestFacts> = {}): QuestFacts {
     dependencies: [],
     workflows: ciFiles(0),
     forge: null,
+    components: null,
     ...overrides,
   }
 }
 
 function quest(checks: readonly QuestCheck[], appliesTo: Quest['appliesTo'] = []): Quest {
-  return { id: 'q', chain: 'werft', title: 'q', requires: [], appliesTo, checks, why: '' }
+  return {
+    id: 'q',
+    chain: 'werft',
+    title: 'q',
+    requires: [],
+    appliesTo,
+    minComponents: null,
+    checks,
+    why: '',
+  }
 }
 
 /** What `git ls-files` says when a Tauri config is in the tree, NUL-separated as git writes it. */
@@ -333,6 +343,37 @@ describe(measureQuests, () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  /** A UI framework *and* component files — either alone is not a frontend. */
+  it('counts components and stories from git and calls a ship with both a frontend', async () => {
+    const listing = {
+      'git ls-files -z -- *.vue *.tsx *.jsx *.svelte *.stories.*': {
+        stdout: 'src/App.vue\0src/Button.vue\0src/Button.stories.ts\0src/Button.spec.tsx\0',
+      },
+    }
+    const ports = mockPorts({
+      commands: listing,
+      files: { [`${SHIP}/package.json`]: JSON.stringify({ dependencies: { vue: '^3' } }) },
+    })
+
+    const measured = await measureQuests(ports, SHIP, mockContract(), [
+      quest([check('storybook')], ['frontend']),
+    ])
+
+    expect(measured.components).toStrictEqual({ components: 2, stories: 1 })
+    expect(measured.traits).toContain('frontend')
+  })
+
+  it('does not call a ship a frontend for a framework without components', async () => {
+    const ports = mockPorts({
+      files: { [`${SHIP}/package.json`]: JSON.stringify({ devDependencies: { vue: '^3' } }) },
+    })
+
+    const measured = await measureQuests(ports, SHIP, mockContract(), [quest([], ['frontend'])])
+
+    expect(measured.components).toStrictEqual({ components: 0, stories: 0 })
+    expect(measured.traits).not.toContain('frontend')
+  })
+
   it('leaves a path out of the read list when it would climb out of the ship', async () => {
     const measured = await measureQuests(mockPorts(), SHIP, mockContract(), [
       quest([check('datei', { datei: '../secrets' }), check('datei', { datei: '/etc/passwd' })]),
@@ -582,6 +623,56 @@ describe('a claim nothing can read', () => {
     })
 
     expect(runCheck(check('baut'), both).ok).toBe(true)
+  })
+})
+
+describe('storybook', () => {
+  const counted = { components: 286, stories: 40 }
+
+  it('is met where Storybook is declared and stories lie beside the components', () => {
+    const seen = runCheck(
+      check('storybook'),
+      facts({ dependencies: ['@storybook/vue3-vite', 'vue'], components: counted }),
+    )
+
+    expect(seen.ok).toBe(true)
+    expect(seen.evidence.found).toBe('40 Stories zu 286 Komponenten')
+  })
+
+  /** Either half alone is a different state: an unused install, or files nothing renders. */
+  it('is violated by a dependency without stories and by stories without the dependency', () => {
+    const unused = facts({
+      dependencies: ['storybook'],
+      components: { components: 50, stories: 0 },
+    })
+    const loose = facts({ dependencies: ['vue'], components: counted })
+
+    expect(runCheck(check('storybook'), unused).ok).toBe(false)
+    expect(runCheck(check('storybook'), loose).ok).toBe(false)
+    expect(runCheck(check('storybook'), loose).evidence.found).toBe(
+      'Storybook nicht deklariert, 40 Stories zu 286 Komponenten',
+    )
+  })
+
+  it('is unmeasured where there is no manifest or nothing was counted', () => {
+    expect(runCheck(check('storybook'), facts()).ok).toBeNull()
+    expect(
+      runCheck(
+        check('storybook'),
+        facts({ contract: mockContract({ members: [] }), components: counted }),
+      ).ok,
+    ).toBeNull()
+  })
+
+  it('finds a step that builds or tests the stories among the commands the CI reaches', () => {
+    const ci = (ciCommands: readonly string[]): QuestFacts =>
+      facts({ workflows: ciFiles(1), contract: mockContract({ ciCommands }) })
+
+    expect(
+      runCheck(check('storybook-in-ci'), ci(['npm ci', 'storybook build'])).evidence.found,
+    ).toBe('storybook build')
+    expect(runCheck(check('storybook-in-ci'), ci(['vite build'])).ok).toBe(false)
+    expect(runCheck(check('storybook-in-ci'), facts()).ok).toBeNull()
   })
 })
 

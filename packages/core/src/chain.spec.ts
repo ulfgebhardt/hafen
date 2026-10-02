@@ -30,6 +30,7 @@ function quest(id: string, overrides: Partial<Quest> = {}): Quest {
     title: id,
     requires: [],
     appliesTo: [],
+    minComponents: null,
     checks: [],
     why: '',
     ...overrides,
@@ -44,6 +45,7 @@ function facts(traits: readonly ShipTrait[], overrides: Partial<QuestFacts> = {}
     dependencies: [],
     workflows: ciFiles(0),
     forge: null,
+    components: null,
     ...overrides,
   }
 }
@@ -125,6 +127,19 @@ describe(evaluateQuests, () => {
       ['lint-standard', 'notApplicable'],
     ])
     expect(results[1]?.reason).toBe('gilt für node — dieses Schiff ist rust')
+  })
+
+  /** Below the size the catalog names, the demand is not owed — not a gap a small site carries. */
+  it('does not ask a quest of a ship below its component threshold', () => {
+    const sized = quest('storybook', { appliesTo: ['frontend'], minComponents: 30 })
+    const small = facts(['frontend'], { components: { components: 9, stories: 0 } })
+    const large = facts(['frontend'], { components: { components: 286, stories: 40 } })
+
+    expect(evaluateQuests([sized], small)[0]?.reason).toBe(
+      'gilt ab 30 Komponenten — dieses Schiff hat 9',
+    )
+    expect(evaluateQuests([sized], small)[0]?.verdict).toBe('notApplicable')
+    expect(evaluateQuests([sized], large)[0]?.verdict).not.toBe('notApplicable')
   })
 
   it('takes a quest out with a prerequisite that does not apply, rather than making it wait', () => {

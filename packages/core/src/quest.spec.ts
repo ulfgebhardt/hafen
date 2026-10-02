@@ -36,6 +36,7 @@ describe(parseQuest, () => {
       title: 'Lint: ein Schritt, der falschen Code findet — und er ist still',
       requires: [],
       appliesTo: ['node', 'rust'],
+      minComponents: null,
       checks: [
         { probe: 'rolle', kind: 'datei', args: { rolle: 'lint' }, question: null },
         {
@@ -155,6 +156,7 @@ describe(renderQuest, () => {
       title: 'Lint: ein Schritt, der falschen Code findet — und er ist still',
       requires: [],
       appliesTo: ['node', 'rust'],
+      minComponents: null,
       checks: [{ probe: 'rolle', kind: 'datei', args: { rolle: 'lint' }, question: null }],
       why: 'Ohne Lint-Schritt wird jede Abnahme von Hand neu verhandelt, und das ist der Posten, der sich pro Auftrag wiederholt statt einmal zu kosten.',
     },
@@ -164,6 +166,7 @@ describe(renderQuest, () => {
       title: 'Und er ist der Hausstandard',
       requires: ['lint'],
       appliesTo: ['node'],
+      minComponents: null,
       checks: [
         {
           probe: 'datei-enthaelt',
@@ -183,6 +186,25 @@ describe(renderQuest, () => {
     expect(parseQuest(renderQuest(quest))).toStrictEqual(quest)
   })
 
+  it('round-trips a size threshold', () => {
+    const sized: Quest = {
+      ...(QUESTS[0] as Quest),
+      id: 'storybook',
+      appliesTo: ['frontend'],
+      minComponents: 30,
+    }
+
+    expect(renderQuest(sized)).toContain('ab_komponenten: 30')
+    expect(parseQuest(renderQuest(sized))).toStrictEqual(sized)
+  })
+
+  /** A threshold that does not parse must not read as zero, which would ask it of every ship. */
+  it('reads a threshold that is no positive number as none', () => {
+    const text = renderQuest(QUESTS[0] as Quest).replace('kette:', 'ab_komponenten: viele\nkette:')
+
+    expect(parseQuest(text)?.minComponents).toBeNull()
+  })
+
   it('names the art on the check that differs, not on every check', () => {
     const text = renderQuest(QUESTS[1] as Quest)
 
@@ -199,6 +221,7 @@ describe(questCatalog, () => {
       title: id,
       requires: [],
       appliesTo: [],
+      minComponents: null,
       checks: [],
       why: '',
     })
