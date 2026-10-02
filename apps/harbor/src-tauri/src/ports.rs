@@ -235,7 +235,9 @@ fn walk(
         }
         // A link to a directory is a directory here, as everywhere else in this file: five of this
         // machine's repositories are reachable only through one.
-        let Ok(kind) = entry.file_type() else { continue };
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
         let directory = kind.is_dir()
             || (kind.is_symlink() && std::fs::metadata(entry.path()).is_ok_and(|it| it.is_dir()));
         if directory {
@@ -301,8 +303,12 @@ pub fn port_places() -> Places {
     Places {
         store: under("HAFEN_STORE", "XDG_DATA_HOME", ".local/share/hafen")
             .unwrap_or_else(|| "hafen".to_owned()),
-        snapshot: under("HAFEN_SNAPSHOT", "XDG_CACHE_HOME", ".cache/hafen/snapshot.json")
-            .unwrap_or_else(|| "snapshot.json".to_owned()),
+        snapshot: under(
+            "HAFEN_SNAPSHOT",
+            "XDG_CACHE_HOME",
+            ".cache/hafen/snapshot.json",
+        )
+        .unwrap_or_else(|| "snapshot.json".to_owned()),
         roots: std::env::var("HAFEN_ROOT")
             .unwrap_or_default()
             .split(',')
@@ -389,7 +395,10 @@ mod tests {
     /// `branch --merged` is a reading and `branch -D` is not, and they begin with the same word.
     #[test]
     fn tells_two_calls_of_one_subcommand_apart() {
-        assert!(reading("git", &["branch".to_owned(), "--merged".to_owned()]));
+        assert!(reading(
+            "git",
+            &["branch".to_owned(), "--merged".to_owned()]
+        ));
         assert!(!reading("git", &["branch".to_owned(), "-d".to_owned()]));
     }
 }
