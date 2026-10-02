@@ -64,6 +64,18 @@ Das nicht messbare ist `werft`: eine Tauri-App ohne einen einzigen Workflow. Dor
 lesen, also wird nichts behauptet — **unmessbar ist nicht verletzt**, und das fünfte Urteil tut
 hier dieselbe Arbeit wie beim geschützten Hauptzweig.
 
+## Die Prüfung ist an eine Vokabel gebunden, und das steht hier
+
+`includeUpdaterJson` ist der Name, den `tauri-action` **in Major 0** für die Veröffentlichung der
+Update-Datei verwendet. In Major 1 (seit 29.06.2026) heißt dieselbe Eingabe `uploadUpdaterJson`.
+Unbekannte Eingaben verwirft GitHub Actions mit einer Warnung — ein Upgrade ohne Umbenennen baut
+also durch, ist grün und lädt die Datei nicht hoch, und **diese Quest fände das nicht**: sie sucht
+die Zeichenkette, und die steht dann noch im Workflow.
+
+Das ist die Grenze einer Praxis-Messung und kein Argument gegen sie. Ein fester Dateipfad hätte
+dieselbe Grenze plus eine zweite (`ci-nennt` oben). Wer die Major wechselt, zieht diesen Text mit —
+und der Workflow sagt es an der Stelle noch einmal.
+
 ## Herkunft
 
 Das Muster kommt aus tome-of-addons, wo es läuft. Was dort gelernt wurde und hier als Check steht,
