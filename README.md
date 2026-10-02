@@ -3,7 +3,7 @@
 Eine Übersicht über alle Git-Repos einer Maschine: Zustand, Test-Vertrag, und was die Flotte von
 ihnen fordert — mit der Evidenz hinter jedem Urteil.
 
-![Die Flotte als Fächer: ein Ast je Organisation, ein Rumpf je Repository](docs/flotte.png)
+![Die ganze Flotte auf einem Blatt, nach Reederei: ein Rumpf je Repository](docs/flotte.png)
 
 ## Wozu
 
@@ -31,17 +31,17 @@ im schlimmsten Fall über einen neuen lesenden Aufruf.
 
 Das ist der Punkt, an dem das Vorgängerprojekt gescheitert ist: ein Agenten-Cockpit, in dem jede
 Messung die nächste Aufgabe rechtfertigte — 295 Auftragsdateien, und die Projekte, um die es ging,
-standen still. Was ein Werkzeug *tun* kann, kostet Aufmerksamkeit. Was es nur misst, nicht.
+standen still. Was ein Werkzeug _tun_ kann, kostet Aufmerksamkeit. Was es nur misst, nicht.
 
 Dieses Werkzeug läuft in achtzig-plus Arbeitsbäumen, die **nicht alle unsere** sind. Deshalb die
 Grenze, und deshalb bleibt der Store lokal.
 
-![Ein Schiff mit Datenblatt: Ladung, Flaggen, Schäden und was heute zu tun wäre](docs/schiff.png)
+![Ein Band mit festgehaltenem Schiff: Ladung und Flaggen am Schiff, Punkte und Zustand im Datenblatt](docs/schiff.png)
 
 Jedes Repository ist ein Schiff, und jedes Merkmal eine eigene Messung: die Rumpflänge sind die
 Punkte, die Masten die erfüllten Forderungen, der Rost die Liegezeit seit dem letzten Commit, die
 Figuren am Steg die Zahl der Autoren. Keine Zusammenfassung zu einer Note — ein großes Schiff mit
-verletztem Vertrag soll geschäftig *und* falsch aussehen, nicht mittelmäßig.
+verletztem Vertrag soll geschäftig _und_ falsch aussehen, nicht mittelmäßig.
 
 ## Benutzen
 
@@ -59,13 +59,37 @@ Ohne Argument steht die Hilfe da. Die Wurzel ist als zweites Argument überschre
 
 ## Installieren
 
-Gebaute Pakete hängen an jedem Release: **[Releases](https://github.com/ulfgebhardt/hafen/releases/latest)**
+<!-- x-release-please-start-version -->
 
-| Plattform | Artefakt                                            |
-| --------- | --------------------------------------------------- |
-| Linux     | `.AppImage`, `.deb`, `.rpm`                         |
-| macOS     | `.dmg` — Apple Silicon und Intel als eigene Dateien |
-| Windows   | `.msi` und `.exe` (NSIS)                            |
+**Aktuell: v1.0.0** — Changelog und alle Dateien am **[Release](https://github.com/ulfgebhardt/hafen/releases/latest)**
+
+<!-- x-release-please-end -->
+
+| Plattform           | Download                                           |
+| ------------------- | -------------------------------------------------- |
+| Linux               | [AppImage][appimage] · [deb][deb] · [rpm][release] |
+| macOS Apple Silicon | [dmg][dmg-arm]                                     |
+| macOS Intel         | [dmg][dmg-intel]                                   |
+| Windows             | [Installer (exe)][exe] · [msi][msi]                |
+
+<!--
+  release-please zieht die Versionen bei jedem Release nach (extra-files, generic). Es ersetzt
+  je Zeile nur das *erste* Vorkommen, deshalb eine Version pro Zeile und `latest/download` statt
+  `download/v…/`. Das rpm steht nicht hier: `Hafen-1.0.0-1.x86_64.rpm` liest es als Pre-Release
+  `1.0.0-1.x86_64` und machte daraus `Hafen-1.1.0.rpm`.
+-->
+<!-- x-release-please-start-version -->
+
+[appimage]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_amd64.AppImage
+[deb]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_amd64.deb
+[dmg-arm]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_aarch64.dmg
+[dmg-intel]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_x64.dmg
+[exe]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_x64-setup.exe
+[msi]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.0.0_x64_en-US.msi
+
+<!-- x-release-please-end -->
+
+[release]: https://github.com/ulfgebhardt/hafen/releases/latest
 
 Kein Code-Signing-Zertifikat: macOS und Windows warnen beim ersten Start, und das ist ehrlich so —
 eine Signatur kostet ein Zertifikat, das dieses Werkzeug nicht hat. Auf **macOS** hält Gatekeeper
