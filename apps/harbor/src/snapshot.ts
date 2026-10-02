@@ -68,11 +68,14 @@ const ADDED_TO_TENDER = { url: null }
 export function adopt(snapshot: Snapshot): Snapshot {
   return {
     ...snapshot,
-    ships: snapshot.ships.map((ship) => ({
-      ...ADDED,
-      ...ship,
-      submodules: (ship.submodules ?? []).map((tender) => ({ ...ADDED_TO_TENDER, ...tender })),
-    })),
+    ships: snapshot.ships.map((ship) => {
+      // The shallow fill first, so the list is certainly there — then each entry in it.
+      const whole = { ...ADDED, ...ship }
+      return {
+        ...whole,
+        submodules: whole.submodules.map((tender) => ({ ...ADDED_TO_TENDER, ...tender })),
+      }
+    }),
   }
 }
 

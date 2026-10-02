@@ -1,3 +1,4 @@
+import { NO_WORK } from '@hafen/core'
 import { describe, expect, it } from 'vitest'
 
 import { BERTH } from './plan'
@@ -5,11 +6,13 @@ import { quest, ship } from './testing'
 import {
   apronOf,
   BEAM_CEILING,
-  BEAM_FLOOR,
   beamShare,
   BERTH_SLACK,
+  BAYS_ACROSS,
+  boxOn,
   bridgeOf,
   cargoOf,
+  CONTAINER,
   deckOf,
   DECK,
   fieldOf,
@@ -33,6 +36,7 @@ import {
   pierMarks,
   pierRows,
   questAt,
+  SEAM,
   SIZE,
   yawOf,
 } from './vessel'
@@ -83,29 +87,55 @@ describe(outlineOf, () => {
 })
 
 describe(hullOf, () => {
-  /**
-   * Length follows the project score — the one place being busy buys space. Bounded at both ends:
-   * a repository with eighteen thousand points must not need its own row, and one with four
-   * commits still has to look like a ship.
-   */
-  it('grows with the score and stops', () => {
-    const small = hullOf(ship(), 10)
-    const big = hullOf(ship(), 3000)
-    const huge = hullOf(ship(), LENGTH_CEILING * 5)
+  const worked = (commits: number, authors = 1) =>
+    ship({ ledger: { total: { ...NO_WORK, commits, authors }, own: NO_WORK } })
 
-    expect(big.length).toBeGreaterThan(small.length)
-    // The beam is not in this: it follows the text in the tree, which these three share.
-    expect(big.beam).toBe(small.beam)
-    expect(small.length).toBeGreaterThanOrEqual(SIZE.minLength)
+  /**
+   * Length is the history, beam is the people, and the two must be able to disagree: a repository
+   * can be long and lonely, or short and crowded.
+   */
+  it('takes her length from the commits and her beam from the authors', () => {
+    const quiet = hullOf(worked(10, 1))
+    const long = hullOf(worked(3000, 1))
+    const crowded = hullOf(worked(10, 200))
+
+    expect(long.length).toBeGreaterThan(quiet.length)
+    expect(long.beam).toBe(quiet.beam)
+    expect(crowded.beam).toBeGreaterThan(quiet.beam)
+    expect(crowded).toHaveLength(quiet.length)
+  })
+
+  /**
+   * Bounded at both ends: a fleet's busiest repository must not need its own row, and its
+   * quietest still has to look like a ship.
+   */
+  it('stops at both ends of its range', () => {
+    const huge = hullOf(worked(LENGTH_CEILING * 5, BEAM_CEILING * 5))
+
     expect(huge.length).toBeLessThanOrEqual(SIZE.maxLength)
     expect(huge.beam).toBeLessThanOrEqual(SIZE.maxBeam)
+  })
+
+  /**
+   * And the range is wide, which is the whole reason this was changed.
+   *
+   * The readings span 18 447 to one in commits and 488 to one in authors; the drawing turned that
+   * into a length range of 1.69 and a beam range of 1.29. Ninety-two ships came out looking like
+   * ninety-two of the same ship.
+   */
+  it('varies enough to be seen', () => {
+    const least = hullOf(worked(1, 1))
+    const most = hullOf(worked(LENGTH_CEILING, BEAM_CEILING))
+
+    expect(most.length / least.length).toBeGreaterThan(3)
+    expect(most.beam / least.beam).toBeGreaterThan(2.5)
   })
 
   it('does not let a repository with no work at all go negative', () => {
     // `Hull.length` is a ship's length, not an array's — `toHaveLength` would be nonsense here.
     /* eslint-disable vitest/prefer-to-have-length */
-    expect(hullOf(ship(), 0).length).toBe(SIZE.minLength)
-    expect(hullOf(ship(), -5).length).toBe(SIZE.minLength)
+    expect(hullOf(worked(0, 0)).length).toBe(SIZE.minLength)
+    expect(hullOf(worked(-5, -5)).length).toBe(SIZE.minLength)
     /* eslint-enable vitest/prefer-to-have-length */
   })
 })
@@ -149,7 +179,7 @@ describe(mooringOf, () => {
    * readings of one number are two chances to disagree about where the quay is.
    */
   it('runs to the quay edge and leads away from the ship', () => {
-    const hull = hullOf(ship(), 400)
+    const hull = hullOf(ship())
     const lines = mooringOf(hull, 1.8)
 
     expect(lines).toHaveLength(2)
@@ -177,7 +207,7 @@ describe(cargoOf, () => {
         quest('d', 'notApplicable'),
       ],
     })
-    const cargo = cargoOf(subject, hullOf(subject, 100))
+    const cargo = cargoOf(subject, hullOf(subject))
 
     expect(cargo.map((box) => box.quest.id)).toStrictEqual(['a'])
   })
@@ -185,18 +215,18 @@ describe(cargoOf, () => {
   it('carries nothing where nothing binds', () => {
     const subject = ship({ quests: [quest('a', 'notApplicable')] })
 
-    expect(cargoOf(subject, hullOf(subject, 100))).toStrictEqual([])
+    expect(cargoOf(subject, hullOf(subject))).toStrictEqual([])
   })
 
   it('carries nothing where nothing has been achieved', () => {
     const subject = ship({ quests: [quest('a', 'violated'), quest('b', 'waiting')] })
 
-    expect(cargoOf(subject, hullOf(subject, 100))).toStrictEqual([])
+    expect(cargoOf(subject, hullOf(subject))).toStrictEqual([])
   })
 
   it('stows from aft forward', () => {
     const subject = ship({ quests: [quest('a', 'met'), quest('b', 'met'), quest('c', 'met')] })
-    const cargo = cargoOf(subject, hullOf(subject, 100))
+    const cargo = cargoOf(subject, hullOf(subject))
 
     expect(cargo[0]?.spot.x).toBeLessThanOrEqual(cargo[2]?.spot.x ?? 0)
   })
@@ -209,7 +239,7 @@ describe(cargoOf, () => {
   it('keeps every container on the deck, on the smallest hull', () => {
     const many = Array.from({ length: 15 }, (_, index) => quest(`q${String(index)}`, 'met'))
     const subject = ship({ quests: many })
-    const hull = hullOf(subject, 0)
+    const hull = hullOf(subject)
 
     expect(cargoOf(subject, hull)).toHaveLength(15)
 
@@ -219,6 +249,45 @@ describe(cargoOf, () => {
       // 0.86 of the half beam is where the taper has reached by the forward end of the deck.
       expect(Math.abs(box.spot.y) + box.across / 2).toBeLessThanOrEqual((hull.beam / 2) * 0.86)
     }
+  })
+})
+
+describe(boxOn, () => {
+  const worked = (commits: number, authors = 1) =>
+    hullOf(ship({ ledger: { total: { ...NO_WORK, commits, authors }, own: NO_WORK } }))
+
+  /**
+   * There is always water between two crates, and that is the point of them.
+   *
+   * A share of the beam alone was not enough, and the small ships showed it: at a beam of 2.6 the
+   * gap came to four hundredths of a unit — three boxes drawn as one block, and a reader counting
+   * demands off a hull counts one.
+   */
+  it.each([1, 50, 4000, 20000])('leaves a visible gap at %i commits', (commits) => {
+    const box = boxOn(worked(commits, commits))
+
+    expect(box.gap).toBeGreaterThanOrEqual(SEAM)
+    // And a gap nobody can see beside a box is no gap: it has to be a real share of one.
+    expect(box.gap / box.across).toBeGreaterThan(0.15)
+  })
+
+  /**
+   * And the stack never goes over the side.
+   *
+   * The gap is sized first and the boxes take what is left, which makes that true by construction:
+   * sizing the box first lets the two add up to more deck than there is.
+   */
+  it.each([1, 50, 4000, 20000])('keeps the stack on the deck at %i commits', (commits) => {
+    const hull = worked(commits, commits)
+    const box = boxOn(hull)
+    const spread = BAYS_ACROSS * box.across + (BAYS_ACROSS - 1) * box.gap
+
+    expect(spread).toBeLessThanOrEqual(hull.beam * CONTAINER.deck + 1e-9)
+  })
+
+  /** A big ship carries big crates: the box is a share of her, the gap only has a floor. */
+  it('grows the crates with the ship', () => {
+    expect(boxOn(worked(20000, 500)).across).toBeGreaterThan(boxOn(worked(1, 1)).across * 2)
   })
 })
 
@@ -240,7 +309,7 @@ describe(landedOf, () => {
       ],
     })
 
-    const owed = landedOf(subject, hullOf(subject, 0))
+    const owed = landedOf(subject, hullOf(subject))
       .map((box) => box.quest.id)
       .sort((a, b) => a.localeCompare(b))
 
@@ -250,13 +319,13 @@ describe(landedOf, () => {
   it('leaves the pier clear when everything is met', () => {
     const clean = ship({ quests: [quest('a', 'met')] })
 
-    expect(landedOf(clean, hullOf(clean, 0))).toStrictEqual([])
+    expect(landedOf(clean, hullOf(clean))).toStrictEqual([])
   })
 
   it('puts the worst nearest the stern, where reading starts', () => {
     const subject = ship({ quests: [quest('offen', 'waiting'), quest('kaputt', 'violated')] })
 
-    expect(landedOf(subject, hullOf(subject, 0))[0]?.quest.id).toBe('kaputt')
+    expect(landedOf(subject, hullOf(subject))[0]?.quest.id).toBe('kaputt')
   })
 
   /**
@@ -269,7 +338,7 @@ describe(landedOf, () => {
   it('stacks every box on her own apron, ahead of her stem', () => {
     const many = Array.from({ length: 11 }, (_, index) => quest(`q${String(index)}`, 'violated'))
     const subject = ship({ quests: many })
-    const hull = hullOf(subject, 0)
+    const hull = hullOf(subject)
 
     for (const box of landedOf(subject, hull)) {
       expect(box.spot.x - box.along / 2).toBeGreaterThanOrEqual(hull.length)
@@ -284,7 +353,7 @@ describe(landedOf, () => {
       quest(`q${String(index)}`, 'violated'),
     )
     const subject = ship({ quests: many })
-    const boxes = landedOf(subject, hullOf(subject, 0))
+    const boxes = landedOf(subject, hullOf(subject))
 
     expect(boxes.at(-1)?.spot.y).toBe(pierRowY(1))
     expect(boxes.at(-1)?.spot.x).toBe(boxes[0]?.spot.x)
@@ -302,16 +371,17 @@ describe(bridgeOf, () => {
       quests: Array.from({ length: 60 }, (_, index) => quest(`q${String(index)}`, 'met')),
     })
 
-    expect(bridgeOf(many, hullOf(many, 1)).along).toBeGreaterThan(
-      bridgeOf(few, hullOf(few, 1)).along,
+    expect(bridgeOf(many, hullOf(many)).along).toBeGreaterThan(bridgeOf(few, hullOf(few)).along)
+    // Twelve is where it stops: a sixtieth demand buys exactly as much deckhouse as the twelfth.
+    expect(bridgeOf(huge, hullOf(huge)).along).toBeCloseTo(
+      (bridgeOf(many, hullOf(many)).along * (0.09 + 12 * 0.0068)) / (0.09 + 11 * 0.0068),
     )
-    expect(bridgeOf(huge, hullOf(huge, 1)).along).toBe(bridgeOf(many, hullOf(many, 1)).along + 0.16)
   })
 
   /** Aft, and clear of where the cargo starts — otherwise the block would sit on a container. */
   it('stands aft of the cargo', () => {
     const subject = ship({ quests: [quest('a', 'met')] })
-    const hull = hullOf(subject, 1)
+    const hull = hullOf(subject)
     const block = bridgeOf(subject, hull)
 
     expect(block.spot.x + block.along / 2).toBeLessThanOrEqual(hull.length * DECK.from)
@@ -319,7 +389,7 @@ describe(bridgeOf, () => {
   })
 
   it('still gives a block to a ship nothing is demanded of', () => {
-    expect(bridgeOf(ship(), hullOf(ship(), 1)).along).toBeGreaterThan(0)
+    expect(bridgeOf(ship(), hullOf(ship())).along).toBeGreaterThan(0)
   })
 })
 
@@ -338,7 +408,7 @@ describe(hasPlume, () => {
 
 describe(questAt, () => {
   const subject = ship({ quests: [quest('a', 'met'), quest('b', 'met'), quest('c', 'met')] })
-  const hull = hullOf(subject, 400)
+  const hull = hullOf(subject)
   const boxes = cargoOf(subject, hull)
 
   it('answers with the demand whose box was hit', () => {
@@ -379,14 +449,14 @@ describe('what waits and what she is', () => {
     submodules: [{ path: 'lib', state: 'aboard' as const, at: 'aaaaaaaa', url: null }],
     working: { staged: 0, unstaged: 0, untracked: 0, conflicted: 1 },
   })
-  const hull = hullOf(busy, 400)
+  const hull = hullOf(busy)
 
   /**
    * The complaint this answers: a flag for unpushed commits and a wake for commits upstream hung
    * on the hull, so a repository with *more* left to do came out the more interesting drawing.
    */
   it('puts everything there is to do on the planking', () => {
-    const waiting = pierMarks(busy, hullOf(busy, 0)).map((box) => box.kind)
+    const waiting = pierMarks(busy, hullOf(busy)).map((box) => box.kind)
 
     expect(waiting).toContain('pennant')
     expect(waiting).toContain('drag')
@@ -402,7 +472,7 @@ describe('what waits and what she is', () => {
 
   /** Every mark lands in exactly one of the two, or a click would answer twice. */
   it('draws nothing in both places', () => {
-    const onPier = new Set(pierMarks(busy, hullOf(busy, 0)).map((box) => box.kind))
+    const onPier = new Set(pierMarks(busy, hullOf(busy)).map((box) => box.kind))
 
     for (const box of hullMarks(busy, hull)) {
       expect(onPier.has(box.kind)).toBe(false)
@@ -416,7 +486,7 @@ describe(gangwayOf, () => {
    * loaded pier, so the plank grows with the gap.
    */
   it('runs from her side to the planking, however far off she lies', () => {
-    const hull = hullOf(ship(), 400)
+    const hull = hullOf(ship())
     const snug = gangwayOf(hull, 0)
     const off = gangwayOf(hull, 2)
 
@@ -428,7 +498,7 @@ describe(gangwayOf, () => {
 })
 
 describe(apronOf, () => {
-  const hull = hullOf(ship(), 400)
+  const hull = hullOf(ship())
   const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
 
   /** Nothing waiting is not an empty platform: an empty platform says something stood here. */
@@ -476,7 +546,14 @@ describe(within, () => {
 })
 
 describe(deckOf, () => {
-  const hull = hullOf(ship(), 400)
+  /**
+   * A hull somebody can actually walk. The smallest one in the harbour is nine by two and a half
+   * and has **no walkable deck at all** — which is honest: a dinghy has no promenade, and the
+   * figures simply stay ashore. `deckOf` says that with `null` rather than with a ring of one.
+   */
+  const hull = hullOf(
+    ship({ ledger: { total: { ...NO_WORK, commits: 4000, authors: 120 }, own: NO_WORK } }),
+  )
 
   /**
    * Two faults with one cause, and this is the measurement that replaces both.
@@ -498,7 +575,9 @@ describe(deckOf, () => {
   })
 
   it('leaves out every spot that something stands on', () => {
+    // A worked hull, because the smallest one has no walkable deck at all — see below.
     const loaded = ship({
+      ledger: { total: { ...NO_WORK, commits: 4000, authors: 120 }, own: NO_WORK },
       quests: Array.from({ length: 8 }, (_, i) => quest(`q${String(i)}`, 'met')),
     })
     const standing = [...cargoOf(loaded, hull), bridgeOf(loaded, hull)]
@@ -548,7 +627,7 @@ describe(deckOf, () => {
 })
 
 describe(fieldOf, () => {
-  const hull = hullOf(ship(), 400)
+  const hull = hullOf(ship())
   const stack = (count: number): readonly Box[] => landedOf(ship({ quests: owing(count) }), hull)
 
   it('has no ground where there is no platform', () => {
@@ -620,7 +699,7 @@ describe(fieldOf, () => {
 })
 
 describe(apronOf, () => {
-  const hull = hullOf(ship(), 400)
+  const hull = hullOf(ship())
 
   /** An apron that stops short of the walkway is an island: somebody on it got there by jumping. */
   it('reaches the planking where it is told where that is', () => {
@@ -700,7 +779,7 @@ describe(hasGangway, () => {
 })
 
 describe(forgeLoad, () => {
-  const hull = hullOf(ship(), 400)
+  const hull = hullOf(ship())
 
   /** Nothing open is nothing on the apron — an empty row would say "asked and found none". */
   it('puts nothing on the apron where nothing is open', () => {
@@ -752,31 +831,42 @@ describe(forgeLoad, () => {
 
 describe(beamShare, () => {
   /**
-   * Her length is what the repository has done, her beam is how much of it there is — and until
-   * these came apart, every ship in the harbour had one shape at ninety sizes.
+   * Heavy-tailed like everything else here, so logarithmic like everything else here: 1 author at
+   * the bottom, 3 at the median, 8 at the third quartile and 488 at the top.
    */
-  it('widens with the text in the tree', () => {
-    expect(beamShare(17305)).toBeGreaterThan(beamShare(1000))
-    expect(beamShare(1000)).toBeGreaterThan(beamShare(10))
+  it('spends its width where the repositories actually are', () => {
+    expect(beamShare(1)).toBe(0)
+    expect(beamShare(3)).toBeGreaterThan(0.12)
+    expect(beamShare(BEAM_CEILING)).toBeCloseTo(1)
+    expect(beamShare(BEAM_CEILING * 9)).toBe(1)
   })
 
-  it('stops at both ends rather than running off', () => {
-    expect(beamShare(BEAM_FLOOR)).toBe(0)
-    expect(beamShare(BEAM_CEILING * 10)).toBe(1)
-    expect(beamShare(-5)).toBe(0)
-  })
-
-  /** A repository git could not answer about is drawn narrow, never at an invented middle. */
+  /** A repository nobody could be counted in is drawn narrow, never at an invented middle. */
   it('takes no answer as the bottom of the range', () => {
     expect(beamShare(null)).toBe(0)
   })
 
-  /** Two readings, and they have to be able to disagree. */
-  it('leaves the length out of it', () => {
-    const busy = hullOf(ship({ lines: 200 }), 25000)
-    const vast = hullOf(ship({ lines: 900000 }), 25000)
+  /**
+   * Two readings, and they have to be able to disagree — which the reading this replaced could
+   * not. Off lines of text, the widest ship in the harbour was `addons/AddOns`: 3 663 532 lines,
+   * 68 commits, **one author**. A folder of downloaded game addons drawn as the broadest hull in
+   * the basin. A reading of people only grows when people turn up.
+   */
+  it('widens for a crowd and not for bulk', () => {
+    const crowded = hullOf(
+      ship({
+        lines: 200,
+        ledger: { total: { ...NO_WORK, commits: 68, authors: 110 }, own: NO_WORK },
+      }),
+    )
+    const vast = hullOf(
+      ship({
+        lines: 3_663_532,
+        ledger: { total: { ...NO_WORK, commits: 68, authors: 1 }, own: NO_WORK },
+      }),
+    )
 
-    expect(vast.beam).toBeGreaterThan(busy.beam)
-    expect(vast).toHaveLength(busy.length)
+    expect(crowded.beam).toBeGreaterThan(vast.beam)
+    expect(crowded).toHaveLength(vast.length)
   })
 })
