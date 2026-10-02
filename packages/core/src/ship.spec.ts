@@ -259,6 +259,54 @@ describe(inspectShip, () => {
   })
 })
 
+describe('stopping a survey', () => {
+  /**
+   * A survey of ninety repositories is seconds, and a reader who has seen enough must be able to
+   * say so. It was a *process* that got killed while the CLI measured; a window that measures by
+   * itself has no process to kill.
+   */
+  it('keeps what it has measured and reads no further', async () => {
+    const names = Array.from({ length: 40 }, (_, index) => `r${String(index)}`)
+    const ports = mockPorts({
+      dirs: {
+        '/repos': names,
+        ...Object.fromEntries(
+          names.flatMap((name) => [
+            [`/repos/${name}`, []],
+            [`/repos/${name}/.git`, []],
+          ]),
+        ),
+      },
+    })
+    let seen = 0
+    const ships = await surveyHarbor(ports, '/repos', {
+      progress: {
+        onShip: () => {
+          seen += 1
+        },
+        stop: () => seen >= 1,
+      },
+    })
+
+    /*
+     * Fewer than all of them, and not exactly one: the survey measures in lanes, so whatever had
+     * already started finishes. Stopping is about the work not yet begun — the alternative is
+     * abandoning readings that are already true.
+     */
+    expect(ships.length).toBeLessThan(names.length)
+    expect(ships.length).toBeGreaterThanOrEqual(1)
+  })
+
+  /** Nobody stopping it is the ordinary case, and it must cost nothing. */
+  it('measures everything where nobody says stop', async () => {
+    const ports = mockPorts({
+      dirs: { '/repos': ['a'], '/repos/a': [], '/repos/a/.git': [] },
+    })
+
+    await expect(surveyHarbor(ports, '/repos', { progress: {} })).resolves.toHaveLength(1)
+  })
+})
+
 describe(findShipPaths, () => {
   it('finds only directories that actually contain a .git', async () => {
     const ports = mockPorts({
@@ -280,8 +328,13 @@ describe(findShipPaths, () => {
     ])
   })
 
-  it('returns nothing for a root that does not exist', async () => {
-    await expect(findShipPaths(mockPorts(), '/nope')).resolves.toStrictEqual([])
+  /**
+   * An unreadable root and an empty one both yield zero ships, and only one of them is a fault:
+   * reporting them alike hides a misconfiguration behind an empty harbour, and a typo in a second
+   * root would quietly halve the fleet.
+   */
+  it('says a root it cannot read, rather than answering nothing', async () => {
+    await expect(findShipPaths(mockPorts(), '/nope')).rejects.toThrow('Wurzel nicht lesbar')
   })
 })
 
@@ -387,8 +440,11 @@ describe(findShipPaths, () => {
     await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual(['/repos/org/buildkite'])
   })
 
-  it('answers nothing for a root that is not there', async () => {
-    await expect(findShipPaths(mockPorts(), '/nirgends')).resolves.toStrictEqual([])
+  it('tells a root it cannot read from one that is simply empty', async () => {
+    await expect(findShipPaths(mockPorts(), '/nirgends')).rejects.toThrow('Wurzel nicht lesbar')
+    await expect(
+      findShipPaths(mockPorts({ dirs: { '/leer': [] } }), '/leer'),
+    ).resolves.toStrictEqual([])
   })
 
   /** A limit so a stray symlink cannot turn the survey into a walk of the whole disk. */

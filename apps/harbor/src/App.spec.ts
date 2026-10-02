@@ -132,11 +132,34 @@ describe('app', () => {
  * the branch the packaged window actually takes.
  */
 function bridge(replies: Record<string, unknown>): ReturnType<typeof vi.fn> {
-  const invoke = vi.fn<(command: string) => Promise<unknown>>(async (command) =>
-    Promise.resolve(replies[command]),
+  const invoke = vi.fn<(command: string, args?: Record<string, unknown>) => Promise<unknown>>(
+    async (command, args) =>
+      await Promise.resolve(
+        typeof replies[command] === 'function'
+          ? (replies[command] as (a?: Record<string, unknown>) => unknown)(args)
+          : replies[command],
+      ),
   )
   vi.stubGlobal('__TAURI_INTERNALS__', { invoke })
   return invoke
+}
+
+/**
+ * What a window needs to measure by itself: the places, and a filesystem answering nothing.
+ *
+ * The window measures in-process now instead of starting the CLI, so the shell it talks to is the
+ * set of ports rather than one `measure` command. A repository whose git calls all come back empty
+ * is still a ship, which is what keeps this a fixture rather than a fake fleet.
+ */
+const MEASURES: Record<string, unknown> = {
+  port_places: { store: '/store', snapshot: '/cache/hafen/snapshot.json', roots: ['/repos'] },
+  port_trees_with: ['/repos/org/ship'],
+  port_read_dir: [],
+  port_read_file: null,
+  port_is_directory: false,
+  port_real_path: (args?: Record<string, unknown>) => args?.['path'],
+  port_run: { code: 1, stdout: '', stderr: '' },
+  port_write_file: null,
 }
 
 describe('acting on a ship', () => {
@@ -152,12 +175,7 @@ describe('acting on a ship', () => {
 
   /** The one button that starts a measurement, beside the timestamp it makes stale. */
   it('measures the fleet when the bar asks for it', async () => {
-    const fresh = { ...snapshot, at: '2026-09-30T08:00:00.000Z' }
-    const invoke = bridge({
-      snapshot: read,
-      measure: { json: JSON.stringify(fresh), error: null },
-      store: null,
-    })
+    const invoke = bridge({ ...MEASURES, snapshot: read })
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
@@ -168,13 +186,15 @@ describe('acting on a ship', () => {
     await button?.trigger('click')
     await flushPromises()
 
-    expect(invoke).toHaveBeenCalledWith('measure', { only: null })
-    expect(page.text()).toContain('30.9.2026')
+    // In this window and not in a second program: no `measure`, a search and a write instead.
+    expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+    expect(invoke).toHaveBeenCalledWith('port_trees_with', expect.anything())
+    expect(invoke).toHaveBeenCalledWith('port_write_file', expect.anything())
   })
 
   /** Said and not swallowed: an action that quietly did nothing is the worst of the three. */
   it('shows what a failed measurement said', async () => {
-    bridge({ snapshot: read, measure: { json: null, error: 'hafen nicht gefunden' } })
+    bridge({ ...MEASURES, snapshot: read, port_write_file: 'Platte voll' })
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
@@ -184,7 +204,7 @@ describe('acting on a ship', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(page.text()).toContain('hafen nicht gefunden')
+    expect(page.text()).toContain('Platte voll')
   })
 
   /**
@@ -651,8 +671,17 @@ describe('deleting one branch, from the window', () => {
       if (command === 'snapshot') {
         return which(args) === 'forge' ? { json: null } : cached(stale)
       }
-      if (command === 'measure') {
-        return { json: JSON.stringify(stale), error: null }
+      if (command === 'port_places') {
+        return { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] }
+      }
+      if (command === 'port_run') {
+        return { code: 1, stdout: '', stderr: '' }
+      }
+      if (command === 'port_read_dir') {
+        return []
+      }
+      if (command === 'port_real_path') {
+        return (args as { path?: string } | undefined)?.path
       }
       return command === 'tools' ? [] : null
     })
@@ -666,7 +695,14 @@ describe('deleting one branch, from the window', () => {
       path: stale.ships[0]?.path,
       branch: 'feat/old',
     })
-    expect(invoke).toHaveBeenCalledWith('measure', { only: stale.ships[0]?.path })
+    /*
+     * That one repository, read again — and in this window rather than by a second program.
+     * The list the button came from is a measurement, and one still showing a branch that is gone
+     * is exactly the kept status field this tool exists to avoid.
+     */
+    expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('port_trees_with', expect.anything())
+    expect(invoke).toHaveBeenCalledWith('port_write_file', expect.anything())
   })
 
   /** git's refusal *is* the safety here, so its own sentence is what a reader gets. */

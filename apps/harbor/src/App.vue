@@ -267,10 +267,7 @@
 
   const watch_ = (): void => {
     watching ??= setInterval(() => {
-      void measuring().then((seen) => {
-        progress.value = seen
-        return seen
-      })
+      progress.value = measuring()
     }, 250)
   }
   const unwatch = (): void => {
@@ -303,7 +300,7 @@
   /** Stop the running survey. Nothing is half-done: the cache still holds the last whole one. */
   const stop = async (): Promise<void> => {
     try {
-      await stopMeasuring()
+      stopMeasuring()
     } catch (error) {
       trouble.value = error instanceof Error ? error.message : String(error)
     }

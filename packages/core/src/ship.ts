@@ -674,6 +674,13 @@ function isNotAShip(entry: string): boolean {
  */
 export const SEARCH_DEPTH = 4
 
+export class UnreadableRootError extends Error {
+  constructor(readonly root: string) {
+    super(`Wurzel nicht lesbar: ${root}`)
+    this.name = 'UnreadableRootError'
+  }
+}
+
 /**
  * Every repository under the root — including nested ones, and stopping at each.
  *
@@ -705,7 +712,16 @@ export async function findShipPaths(ports: Ports, root: string): Promise<readonl
    */
   const found = await ports.fs.treesWith(root, '.git', SEARCH_DEPTH, [...NOT_A_SHIP])
   if (found === null) {
-    return []
+    /*
+     * An unreadable root and an empty one both yield zero ships, and only one of them is a fault:
+     * reporting them alike hides a misconfiguration behind an empty harbour, and a typo in a
+     * second root would quietly halve the fleet.
+     *
+     * Thrown from here rather than checked beforehand, which is what it was: a `readDir` of each
+     * root *and* a search over it is two questions with one answer, and the search is the one that
+     * has to look anyway.
+     */
+    throw new UnreadableRootError(root)
   }
   return found
     .filter((path) => {
@@ -713,13 +729,6 @@ export async function findShipPaths(ports: Ports, root: string): Promise<readonl
       return !below.split('/').some((part) => isNotAShip(part) || part.startsWith('.'))
     })
     .sort()
-}
-
-export class UnreadableRootError extends Error {
-  constructor(readonly root: string) {
-    super(`Wurzel nicht lesbar: ${root}`)
-    this.name = 'UnreadableRootError'
-  }
 }
 
 /**
@@ -793,6 +802,18 @@ export interface SurveyProgress {
    * reported rather than inferred.
    */
   onCount?: (total: number) => void
+  /**
+   * Asked before each repository: whether to stop here and keep what is already measured.
+   *
+   * A survey of ninety repositories is seconds, and a reader who has seen enough must be able to
+   * say so. It was a *process* that got killed while the CLI did the measuring; a window that
+   * measures by itself has no process to kill, and "let it finish or reload the app" would be the
+   * window taking a button away by moving the work closer.
+   *
+   * Partial and not discarded: what has been read is true, and throwing it away because the rest
+   * was not would be the one thing a measurement must never do.
+   */
+  stop?: () => boolean
   /** Measured before the rest — see `surveyOrder`. */
   first?: readonly string[]
 }
@@ -912,15 +933,6 @@ export async function surveyHarbor(
   const archived = new Set(register.archived)
   const roots = typeof root === 'string' ? [root] : root
 
-  // An unreadable root and an empty one both yield zero ships, but only one of them is
-  // a fault. Reporting them alike hides misconfiguration behind an empty harbor. Every root has
-  // to be readable: a typo in the second one would otherwise just quietly halve the fleet.
-  for (const one of roots) {
-    if ((await ports.fs.readDir(one)) === null) {
-      throw new UnreadableRootError(one)
-    }
-  }
-
   const found = await findAcrossRoots(ports, roots)
   const extra: string[] = []
   for (const path of enlisted) {
@@ -934,6 +946,11 @@ export async function surveyHarbor(
   progress.onCount?.(paths.length)
 
   await inLanes(surveyOrder(paths, progress.first ?? []), SURVEY_LANES, async (path) => {
+    // Asked before the work and not after it: stopping is only worth anything if it stops
+    // something, and the cheapest moment is before the fifteen git calls for this repository.
+    if (progress.stop?.() === true) {
+      return
+    }
     const ship = await inspectShip(ports, path, {
       catalog,
       ownEmails,

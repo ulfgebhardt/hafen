@@ -66,7 +66,7 @@ der Fehler nie an Tauri lag.
 
 ## Die vier Baustellen
 
-### 1. Der Adapter (Ziel 6)
+### 1. Der Adapter (Ziel 6) ✅
 
 `packages/core` kennt vier Ports. Jeder hat eine Entsprechung in Rust:
 
@@ -80,6 +80,21 @@ der Fehler nie an Tauri lag.
 Die Erlaubnisliste lesender git-Kommandos (heute in `command.spec.ts` geprüft) wandert nach
 `lib.rs` und wird dort **erzwungen**, nicht nur getestet. Der Test bleibt und prüft dann eine
 Zusicherung statt einer Absicht.
+
+Gebaut, und dazu kamen zwei Dinge, die der Plan nicht vorhersah:
+
+- **`port_places`** löst Store, Schnappschuss und Wurzeln nach denselben XDG-Regeln auf, die die
+  CLI benutzt. Sie müssen dieselben sein: die beiden bearbeiten dieselben Dateien, und zwei
+  Pfadkonventionen für einen Store sind zwei Meinungen darüber, wo ein Register liegt.
+- **Der Katalog wird einkompiliert** (`catalog.ts`). `BUILTIN_STORE` löst von `packages/cli/src`
+  auf — auf einem fremden Rechner ein Pfad, den es nicht gibt. Ein geladenes Binary hätte jedes
+  Repository gegen **gar keine Forderung** gemessen und eine Flotte ohne ein einziges Urteil
+  gezeichnet: kaputt aussehend, während es über eine leere Norm korrekt war. Dieselben Dateien,
+  nur anders gelesen.
+
+Und `SurveyOptions.stop`: Abbrechen war ein Signal an einen Prozess. Ein Fenster, das selbst
+misst, hat keinen Prozess zum Töten — also fragt der Suchlauf vor jedem Repository nach. Was
+gemessen ist, **bleibt**: eine bereits genommene Lesung ist wahr, ob der Rest folgte oder nicht.
 
 ### 2. Erststart (Ziele 3, 6)
 

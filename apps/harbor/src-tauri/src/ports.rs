@@ -16,7 +16,7 @@
 //! write through silently, while an allow list at worst trips over a new *reading*. `git worktree
 //! list` is the proof — checking for the word `worktree` called a read a write.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
@@ -257,6 +257,60 @@ pub fn port_write_file(path: String, contents: String) -> Option<String> {
         }
     }
     std::fs::write(&path, contents).err().map(|e| e.to_string())
+}
+
+/// Where the window's own files live, and where it looks for repositories.
+///
+/// Resolved here and not in the webview because the rules are the host's: `$HOME`, the XDG
+/// variables and the overrides. The CLI resolves the same three with node's `homedir()` and
+/// `process.env`, neither of which exists in a window — which is why a downloaded binary could
+/// not find its own store.
+///
+/// **The same rules as the CLI's, deliberately**, because the two edit the same files. Two path
+/// conventions for one store are two opinions about where a register is.
+#[derive(Serialize)]
+pub struct Places {
+    /// The catalog and the register: `$HAFEN_STORE`, else `$XDG_DATA_HOME/hafen`, else `~/.local/share/hafen`.
+    pub store: String,
+    /// The measurement: `$HAFEN_SNAPSHOT`, else `$XDG_CACHE_HOME/hafen/snapshot.json`, else `~/.cache/…`.
+    pub snapshot: String,
+    /// Where repositories are looked for: `$HAFEN_ROOT`, comma-separated, else nothing.
+    ///
+    /// Empty is an answer and not a default: a machine that has never been asked where its
+    /// projects are has no roots, and the window says so rather than guessing at `~/Projects`.
+    pub roots: Vec<String>,
+}
+
+/// One directory out of a variable, a fallback variable, or `$HOME` plus a tail.
+fn under(given: &str, xdg: &str, tail: &str) -> Option<String> {
+    if let Ok(set) = std::env::var(given) {
+        if !set.is_empty() {
+            return Some(set);
+        }
+    }
+    let base = std::env::var(xdg)
+        .ok()
+        .filter(|one| !one.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var("HOME").ok().map(PathBuf::from))?;
+    Some(base.join(tail).to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn port_places() -> Places {
+    Places {
+        store: under("HAFEN_STORE", "XDG_DATA_HOME", ".local/share/hafen")
+            .unwrap_or_else(|| "hafen".to_owned()),
+        snapshot: under("HAFEN_SNAPSHOT", "XDG_CACHE_HOME", ".cache/hafen/snapshot.json")
+            .unwrap_or_else(|| "snapshot.json".to_owned()),
+        roots: std::env::var("HAFEN_ROOT")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|one| !one.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    }
 }
 
 /// What the machine has, for the readings that are about the host rather than a repository.
