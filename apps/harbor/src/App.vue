@@ -3,12 +3,15 @@
 
   import {
     bandOf,
-    byBand,
     CONTRACTS,
     draws,
     firstBand,
     FLEET,
-    isBand,
+    FLEET_ARCHIVE,
+    fleetPageFor,
+    isFleet,
+    pageFor,
+    shipsOn,
     viewOf,
   } from './components/band'
   import BandTabs from './components/BandTabs.vue'
@@ -50,6 +53,7 @@
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
+  import type { Hold } from './components/viewport'
   import type { Progress, Forge, RegisterAction, Snapshot } from './snapshot'
   import type { Places } from './survey'
   import type { Available } from './update'
@@ -110,9 +114,16 @@
   const view = ref<View>('dock')
   /** The drawing, so the place a ship holds on screen can be asked before it is swapped out. */
   const harbour = ref<{
-    where?: (ship: Ship | null) => { x: number; y: number } | null
+    where?: (ship: Ship | null) => Hold | null
   } | null>(null)
-  const hold = ref<{ x: number; y: number } | null>(null)
+  const hold = ref<Hold | null>(null)
+  /**
+   * Which fleet sheet was open last, so the fleet button comes back to it.
+   *
+   * Without the archive by default; a reader who opened the full sheet and went to look at a dock
+   * should not have to open it again on the way back.
+   */
+  const lastFleet = ref<typeof FLEET | typeof FLEET_ARCHIVE>(FLEET)
 
   const showView = (next: View): void => {
     // Asked before the page changes, because the drawing she is in is gone a tick later.
@@ -121,7 +132,7 @@
     hold.value = harbour.value?.where?.(picked.value) ?? null
     view.value = next
     if (next === 'fleet') {
-      page.value = FLEET
+      page.value = fleetPageFor(picked.value, lastFleet.value)
       return
     }
     if (next === 'contracts') {
@@ -139,6 +150,9 @@
    */
   watch(page, (next) => {
     view.value = viewOf(next)
+    if (isFleet(next)) {
+      lastFleet.value = next
+    }
   })
 
   /**
@@ -174,6 +188,31 @@
    * with itself, and the reader has no way to tell which half to believe.
    */
   const fleet = computed(() => snapshot.value?.ships ?? [])
+
+  /**
+   * After a measurement, the ship being read is the measured one, and she is where she now is.
+   *
+   * `picked` held the object from before, so the datasheet went on reading the old figures; and a
+   * measurement that moved her to another band left the page on the band she had left, where the
+   * drawing no longer carried her. Looked up again by path, and the page follows her — keeping
+   * where she stood and how large, the same as a switch between views.
+   */
+  watch(fleet, (ships) => {
+    const before = picked.value
+    if (before === null) {
+      return
+    }
+    const now = ships.find((one) => one.path === before.path) ?? null
+    picked.value = now
+    if (now === null) {
+      return
+    }
+    const next = pageFor(page.value, now)
+    if (next !== page.value) {
+      hold.value = harbour.value?.where?.(before) ?? null
+      page.value = next
+    }
+  })
 
   /**
    * Whether this machine has ever been told where its projects are.
@@ -247,7 +286,7 @@
    * it used to get spent four times the area and grouped by the directory an organisation happens
    * to be filed under, which is a filing decision rather than a fact about the code.
    */
-  const layout = computed<Layout>(() => (page.value === FLEET ? 'basins' : 'lanes'))
+  const layout = computed<Layout>(() => (isFleet(page.value) ? 'basins' : 'lanes'))
 
   /**
    * The forge reading keyed by ship, for the drawing.
@@ -272,13 +311,7 @@
    * honours the search and the contract pick, because those are things a reader asked for; the
    * bands are not, they are how the other pages are arranged.
    */
-  const shown = computed(() =>
-    page.value === FLEET
-      ? narrowed.value
-      : isBand(page.value)
-        ? byBand(narrowed.value)[page.value]
-        : [],
-  )
+  const shown = computed(() => shipsOn(page.value, narrowed.value))
 
   /**
    * Whether this window can measure and write at all.
@@ -625,6 +658,7 @@
         v-model:query="query"
         :ships="narrowed"
         :contract="contract"
+        :fleet-page="fleetPageFor(picked, lastFleet)"
         @clear="contract = null"
         @view="showView"
       />
