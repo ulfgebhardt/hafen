@@ -8,11 +8,16 @@ import {
   draws,
   firstBand,
   FLEET,
+  FLEET_ARCHIVE,
+  fleetPageFor,
   isBand,
+  isFleet,
   PAGE_LABEL,
   PAGE_MEANING,
   PAGES,
+  pageFor,
   pagesOf,
+  shipsOn,
   VIEWS,
   viewOf,
 } from './band'
@@ -105,7 +110,7 @@ describe(pagesOf, () => {
   /** The question first, the page second: five tabs on one line was a bar nobody could aim at. */
   it('offers the bands in the dock view and the fleet in the other', () => {
     expect(pagesOf('dock')).toStrictEqual(['active', 'dormant', 'archived'])
-    expect(pagesOf('fleet')).toStrictEqual([FLEET])
+    expect(pagesOf('fleet')).toStrictEqual([FLEET, FLEET_ARCHIVE])
   })
 
   /**
@@ -144,5 +149,75 @@ describe(viewOf, () => {
         expect(viewOf(page)).toBe(view)
       }
     }
+  })
+})
+
+describe(shipsOn, () => {
+  const active = ship({ name: 'active', rustDays: 1 })
+  const dormant = ship({ name: 'dormant', rustDays: 400 })
+  const archived = ship({ name: 'archived', archived: true, rustDays: 900 })
+  const fleet = [active, dormant, archived]
+
+  /** The default fleet sheet: everything but what the register put away. */
+  it('leaves the archive off the fleet sheet', () => {
+    expect(shipsOn(FLEET, fleet)).toStrictEqual([active, dormant])
+  })
+
+  it('puts every ship on the sheet with the archive', () => {
+    expect(shipsOn(FLEET_ARCHIVE, fleet)).toStrictEqual(fleet)
+  })
+
+  it('gives a band its own ships and the catalog none', () => {
+    expect(shipsOn('archived', fleet)).toStrictEqual([archived])
+    expect(shipsOn(CONTRACTS, fleet)).toStrictEqual([])
+  })
+})
+
+describe(isFleet, () => {
+  it('knows both fleet sheets and nothing else', () => {
+    expect(PAGES.filter((page) => isFleet(page))).toStrictEqual([FLEET, FLEET_ARCHIVE])
+  })
+
+  /** The sheet with the archive is a fleet sheet and not a band, so it belongs to the fleet button. */
+  it('puts the full sheet in the fleet view', () => {
+    expect(viewOf(FLEET_ARCHIVE)).toBe('fleet')
+    expect(isBand(FLEET_ARCHIVE)).toBe(false)
+  })
+})
+
+describe(fleetPageFor, () => {
+  /** The sheet last open, as long as the ship being read is on it. */
+  it('comes back to the sheet that was open', () => {
+    expect(fleetPageFor(null, FLEET_ARCHIVE)).toBe(FLEET_ARCHIVE)
+    expect(fleetPageFor(ship({ rustDays: 1 }), FLEET)).toBe(FLEET)
+  })
+
+  /** An archived ship is only on the full sheet, and a switch that lost her would have lost the reader. */
+  it('opens the full sheet for an archived ship', () => {
+    expect(fleetPageFor(ship({ archived: true, rustDays: 900 }), FLEET)).toBe(FLEET_ARCHIVE)
+  })
+})
+
+describe(pageFor, () => {
+  const active = ship({ rustDays: 1 })
+  const archived = ship({ archived: true, rustDays: 900 })
+
+  /** A measurement moved her to another band, and the band page goes with her. */
+  it('moves a band page to the band she is in now', () => {
+    expect(pageFor('dormant', active)).toBe('active')
+    expect(pageFor('active', archived)).toBe('archived')
+    expect(pageFor('active', active)).toBe('active')
+  })
+
+  /** Put away while the fleet sheet was open: only the full sheet still carries her. */
+  it('moves the fleet sheet onto the full one when she is archived', () => {
+    expect(pageFor(FLEET, archived)).toBe(FLEET_ARCHIVE)
+    expect(pageFor(FLEET, active)).toBe(FLEET)
+  })
+
+  /** The full sheet and the catalog carry everybody, so there is nowhere to follow her to. */
+  it('leaves the pages that carry every ship where they are', () => {
+    expect(pageFor(FLEET_ARCHIVE, active)).toBe(FLEET_ARCHIVE)
+    expect(pageFor(CONTRACTS, archived)).toBe(CONTRACTS)
   })
 })

@@ -91,9 +91,39 @@ describe('the two questions the bar offers pages for', () => {
         .find((one) => one.attributes('title')?.startsWith(view))
         ?.attributes('title')
 
-    expect(title('Flotte')).toContain('Flotte 3')
+    // The fleet sheet it would open leaves the archive off: two of the three.
+    expect(title('Flotte')).toContain('Flotte 2')
     // The dock stands for the band that is open, not for the fleet: two of the three are active.
     expect(title('Dock')).toContain('Dock 2')
+  })
+
+  /** The switch counts the sheet it would open, and only the parent knows which that is. */
+  it('counts the full sheet when that is the one the switch would open', () => {
+    const fleet = [ship({ rustDays: 1 }), ship({ archived: true, rustDays: 900 })]
+    const tabs = mount(BandTabs, {
+      props: { page: 'active', view: 'dock', ships: fleet, fleetPage: 'fleetArchive' },
+    })
+
+    expect(
+      tabs
+        .findAll('button')
+        .find((one) => one.attributes('title')?.startsWith('Flotte'))
+        ?.attributes('title'),
+    ).toContain('Flotte 2')
+  })
+
+  /** Two sheets in the fleet view, each with its own count: without the archive, and with it. */
+  it('offers the fleet with and without the archive, counted apart', () => {
+    const fleet = [
+      ship({ rustDays: 1 }),
+      ship({ rustDays: 400 }),
+      ship({ archived: true, rustDays: 900 }),
+    ]
+    const tabs = mount(BandTabs, { props: { page: 'fleet', view: 'fleet', ships: fleet } })
+    const text = tabs.text()
+
+    expect(text).toContain('Flotte2')
+    expect(text).toContain('mit Archiv3')
   })
 
   /** From the fleet page the dock switch stands for the band it would open — the first. */

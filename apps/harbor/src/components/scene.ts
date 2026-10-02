@@ -69,6 +69,7 @@ import {
   clampPan,
   clampZoom,
   fitScale,
+  heldView,
   isPannable,
   wholeScale,
   zoomAt,
@@ -82,7 +83,7 @@ import type { Side, Spot } from './plan'
 import type { Network, Place } from './traffic'
 import type { Traits } from './traits'
 import type { Container as Container_, Ground, Hull, MarkBox } from './vessel'
-import type { Extent, Pan } from './viewport'
+import type { Extent, Hold, Pan } from './viewport'
 import type { ForgeStats, Ship } from '@hafen/core'
 import type { FederatedPointerEvent } from 'pixi.js'
 
@@ -529,14 +530,14 @@ export interface Scene {
    * Does nothing for a ship this page does not carry, which is the honest answer — there is
    * nothing to centre on.
    */
-  focus: (ship: Ship | null, hold?: { x: number; y: number } | null) => void
+  focus: (ship: Ship | null, hold?: Hold | null) => void
   /**
    * Where a ship is on screen right now, or `null` where this page does not carry her.
    *
    * Asked before a page is left, so the next drawing can put her back on the same spot: what
    * changes at a switch should be the harbour around her, not where the eye has to look.
    */
-  where: (ship: Ship | null) => { x: number; y: number } | null
+  where: (ship: Ship | null) => Hold | null
   /**
    * Mark the ships a search found, and frame them.
    *
@@ -1861,13 +1862,13 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
   const berthOf = (ship: Ship | null): Placed | undefined =>
     placed.find((one) => one.ship.path === ship?.path)
 
-  const where = (ship: Ship | null): { x: number; y: number } | null => {
+  const where = (ship: Ship | null): Hold | null => {
     const entry = berthOf(ship)
     if (entry === undefined) {
       return null
     }
     const scale = zoom ?? fitScale(extent, viewOf())
-    return { x: pan.x + entry.spot.x * scale, y: pan.y + entry.spot.y * scale }
+    return { x: pan.x + entry.spot.x * scale, y: pan.y + entry.spot.y * scale, scale }
   }
 
   /**
@@ -1907,22 +1908,32 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     settle()
   }
 
-  const focus = (ship: Ship | null, hold: { x: number; y: number } | null = null): void => {
+  const focus = (ship: Ship | null, hold: Hold | null = null): void => {
     const entry = berthOf(ship)
     if (entry === undefined) {
       return
     }
     const view = viewOf()
-    const scale = zoom ?? fitScale(extent, view)
     /*
-     * Where she was, if that is known — otherwise the middle.
+     * Where she was and how large, if that is known — otherwise the middle, at whatever is set.
      *
      * Holding her place is the better answer at a switch: the reader is looking at her, and what
      * should change is the harbour around her. Centring moves the one thing that was already
-     * where the eye is.
+     * where the eye is, and redrawing at "everything fits" shrinks it to a speck.
      */
-    const at = hold ?? { x: view.width / 2, y: view.height / 2 }
-    pan = { x: at.x - entry.spot.x * scale, y: at.y - entry.spot.y * scale }
+    if (hold === null) {
+      // The scale is left alone: `null` is "follow the fit when the window resizes", and pinning
+      // it here would end that for a reader who never zoomed.
+      const scale = zoom ?? fitScale(extent, view)
+      pan = {
+        x: view.width / 2 - entry.spot.x * scale,
+        y: view.height / 2 - entry.spot.y * scale,
+      }
+    } else {
+      const held = heldView(hold, entry.spot, wholeScale(extent, view))
+      zoom = held.zoom
+      pan = held.pan
+    }
     // Through `settle`, so the same clamp applies as to a drag: a harbour smaller than the window
     // cannot be pushed off it, and this must not be the one way round that.
     settle()

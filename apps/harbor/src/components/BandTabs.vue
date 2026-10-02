@@ -7,10 +7,12 @@
     byBand,
     CONTRACTS,
     draws,
+    FLEET,
     isBand,
     PAGE_LABEL,
     PAGE_MEANING,
     pagesOf,
+    shipsOn,
     VIEW_LABEL,
     VIEW_MEANING,
     VIEWS,
@@ -23,10 +25,16 @@
   import type { ContractFilter } from './contracts'
   import type { Ship } from '@hafen/core'
 
-  const { ships, contract = null } = defineProps<{
+  const {
+    ships,
+    contract = null,
+    fleetPage = FLEET,
+  } = defineProps<{
     ships: readonly Ship[]
     /** What was picked on the catalog page, so the basin can say what it is showing. */
     contract?: ContractFilter | null
+    /** Which fleet sheet the fleet switch would open, which only the parent knows. */
+    fleetPage?: Page
   }>()
 
   const emit = defineEmits<{ clear: []; view: [(typeof VIEWS)[number]] }>()
@@ -56,8 +64,10 @@
   const query = defineModel<string>('query', { default: '' })
 
   const grouped = computed(() => byBand(ships))
-  const scores = computed(() =>
-    Object.fromEntries(BANDS.map((name) => [name, bandPoints(grouped.value[name])])),
+  /** What each page that draws ships is worth — off `shipsOn`, so the tab and the drawing agree. */
+  const scores = computed(
+    () =>
+      new Map(pagesOf(view.value).map((name) => [name, bandPoints(shipsOn(name, ships))] as const)),
   )
 
   /**
@@ -67,9 +77,6 @@
    * disagree. It moves with the search for the same reason every other count does.
    */
   const demands = computed(() => tallyContracts(ships).flatMap((chain) => chain.contracts).length)
-
-  /** What the fleet page is worth: every ship on it, because that page has no band to split by. */
-  const whole = computed(() => bandPoints(ships))
 
   /**
    * Which band the dock switch would land on — the one open, or the first.
@@ -89,7 +96,7 @@
    * with the search, like every other count on this bar.
    */
   const counted = computed<Record<View, number>>(() => ({
-    fleet: ships.length,
+    fleet: shipsOn(fleetPage, ships).length,
     dock: grouped.value[band.value].length,
     contracts: demands.value,
   }))
@@ -180,7 +187,7 @@
         was the catalog — a tab that says 13 beside a harbour of 92 is a window lying about itself.
       -->
       <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{
-        name === CONTRACTS ? demands : isBand(name) ? grouped[name].length : ships.length
+        name === CONTRACTS ? demands : shipsOn(name, ships).length
       }}</span>
 
       <!--
@@ -195,8 +202,8 @@
       <PointValue
         v-if="draws(name)"
         class="ml-1.5 scale-90 opacity-70"
-        :project="isBand(name) ? (scores[name]?.project ?? 0) : whole.project"
-        :personal="isBand(name) ? (scores[name]?.own ?? 0) : whole.own"
+        :project="scores.get(name)?.project ?? 0"
+        :personal="scores.get(name)?.own ?? 0"
       />
     </button>
 
