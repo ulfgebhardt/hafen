@@ -2,12 +2,25 @@ name: "pull request title"
 
 # release-please liest die Commit-Typen, also muss der Titel eines Squash-Merges einer sein.
 # Ein PR mit dem Titel "fixes" landet sonst in keiner Changelog-Zeile und in keinem Release.
+#
+# Das trägt nur, weil das Repository ausschließlich squasht und dabei den PR-Titel als Commit-Titel
+# nimmt (Settings → General). Mit Merge-Commits las release-please jeden Eintrag zweimal — den
+# Merge-Commit und den Commit im Zweig — und die Commits im Zweig prüft dieser Check nie.
+#
+# Der Changelog zeigt jeden Typ (`changelog-sections` in release-please-config.json, die Liste von
+# Leuchtturm). release-please blendet ab Werk ci, build, refactor, test, style und chore aus;
+# v1.1.0 hat dadurch #11 verschwiegen, den PR, der das arm64-Artefakt überhaupt erst baut.
 on:
   pull_request_target:
     types:
       - opened
       - edited
       - synchronize
+
+# Keyed by pull request NUMBER, not `head_ref`: two forks may both push a branch named `patch-1`.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   pull-requests: write
@@ -19,10 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.actor != 'dependabot[bot]' }}
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      # Pinned by SHA, unlike the other workflows: `pull_request_target` runs with a write token on
+      # pull requests from forks, so a moved tag would be code we never read running with it.
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # release-please titles its own pull request `chore(release): …`, so the scope it uses has
+          # to be one this accepts — otherwise the one PR that must pass is the one that cannot.
+          # `deps` is the same story for dependabot. (This comment used to sit inside the block
+          # below, where YAML reads it as content: its three lines were accepted scopes.)
           scopes: |
             core
             cli
@@ -30,8 +49,14 @@ jobs:
             tauri
             quests
             ci
-            # release-please titles its own pull request `chore(release): …`, so the scope it uses
-            # has to be one this accepts — otherwise the one PR that must pass is the one that
-            # cannot. `deps` is the same story for dependabot.
             release
             deps
+          # Every changelog line then names the part it is about.
+          requireScope: true
+          # Leuchtturm's `subjectPattern: ^(?![A-Z]).+$` is left out on purpose: the subjects here
+          # are German, and "Flotte ohne Archiv" (#7) or "Linux arm64" (#11) are correct with a
+          # capital letter. The rule would demand a spelling error.
+          headerPattern: '^(\w*)(?:\(([\w$.\-*/ ]*)\))?: (.*)$'
+          headerPatternCorrespondence: type, scope, subject
+          # `[WIP] …` keeps the check pending instead of failing it.
+          wip: true
