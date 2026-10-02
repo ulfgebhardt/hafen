@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { fleetPoints, projectPoints } from '@hafen/core'
+  import { fleetLines, fleetPoints, projectPoints } from '@hafen/core'
   import { computed, ref } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
@@ -66,6 +66,19 @@
    */
   const mine = computed(() => fleetPoints(ships))
   const fleet = computed(() => projectPoints(ships))
+  /**
+   * The personal figure, worked out where it is shown.
+   *
+   * The band tabs add up to the first line only, and the header is the sum of all four — 23 779
+   * against 20 767 with nothing saying why was a figure that looked wrong while being right.
+   */
+  const bill = computed(() => {
+    const number = (value: number): string => value.toLocaleString('de-DE')
+    const lines = fleetLines(mine.value).map(
+      (line) => `${line.name}: ${number(line.points)} (${line.detail})`,
+    )
+    return [...lines, `deine Punkte: ${number(mine.value.total)}`].join('\n')
+  })
   const bound = computed(() => ships.filter((ship) => bindingQuests(ship).length > 0).length)
 
   /**
@@ -106,9 +119,7 @@
 
     <p class="font-mono text-xs text-slate-500">{{ bound }} gebunden</p>
 
-    <p
-      :title="`${mine.active} Projekte aktiv · ${mine.clean} von ${mine.fleet} Bäumen sauber · ${mine.met} von ${mine.binding} Quests erfüllt`"
-    >
+    <p :title="bill">
       <PointValue :project="fleet" :personal="mine.total" />
     </p>
     <!--
