@@ -65,6 +65,8 @@ const ROLE_COMMANDS: Record<CheckRole, readonly RoleCommand[]> = {
     { tool: 'clippy' },
     // Without `--frail` remark reports and exits green, and `-o` would rewrite the markdown.
     { tool: 'remark', needs: [/--frail\b/] },
+    // Without `--check` it formats the staged files, which is a writer and not a lint.
+    { tool: 'pretty-quick', needs: [/--check\b/] },
   ],
   typecheck: [
     { tool: 'tsc', needs: [/--noEmit\b/] },
@@ -530,4 +532,87 @@ export function nameProximity(
     return 3
   }
   return roleTools(commands, role).some((tool) => name.includes(tool)) ? 2 : 1
+}
+
+/** What a script's name says it does, as far as this module has a word for it. */
+export type Claim = CheckRole | 'build'
+
+/** The name parts that claim something, in the order `claimOf` prefers the later one. */
+const CLAIMS: readonly Claim[] = [...CHECK_ROLES, 'build']
+
+/**
+ * Name parts that make a script the preparation of a run rather than the run itself.
+ *
+ * Measured on 02.10.2026: `e2e:seed` fills a database for the tests, `build:dev-brandings`
+ * builds for local development and `test:unit:debug` waits for a debugger. None claims what its
+ * role word says, and reading them as if they did is how a seed script would answer for e2e.
+ */
+const PREPARES: readonly string[] = [
+  'seed',
+  'setup',
+  'prepare',
+  'clean',
+  'dev',
+  'debug',
+  'watch',
+  'serve',
+  'start',
+]
+
+/**
+ * What a script's *name* says it does — the last part that is a role or `build`, so
+ * `test:lint:locales` claims `lint` and `test:lint:typecheck` claims `typecheck`.
+ *
+ * The second place a name decides something, and like `namedAsWriter` it decides a different
+ * question than the role: not "what does this measure" but "what would it have to be read as".
+ * It never makes a script a check. It only stops an unreadable one from being a gap.
+ */
+export function claimOf(name: string): Claim | null {
+  if (segments(name).some((segment) => PREPARES.includes(segment))) {
+    return null
+  }
+  return (
+    segments(name)
+      .toReversed()
+      .find((segment): segment is Claim => CLAIMS.includes(segment as Claim)) ?? null
+  )
+}
+
+/**
+ * Whether a table here names this tool at all. `vitest` without `run` watches and `cargo check`
+ * builds nothing — both are read, and read as not doing the job, which is an answer.
+ *
+ * Except an interpreter: `node --test` is listed, but `node scripts/build.js` runs a file, and
+ * what the file does is exactly what is not read.
+ */
+function knownTool(tool: string): boolean {
+  return (
+    !INTERPRETERS.includes(tool) &&
+    [...Object.values(ROLE_COMMANDS).flat(), ...BUILD_COMMANDS].some((entry) => entry.tool === tool)
+  )
+}
+
+/**
+ * The command this module cannot read, or `null` for one it can.
+ *
+ * Readable is everything with an answer: a tool of a role or a build, a verb, a hand-off to a
+ * script (followed elsewhere), a package manager's own subcommand, a helper that only moves
+ * files, and a run that never hands back a verdict (`judges`). What is left runs something no table here knows — `tsup` before it was listed, a
+ * `node scripts/build.js`, a `run-s build:*` whose targets nobody follows. That is not nothing,
+ * and calling it nothing is what made those ships violate a quest they might well meet.
+ */
+export function unreadCommand(command: string): string | null {
+  const tool = toolOf(command)
+  if (
+    tool === null ||
+    !judges(command) ||
+    HELPERS.includes(tool) ||
+    RUNNERS.includes(tool) ||
+    knownTool(tool) ||
+    buildsArtifact(command) ||
+    commandRoles([command]).length > 0
+  ) {
+    return null
+  }
+  return command
 }

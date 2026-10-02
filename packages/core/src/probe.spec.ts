@@ -543,6 +543,48 @@ describe('whether anything here builds', () => {
   })
 })
 
+describe('a claim nothing can read', () => {
+  const workflows = ['jobs:\n  x:\n    steps:\n      - run: npm run build\n']
+  const unread = (claims: 'build' | 'lint', inCi: boolean): QuestFacts =>
+    facts({
+      workflows,
+      contract: mockContract({
+        unread: [{ dir: 'backend', script: claims, claims, command: 'mytool', inCi }],
+      }),
+    })
+
+  /** Unmeasurable is not violated — and the evidence names the command that stopped us. */
+  it('is unmeasured where an unread script claims the build', () => {
+    const seen = runCheck(check('baut'), unread('build', false))
+
+    expect(seen.ok).toBeNull()
+    expect(seen.evidence.found).toBe('nicht lesbar: build (backend) → mytool')
+  })
+
+  it('is unmeasured in the CI only where a step runs that script', () => {
+    expect(runCheck(check('baut-in-ci'), unread('build', true)).ok).toBeNull()
+    expect(runCheck(check('baut-in-ci'), unread('build', false)).ok).toBe(false)
+  })
+
+  it('does the same for a role', () => {
+    expect(runCheck(check('rolle', { rolle: 'lint' }), unread('lint', false)).ok).toBeNull()
+    expect(runCheck(check('rolle-in-ci', { rolle: 'lint' }), unread('lint', true)).ok).toBeNull()
+    expect(runCheck(check('rolle-in-ci', { rolle: 'lint' }), unread('lint', false)).ok).toBe(false)
+  })
+
+  /** A measured answer wins: an unread script beside a real build changes nothing. */
+  it('lets a measured build stand', () => {
+    const both = facts({
+      contract: mockContract({
+        builds: true,
+        unread: [{ dir: '.', script: 'build', claims: 'build', command: 'mytool', inCi: false }],
+      }),
+    })
+
+    expect(runCheck(check('baut'), both).ok).toBe(true)
+  })
+})
+
 describe('what guards the default branch', () => {
   const reading = (guard: unknown): QuestFacts =>
     facts({

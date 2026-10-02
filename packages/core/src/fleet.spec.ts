@@ -30,6 +30,7 @@ function contract(
     devEntry: 'script',
     builds: false,
     buildsInCi: false,
+    unread: [],
     inCi: [],
     gaps,
   }

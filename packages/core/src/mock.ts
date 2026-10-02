@@ -158,6 +158,7 @@ export function mockContract(overrides: Partial<Contract> = {}): Contract {
     inCi: [],
     builds: false,
     buildsInCi: false,
+    unread: [],
     gaps: CHECK_ROLES.filter((role) => !scripts[role]),
     ...overrides,
   }

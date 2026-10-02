@@ -4,10 +4,12 @@ import {
   bodyBuilds,
   bodyRoles,
   buildsArtifact,
+  claimOf,
   delegationOf,
   namedAsWriter,
   nameProximity,
   toolOf,
+  unreadCommand,
 } from './role'
 
 describe(bodyRoles, () => {
@@ -267,5 +269,55 @@ describe(toolOf, () => {
 
   it('finds none in a command that only sets up', () => {
     expect(toolOf('FOO=1')).toBeNull()
+  })
+})
+
+describe(claimOf, () => {
+  it('reads the last part of a name that is a role or a build', () => {
+    expect(claimOf('build')).toBe('build')
+    expect(claimOf('docs:build')).toBe('build')
+    expect(claimOf('test:lint:locales')).toBe('lint')
+    expect(claimOf('test:lint:typecheck')).toBe('typecheck')
+  })
+
+  it('claims nothing for a name that says nothing', () => {
+    expect(claimOf('dev')).toBeNull()
+    expect(claimOf('rebuild')).toBeNull()
+  })
+
+  /** Measured: `e2e:seed`, `build:dev-brandings`, `test:unit:debug` prepare a run and are none. */
+  it('claims nothing for a name that prepares a run', () => {
+    expect(claimOf('e2e:seed')).toBeNull()
+    expect(claimOf('build:dev-brandings')).toBeNull()
+    expect(claimOf('test:unit:debug')).toBeNull()
+  })
+})
+
+describe(unreadCommand, () => {
+  /** Measured on 02.10.2026, before `tsup` was listed: IT4C.dev's backend build. */
+  it('names a command no table here knows', () => {
+    expect(unreadCommand('mytool --out dist')).toBe('mytool --out dist')
+    expect(unreadCommand('node scripts/build.js')).toBe('node scripts/build.js')
+    expect(unreadCommand('run-s build:*')).toBe('run-s build:*')
+  })
+
+  /** Read is everything with an answer, including the answer "this does not do it". */
+  it('reads a known tool, a verb, a hand-off and a helper', () => {
+    expect(unreadCommand('vite build')).toBeNull()
+    expect(unreadCommand('vitest')).toBeNull()
+    expect(unreadCommand('vuepress build docs')).toBeNull()
+    expect(unreadCommand('npm run build')).toBeNull()
+    expect(unreadCommand('rimraf dist')).toBeNull()
+  })
+
+  it('finds nothing unread in a command that only sets up', () => {
+    expect(unreadCommand('FOO=1')).toBeNull()
+  })
+
+  /** No verdict is an answer too, and `pretty-quick` without `--check` is a writer it knows. */
+  it('reads a run that hands back no verdict', () => {
+    expect(unreadCommand('node --inspect-brk ./node_modules/jest/bin/jest.js')).toBeNull()
+    expect(unreadCommand('pretty-quick --staged')).toBeNull()
+    expect(bodyRoles('pretty-quick --check')).toStrictEqual(['lint'])
   })
 })

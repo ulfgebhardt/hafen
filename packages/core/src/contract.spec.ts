@@ -506,6 +506,60 @@ describe('detectContract CI build reading', () => {
   })
 })
 
+describe('detectContract unread scripts', () => {
+  function ship(scripts: Record<string, string>, workflow = '') {
+    return mockPorts({
+      commands: tracked('package.json'),
+      files: {
+        [`${SHIP}/package.json`]: manifest(scripts),
+        [`${SHIP}/.github/workflows/ci.yml`]: workflow,
+      },
+      dirs: { [`${SHIP}/.github/workflows`]: workflow === '' ? [] : ['ci.yml'] },
+    })
+  }
+
+  it('names a script that claims a build and runs nothing readable', async () => {
+    const contract = await detectContract(
+      ship(
+        { build: 'mytool src --out dist' },
+        'jobs:\n  x:\n    steps:\n      - run: npm run build\n',
+      ),
+      SHIP,
+    )
+
+    expect(contract.builds).toBe(false)
+    expect(contract.unread).toStrictEqual([
+      { dir: '.', script: 'build', claims: 'build', command: 'mytool src --out dist', inCi: true },
+    ])
+  })
+
+  /** A role it claims is a question and no longer a gap: `fehlt` would say nothing was found. */
+  it('takes a claimed role out of the gaps', async () => {
+    const contract = await detectContract(ship({ 'test:lint:locales': 'scripts/locales.sh' }), SHIP)
+
+    expect(contract.scripts.lint).toBe(false)
+    expect(contract.unread.map((one) => one.claims)).toStrictEqual(['lint'])
+    expect(contract.gaps).not.toContain('lint')
+  })
+
+  it('leaves alone what delivers, what is read and what writes', async () => {
+    const contract = await detectContract(
+      ship({
+        build: 'vite build',
+        // Not `test:unit`: the house name is a check whatever it runs.
+        unit: 'vitest',
+        'test:e2e': 'test-e2e',
+        'lint:fix': 'mytool --fix',
+        dev: 'mytool serve',
+      }),
+      SHIP,
+    )
+
+    expect(contract.unread).toStrictEqual([])
+    expect(contract.gaps).toContain('unit')
+  })
+})
+
 describe(contractChecks, () => {
   it('pairs every declared script with the member it runs in', async () => {
     // dreammall.earth: `test:lint` in the members, none at the root. Offering the bare
