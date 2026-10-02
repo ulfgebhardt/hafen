@@ -22,6 +22,7 @@
   import NoGit from './components/NoGit.vue'
   import { filterShips } from './components/search'
   import ShipSheet from './components/ShipSheet.vue'
+  import UpdateBanner from './components/UpdateBanner.vue'
   import {
     availableTools,
     currentPlaces,
@@ -42,6 +43,7 @@
     stopMeasuring,
   } from './snapshot'
   import { askForRoot, bordmittel, needsRoots, registerIn } from './survey'
+  import { checkForUpdate, installUpdate, runningVersion } from './update'
 
   import type { Layout, Page, View } from './components/band'
   import type { Bordmittel } from './components/bordmittel'
@@ -50,6 +52,7 @@
   import type { ToolName } from './components/tools'
   import type { Progress, Forge, RegisterAction, Snapshot } from './snapshot'
   import type { Places } from './survey'
+  import type { Available } from './update'
   import type { Ship } from '@hafen/core'
 
   const snapshot = ref<Snapshot | null>(null)
@@ -298,6 +301,34 @@
   const trouble = ref<string | null>(null)
 
   /**
+   * The one newer version, if there is one — and nothing at all otherwise.
+   *
+   * Its own state, like the forge readings and for the same reason: the check is a question to the
+   * network and the snapshot is a reading of this disk, and folding one into the other would give
+   * the older figure the younger timestamp.
+   */
+  const update = ref<Available | null>(null)
+  const updating = ref(false)
+  /** What the install said when it failed. Not swallowed — somebody pressed a button. */
+  const updateTrouble = ref<string | null>(null)
+  /** Clicked away. Comes back next start: the update does not go away either. */
+  const dismissed = ref(false)
+
+  const install = async (): Promise<void> => {
+    const found = update.value
+    if (found === null || updating.value) {
+      return
+    }
+    updating.value = true
+    updateTrouble.value = null
+    try {
+      updateTrouble.value = await installUpdate(found.rid)
+    } finally {
+      updating.value = false
+    }
+  }
+
+  /**
    * Measure again — the whole fleet, or the one repository named.
    *
    * The picture is replaced whole when it comes back rather than patched as it goes: a harbour
@@ -512,6 +543,13 @@
     forge.value = await loadForge()
 
     /*
+     * And after those: looking for a newer version is seventeen seconds of somebody else's network
+     * at worst, and a harbour that would not draw until GitHub answered would have the priorities
+     * backwards. Nothing is reported when the look fails — being offline is not a Hafen problem.
+     */
+    update.value = await checkForUpdate(await runningVersion())
+
+    /*
      * And the one question the harbour cannot measure, asked once.
      *
      * After the picture, so a machine that *has* been asked never waits on this; and off the
@@ -539,6 +577,19 @@
 
 <template>
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
+    <!--
+      Above everything, including the two views that replace the harbour: a newer version can be
+      exactly the remedy for the state somebody is looking at.
+    -->
+    <UpdateBanner
+      v-if="update !== null && !dismissed"
+      :version="update.version"
+      :current="update.current"
+      :busy="updating"
+      :trouble="updateTrouble"
+      @install="install"
+      @dismiss="dismissed = true"
+    />
     <!--
       Before the harbour, because an empty harbour and an unasked machine look alike and only one
       of them has a remedy.

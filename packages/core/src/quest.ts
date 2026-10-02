@@ -45,8 +45,13 @@ export type ProbeKind = (typeof PROBE_KINDS)[number]
  * ship and not about the check — `lint` is owed by anything that compiles, `lint-standard` only
  * by what can carry an eslint config, and that difference is the whole reason a Rust crate comes
  * out as `notApplicable` instead of as a gap.
+ *
+ * `tauri` is named for exactly what is measured and not for the broader thing it is a case of. A
+ * trait called `binary` would claim to recognise every repository that ships an executable, and
+ * what the measurement sees is one bundler's config file — then a Go program with no self-update
+ * would carry a gap it was never asked about. The narrow name is the honest one.
  */
-export const SHIP_TRAITS = ['node', 'rust'] as const
+export const SHIP_TRAITS = ['node', 'rust', 'tauri'] as const
 
 export type ShipTrait = (typeof SHIP_TRAITS)[number]
 
