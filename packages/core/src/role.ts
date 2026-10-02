@@ -492,7 +492,7 @@ const WRITING: readonly string[] = ['update', 'updates', 'write', 'fix', 'fixup'
  * question than the role: not "what does this measure" but "is it safe to press". The flags are
  * not always there to be read. `"test:e2e:a11y:update": "A11Y_UPDATE_BASELINE=1 playwright test
  * a11y"` writes its baseline through an environment variable, and gezeitenatlas and
- * genossenschaft both offered it as a check until this existed.
+ * a second ship both offered it as a check until this existed.
  *
  * It fails in the safe direction: at worst a real check whose name says `fix` is not offered, and
  * nothing is offered that overwrites the answer it was asked for.

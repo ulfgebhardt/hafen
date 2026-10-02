@@ -21,7 +21,7 @@ describe(matches, () => {
    */
   it('finds a ship by name, by org and by path', () => {
     expect(matches(leuchtturm, 'deploy')).toBe(true)
-    expect(matches(leuchtturm, 'community')).toBe(true)
+    expect(matches(leuchtturm, 'verbund')).toBe(true)
     expect(matches(addons, 'addons')).toBe(true)
   })
 
@@ -57,7 +57,10 @@ describe(filterShips, () => {
     expect(filterShips(fleet, '').map((one) => one.name)).toStrictEqual(
       fleet.map((one) => one.name),
     )
-    expect(filterShips(fleet, 'a').map((one) => one.name)).toStrictEqual([leuchtturm.name, addons.name])
+    expect(filterShips(fleet, 'a').map((one) => one.name)).toStrictEqual([
+      leuchtturm.name,
+      addons.name,
+    ])
   })
 
   it('answers with nothing rather than everything when nothing matches', () => {

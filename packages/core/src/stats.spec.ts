@@ -7,7 +7,7 @@ import type { CommandMap } from './mock'
 import type { Ship } from './ship'
 import type { ForgeStats, Slug, Unread } from './stats'
 
-const HAFEN: Slug = { host: 'github.com', owner: 'ulfgebhardt', repo: 'hafen' }
+const HAFEN: Slug = { host: 'github.com', owner: 'seefahrt', repo: 'hafen' }
 
 const GRAPH = JSON.stringify({
   data: {
@@ -45,8 +45,8 @@ describe(slugOf, () => {
   })
 
   it('reads both spellings of one remote', () => {
-    expect(slugOf('https://github.com/ulfgebhardt/hafen.git')).toStrictEqual(HAFEN)
-    expect(slugOf('git@github.com:ulfgebhardt/hafen')).toStrictEqual(HAFEN)
+    expect(slugOf('https://github.com/seefahrt/hafen.git')).toStrictEqual(HAFEN)
+    expect(slugOf('git@github.com:seefahrt/hafen')).toStrictEqual(HAFEN)
   })
 
   it('takes the last two segments, however deep the path', () => {
@@ -74,8 +74,8 @@ describe(slugsOf, () => {
    */
   it('asks each repository once, by its leading remote', () => {
     const wanted = slugsOf([
-      ship('git@github.com:ulfgebhardt/hafen.git'),
-      ship('https://github.com/ulfgebhardt/hafen', 'zweite Kopie'),
+      ship('git@github.com:seefahrt/hafen.git'),
+      ship('https://github.com/seefahrt/hafen', 'zweite Kopie'),
     ])
 
     expect(wanted).toStrictEqual([HAFEN])
@@ -273,9 +273,9 @@ describe(forgeLinks, () => {
   it('builds every link off the one repository address', () => {
     const links = forgeLinks(HAFEN)
 
-    expect(links['repo']).toBe('https://github.com/ulfgebhardt/hafen')
-    expect(links['issues']).toBe('https://github.com/ulfgebhardt/hafen/issues')
-    expect(links['pulls']).toBe('https://github.com/ulfgebhardt/hafen/pulls')
+    expect(links['repo']).toBe('https://github.com/seefahrt/hafen')
+    expect(links['issues']).toBe('https://github.com/seefahrt/hafen/issues')
+    expect(links['pulls']).toBe('https://github.com/seefahrt/hafen/pulls')
   })
 })
 

@@ -132,6 +132,13 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
 
 ## Niemals
 
+- **Kein echter Name aus der Flotte, nirgends** — nicht in Code, Kommentar, Test, Quest, Commit
+  oder PR-Text, auch keine Wurzel-SHA, Remote-Adresse oder Domain, über die sich ein Repo finden
+  lässt. Dieses Repository ist öffentlich, die Flotte nicht. Eine Messung wird mit Beispielnamen
+  aufgeschrieben (`Leuchtturm`, `werkstatt/kalender`, `*.example`), die Zahl bleibt. Bis
+  03.10.2026 standen rund fünfzig echte Namen im Baum und in der Historie, weil jede Begründung
+  ihre Messung nannte. Eine Sperrliste, die das prüft, gibt es absichtlich nicht: sie wäre selbst
+  die Liste.
 - **Nichts auf eine Forge schreiben, und nicht nach draußen fragen.** Kein `fetch`, kein `gh`.
   Viele dieser Repos sind nicht allein unsere, und ein Werkzeug, das beim Ansehen einer Liste
   Anfragen verschickt, tut das ungefragt.

@@ -25,9 +25,8 @@ des Repositories einschalten und brauchen keine Datei — diese Quest sieht sie 
 dann eine Lücke, die es womöglich nicht gibt. *Version Updates*, das laufende Nachführen, brauchen
 `.github/dependabot.yml`, und genau das ist gefordert.
 
-Auf dieser Flotte am 30.09.2026 gemessen: **11 von 45 gebundenen Repositories** haben die Datei —
-dalben.earth, beide boilerplates, eslint-config-it4c, Leitstand.example, beide Leuchttürme, peilung-app,
-gezeitenatlas, kalender, leuchtturm-hosting. 34 fehlt sie.
+Auf dieser Flotte am 30.09.2026 gemessen: **11 von 45 gebundenen Repositories** haben die Datei,
+34 fehlt sie.
 
 Die Zahl steht hier, weil sie beim ersten Anlauf falsch war: ein `find -maxdepth 3` über
 `<org>/<repo>/.github/` ist eine Ebene zu flach und meldete null. Die Quest selbst hat es richtig
