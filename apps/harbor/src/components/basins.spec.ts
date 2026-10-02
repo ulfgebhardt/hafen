@@ -71,30 +71,32 @@ describe(cellsFor, () => {
   })
 
   /**
-   * From the middle outward, and the middle is a **berth**.
+   * From the first ring outward, and the middle cell stays empty.
    *
-   * It was kept clear for the kindred's name, with an eye that grew with the basin — which made
-   * every basin a wide donut with its ships pushed to the rim. The heart of a project is where the
-   * work is, and it is crowded.
+   * This went two ways before it settled. An eye that grew with the basin kept the shape a ring
+   * and made every basin a wide donut with its ships at the rim. Filling the middle fixed the
+   * crowding and left the kindred's name nowhere to go but above the basin, where it was lost
+   * among twenty-three others and, on a tight row, under a hull. One cell does both.
    */
-  it('fills from the middle outward', () => {
+  it('fills from the first ring outward and leaves the middle open', () => {
     const rings = cellsFor(20).map((cell) => ringOf(cell))
 
-    expect(rings[0]).toBe(0)
+    expect(rings[0]).toBe(1)
+    expect(rings).not.toContain(0)
     expect(rings).toStrictEqual([...rings].sort((a, b) => a - b))
   })
 
-  it('puts a kindred of one in the middle and nowhere else', () => {
-    expect(cellsFor(1)).toStrictEqual([{ q: 0, r: 0 }])
+  it('puts a kindred of one beside its name, not on top of it', () => {
+    expect(cellsFor(1)).toStrictEqual([{ q: 1, r: 0 }])
   })
 
-  /** Every inner ring is full before an outer one is started — that is what crowding is. */
+  /** Every ring is full before the next is started — that is what crowding is. */
   it.each([7, 19, 37])('fills each ring before the next at %i', (count) => {
     const rings = cellsFor(count).map((cell) => ringOf(cell))
     const outer = Math.max(...rings)
 
-    for (let ring = 0; ring < outer; ring += 1) {
-      expect(rings.filter((one) => one === ring)).toHaveLength(ring === 0 ? 1 : 6 * ring)
+    for (let ring = 1; ring < outer; ring += 1) {
+      expect(rings.filter((one) => one === ring)).toHaveLength(6 * ring)
     }
   })
 
@@ -140,13 +142,28 @@ describe(spotOf, () => {
 })
 
 describe(basinOf, () => {
-  it('holds every ship and starts at its own middle', () => {
+  it('holds every ship and keeps the middle cell clear', () => {
     const basin = basinOf(45)
 
     expect(basin.cells).toHaveLength(45)
-    expect(basin.cells[0]).toStrictEqual({ q: 0, r: 0 })
+    expect(basin.cells.some((cell) => cell.q === 0 && cell.r === 0)).toBe(false)
     expect(basin.width).toBeGreaterThan(0)
     expect(basin.height).toBeGreaterThan(0)
+  })
+
+  /**
+   * The name is cut to the water between the two nearest hulls, not to the basin.
+   *
+   * A berth starts half a pitch before its cell's middle, so the open water across the centre is
+   * two lattice steps less one berth. Cut to the basin instead, the name ran under the ships
+   * either side of it — which is where it was, and why it could not be read.
+   */
+  it('gives the name the gap between the nearest two hulls', () => {
+    const basin = basinOf(14)
+
+    expect(basin.room).toBeGreaterThan(0)
+    expect(basin.room).toBeLessThan(basin.width)
+    expect(basin.label).toStrictEqual(basin.middle)
   })
 
   /** The middle is inside the box, because the liveliest ship of the project stands there. */

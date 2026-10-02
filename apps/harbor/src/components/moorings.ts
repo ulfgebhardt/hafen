@@ -317,6 +317,14 @@ export interface Dock {
    * arrangement is the only thing that knows it.
    */
   label: Spot
+  /**
+   * How much room the name has there, which is **not** the dock's width.
+   *
+   * A block of rows has its whole width free above it; a basin has one cell of open water in its
+   * middle and ships either side of it. Cutting the name to the dock's width put it under the two
+   * nearest hulls, where it was simply not readable.
+   */
+  room: number
 }
 
 export interface Harbour {
@@ -690,6 +698,7 @@ export function harbourOf(groups: readonly Fleetlet[], aspect = 16 / 9): Harbour
         height: Math.max(...mine.map((one) => one.y + one.height)) - top,
         angle,
         label: { x: left + wide / 2, y: top - 6 },
+        room: wide,
       })
       tips.push({ id: onLimb, org: group.org })
     }
