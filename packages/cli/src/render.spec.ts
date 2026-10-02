@@ -33,6 +33,7 @@ function ship(overrides: Partial<Ship> = {}): Ship {
     org: 'org',
     path: '/repos/org/ship',
     remotes: [],
+    lineage: [],
     branch: 'main',
     dirty: false,
     working: NOTHING_OPEN,
