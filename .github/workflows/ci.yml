@@ -99,7 +99,10 @@ jobs:
 
       - name: Clippy
         if: matrix.platform == 'ubuntu-22.04'
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
+      # --locked: eine Cargo.lock, die nicht zur Cargo.toml passt, ist rot statt still
+      # repariert. So blieb das Release 1.0.0 unbemerkt: release-please hob Cargo.toml an,
+      # die Lock-Datei nicht, und jeder lokale Lauf schrieb sie danach um.
       - name: Test
-        run: cargo test
+        run: cargo test --locked
