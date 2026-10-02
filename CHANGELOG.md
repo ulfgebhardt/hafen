@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/ulfgebhardt/hafen/compare/v1.1.0...v1.1.1) (2026-10-02)
+
+
+### Continuous Integration
+
+* **release:** der Changelog zeigt jeden Typ, und der Titel-Check folgt Ocelot-Social ([#12](https://github.com/ulfgebhardt/hafen/issues/12)) ([56a7974](https://github.com/ulfgebhardt/hafen/commit/56a7974eb9fa2e5b4f001295ec3de6f097c92a68))
+
 ## [1.1.0](https://github.com/ulfgebhardt/hafen/compare/v1.0.0...v1.1.0) (2026-10-02)
 
 
