@@ -50,13 +50,29 @@ const ADDED: Partial<Ship> = {
   defaultBranch: null,
   submodules: [],
   enlisted: false,
+  lines: null,
+  roots: [],
 }
+
+/**
+ * And the one field that is *inside* a list, so a spread cannot reach it.
+ *
+ * A submodule gained its url with kinship, and an older cache holds the entries without one — so
+ * the list is there, `submodules: []` never fires, and the first reader of `tender.url` gets
+ * `undefined` where the type promises `string | null`. The same accident as the others, one level
+ * down, and it needs the same answer in the same place rather than a guard at the reader.
+ */
+const ADDED_TO_TENDER = { url: null }
 
 /** A snapshot from disk, brought up to the shape this window expects. */
 export function adopt(snapshot: Snapshot): Snapshot {
   return {
     ...snapshot,
-    ships: snapshot.ships.map((ship) => ({ ...ADDED, ...ship })),
+    ships: snapshot.ships.map((ship) => ({
+      ...ADDED,
+      ...ship,
+      submodules: (ship.submodules ?? []).map((tender) => ({ ...ADDED_TO_TENDER, ...tender })),
+    })),
   }
 }
 

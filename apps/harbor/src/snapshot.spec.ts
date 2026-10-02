@@ -353,6 +353,30 @@ describe(adopt, () => {
       branches: [],
       submodules: [],
       enlisted: false,
+      lines: null,
+      roots: [],
+    })
+  })
+
+  /**
+   * And the one field that is *inside* a list, which a spread cannot reach.
+   *
+   * A submodule gained its url with kinship. An older cache holds the entries without one, so the
+   * list is there, `submodules: []` never fires, and the first reader of `tender.url` gets
+   * `undefined` where the type promises `string | null` — which is exactly what blanked the
+   * datasheet with "undefined is not an object (evaluating 'ship.roots')" beside it.
+   */
+  it('fills a field inside a list the same way', () => {
+    const old = {
+      ...SNAPSHOT,
+      ships: [{ path: '/a', name: 'a', submodules: [{ path: 'lib', state: 'aboard', at: 'aaaa' }] }],
+    } as unknown as Snapshot
+
+    expect(adopt(old).ships[0]?.submodules[0]).toStrictEqual({
+      path: 'lib',
+      state: 'aboard',
+      at: 'aaaa',
+      url: null,
     })
   })
 
