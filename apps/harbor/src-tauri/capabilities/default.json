@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Der Hafen aendert nichts an einem Repository, ausser an zwei eng gezogenen Stellen: git remote prune origin (entfernt Remote-Tracking-Refs geloeschter Branches) und git branch -d, einzeln, mit gits eigener Weigerung als Sicherung - nie -D. Nichts committet, pusht, mergt, rebaset oder resettet. Keine Shell-Berechtigung und kein Dateisystem-Plugin: das Fenster kann kein Kommando eigener Wahl starten und kein Argument uebergeben, dessen Form nicht in lib.rs steht. Werkzeuge wie lazygit oder ein Editor werden in einem Verzeichnis geoeffnet - entschieden wird darin vom Menschen. Geschrieben werden zwei Dateien: der Cache und das Register.",
+  "description": "Der Hafen aendert nichts an einem Repository, ausser an zwei eng gezogenen Stellen: git remote prune origin (entfernt Remote-Tracking-Refs geloeschter Branches) und git branch -d, einzeln, mit gits eigener Weigerung als Sicherung - nie -D. Nichts committet, pusht, mergt, rebaset oder resettet. Keine Shell-Berechtigung und kein Dateisystem-Plugin: das Fenster kann kein Kommando eigener Wahl starten und kein Argument uebergeben, dessen Form nicht in lib.rs steht. Die einzige Plugin-Berechtigung ist dialog:allow-open - ein nativer Ordnerdialog, der nichts oeffnet und nichts schreibt, sondern einen Pfad zurueckgibt, den ein Mensch gewaehlt hat. Genau das ist der Inhalt des Registers. Gemessen wird ueber die Ports in ports.rs, und dort steht eine Erlaubnisliste lesender git-Kommandos, an der jeder Aufruf vorbei muss. Werkzeuge wie lazygit oder ein Editor werden in einem Verzeichnis geoeffnet - entschieden wird darin vom Menschen. Geschrieben werden zwei Dateien: der Cache und das Register.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

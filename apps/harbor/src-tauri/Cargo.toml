@@ -17,4 +17,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# The one native dialog this window opens: where the projects are.
+#
+# A plugin and not a crate of our own, because a folder picker is the platform's and every
+# platform's is different. It opens nothing and writes nothing — it hands back a path a human
+# chose, which is exactly the kind of thing the register holds.
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

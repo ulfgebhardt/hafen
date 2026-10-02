@@ -68,7 +68,14 @@ export type { QuestResult, QuestVerdict } from './chain'
 export { bindingQuests, evaluateQuests, unmeasuredQuests, violatedQuests } from './chain'
 
 export type { Register } from './register'
-export { EMPTY_REGISTER, parseRegister, renderRegister, setArchived, setEnlisted } from './register'
+export {
+  EMPTY_REGISTER,
+  parseRegister,
+  renderRegister,
+  setArchived,
+  setEnlisted,
+  setRoot,
+} from './register'
 
 export type { Remote, Ship, Stage, SurveyProgress, Worktree } from './ship'
 export {

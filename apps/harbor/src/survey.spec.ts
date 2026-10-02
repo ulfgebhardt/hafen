@@ -83,7 +83,11 @@ describe(registerIn, () => {
   it('takes a missing register as no decisions yet', async () => {
     withInvoke({ port_read_file: null })
 
-    await expect(registerIn('/store')).resolves.toStrictEqual({ archived: [], enlisted: [] })
+    await expect(registerIn('/store')).resolves.toStrictEqual({
+      archived: [],
+      enlisted: [],
+      roots: [],
+    })
   })
 })
 
