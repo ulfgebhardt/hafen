@@ -410,7 +410,7 @@ function dockLabels(harbour: Harbour): Container {
   const group = new Container()
   for (const block of harbour.blocks) {
     const text = new Text({
-      text: fit(block.org, Math.max(6, Math.floor(block.width / 3.4))),
+      text: fit(block.org, Math.max(6, Math.floor(block.room / 3.4))),
       style: DOCK_LABEL,
     })
     const middle = block.label.x * UNIT

@@ -122,7 +122,7 @@ function layout(groups: readonly Fleetlet[], blocks: readonly Block[], room: num
   const quays: Quay[] = []
   const ways: Way[] = []
   const moorings: Mooring[] = []
-  const placed: (Block & { at: Spot; label: Spot })[] = []
+  const placed: (Block & { at: Spot; label: Spot; room: number })[] = []
 
   /** The root stands on the quay, and it is the only node with no parent. */
   quays.push({ id: 0, spot: { x: TRUNK_X, y: MARGIN.y }, rank: 'root', org: null })
@@ -331,7 +331,12 @@ function layout(groups: readonly Fleetlet[], blocks: readonly Block[], room: num
       })
     })
 
-    placed.push({ ...block, at: { x, y }, label: { x: x + block.width / 2, y: y - 6 } })
+    placed.push({
+      ...block,
+      at: { x, y },
+      label: { x: x + block.width / 2, y: y - 6 },
+      room: block.width,
+    })
     laneHeight = Math.max(laneHeight, block.height)
     x += block.width + GAP.x
   })

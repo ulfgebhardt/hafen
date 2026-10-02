@@ -93,11 +93,14 @@ export function ringCells(k: number): readonly Cell[] {
 /**
  * Where a kindred's ships stand: from the middle outward, ring by ring.
  *
- * **The middle is a berth, not a hole.** It was kept clear for the kindred's name at first, and
- * the eye grew with the basin so the shape stayed a ring — which made every basin a wide donut
- * with its ships pushed to the rim. That is the opposite of what the middle of a project looks
- * like: the heart of one is where the work is, and it is crowded. The name moved above the basin,
- * where every other dock in this window carries its own.
+ * **One cell in the middle, and it is the name's.** This went two ways before it settled. An
+ * *eye* that grew with the basin kept the shape a ring and made every basin a wide donut with its
+ * ships pushed to the rim — the opposite of what the heart of a project looks like. Filling the
+ * middle with a ship fixed the crowding and left the name nowhere to go but above the basin, where
+ * it was lost among twenty-three others and, on a tight row, under a hull.
+ *
+ * One cell. The rings are full from the first one out, so the middle is crowded; and the name
+ * stands in open water, which is the only place a name can be read.
  *
  * Which ship lands where is `kindredsOf`: nearest the middle is the one somebody touched last. So
  * the radius is a reading rather than the order the repositories happened to be filed in.
@@ -110,7 +113,7 @@ export function cellsFor(count: number): readonly Cell[] {
   if (count <= 0) {
     return []
   }
-  const cells: Cell[] = [{ q: 0, r: 0 }]
+  const cells: Cell[] = []
   for (let ring = 1; cells.length < count; ring += 1) {
     cells.push(...ringCells(ring).slice(0, count - cells.length))
   }
@@ -157,17 +160,23 @@ export interface Basin {
   /**
    * Where the name goes, as the same kind of offset.
    *
-   * Above the basin, because the middle is a berth: it held the name while the eye was kept
-   * clear, and keeping an eye clear is exactly what stopped the heart of a project from looking
-   * like one.
+   * In the middle, which is the one cell no ship stands in.
    */
   label: Spot
+  /**
+   * How wide the name may be there.
+   *
+   * The gap between the two nearest hulls and **not** the basin's width: a berth starts half a
+   * pitch before its cell's middle, so the open water across the centre is two lattice steps less
+   * one berth. Cut to the basin instead, the name ran under the ships either side of it.
+   */
+  room: number
 }
 
 export function basinOf(count: number): Basin {
   const cells = cellsFor(count)
   if (cells.length === 0) {
-    return { cells, width: 1, height: 1, middle: { x: 0, y: 0 }, label: { x: 0, y: 0 } }
+    return { cells, width: 1, height: 1, middle: { x: 0, y: 0 }, label: { x: 0, y: 0 }, room: 0 }
   }
   const spots = cells.map((cell) => spotOf(cell))
   // A berth stands *from* her spot, so her box reaches a pitch to the east and a row down.
@@ -181,7 +190,8 @@ export function basinOf(count: number): Basin {
     width: right - left,
     height: foot - top,
     middle,
-    label: { x: middle.x, y: -6 },
+    label: middle,
+    room: 2 * (LATTICE.along - BERTH.pitch / 2),
   }
 }
 
@@ -427,6 +437,7 @@ function lay(kindreds: readonly Kindred[], basins: readonly Basin[], room: numbe
       height: basin.height,
       angle: 0,
       label: { x: west + basin.label.x, y: top + basin.label.y },
+      room: basin.room,
     })
 
     x += basin.width + LATTICE.along * MOAT.along
