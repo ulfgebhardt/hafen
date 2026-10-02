@@ -161,9 +161,16 @@ andere Richtung und gehört ins Register — eine Entscheidung des Menschen, an 
   quest/probe: eine Zahl ist eine Tatsache, ein Gewicht eine Entscheidung. Der Schnappschuss
   traegt die **Rohsignale** und nicht die Punkte, also kostet eine andere Gewichtung keine neue
   Messung. Das zaehlt, weil der erste Satz Gewichte immer falsch ist.
-- **Quests gehen nicht in die Punkte ein.** Eine erfuellte Forderung ist ein Zustand, in dem das
-  Schiff sein *soll*, keine Leistung zum Verbuchen — und beides zu addieren liesse ein Repo sich
-  mit Commit-Menge aus einem verletzten Vertrag freikaufen.
+- **Quests gehen nicht in die Projektpunkte ein — in die Nutzerpunkte schon.** Eine erfuellte
+  Forderung ist ein Zustand, in dem das *Schiff* sein soll, keine Leistung des Repos: beides zu
+  addieren liesse ein Repo sich mit Commit-Menge aus einem verletzten Vertrag freikaufen, also
+  sieht `shipPoints` keine Quest. Wer aber hingeht und eine Forderung erfuellt, hat etwas getan
+  (`QUEST_POINTS`, seit 30.09.2026) — und eine Aufgabenliste ohne Wert kann nicht sagen, was
+  zuerst dran ist. Bis 02.10.2026 stand hier nur der erste Satz, und der war seit zwei Tagen falsch.
+- **Die Kopfzeile ist mehr als die Summe der Reiter, und sie sagt es** (`fleetLines`). Die Reiter
+  zaehlen, was in einem Schiff liegt; Breite, Ordnung und erfuellte Forderungen gibt es nur auf
+  Flottenebene. 23 779 ueber drei Reitern mit zusammen 20 767 sah falsch aus und war richtig —
+  der Tooltip rechnet die Differenz vor.
 - **Ein Commit ohne Convention zaehlt trotzdem, und es wird gesagt wie viele.** Eine Null neben
   2 000 Commits waere eine fehlende Konvention und keine Untaetigkeit — die eine Art, wie diese
   Zahlen glatt luegen koennten. Gemessen: 96 % der 124 314 Commits dieser Flotte tragen keine,
