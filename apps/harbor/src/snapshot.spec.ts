@@ -168,6 +168,18 @@ const MEASURING: Record<string, unknown> = {
   port_write_file: null,
 }
 
+/** One recorded call to a port command, as the mock keeps it. */
+type Wrote = { path?: string; contents?: string } | undefined
+
+/** Whether a recorded `port_write_file` call was aimed at the register. */
+const registerPath = (args: unknown): boolean =>
+  ((args as Wrote)?.path ?? '').endsWith('register.md')
+
+/** What such a call wrote. */
+const wrote = (call: readonly unknown[] | undefined): string => {
+  return (call?.[1] as Wrote)?.contents ?? ''
+}
+
 describe('acting on the harbour', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -286,25 +298,45 @@ describe('acting on the harbour', () => {
      * that was just written is the kept status field the whole tool exists to avoid.
      */
     it('writes the register and then measures that repository again', async () => {
-      const invoke = asAppWith({ ...MEASURING, register: null })
+      const invoke = asAppWith(MEASURING)
       const before = { ...SNAPSHOT, ships: [ship('/a')] } as Snapshot
 
       const after = await setRegister(before, 'archivieren', '/a')
 
-      expect(invoke).toHaveBeenCalledWith('register', { action: 'archivieren', path: '/a' })
+      /*
+       * Written here with `packages/core`'s own functions. It went through the CLI before, so a
+       * machine without `hafen` on the PATH could record no decision at all — and a register
+       * nobody can write is a decision nobody can make.
+       */
+      expect(invoke).not.toHaveBeenCalledWith('register', expect.anything())
+
+      const written = invoke.mock.calls.find(
+        (call) => call[0] === 'port_write_file' && registerPath(call[1]),
+      )
+
+      expect(wrote(written)).toContain('- /a')
       // That one repository and no search: the register decides, the ship carries, and the answer
       // comes back from measuring it again.
       expect(invoke).not.toHaveBeenCalledWith('port_trees_with', expect.anything())
       expect(after.ships.map((one) => one.path)).toStrictEqual(['/a'])
     })
 
-    it('does not measure when the register refused', async () => {
-      const invoke = asAppWith({ register: 'Register nicht schreibbar' })
+    it('does not measure when the register could not be written', async () => {
+      const invoke = asAppWith({ ...MEASURING, port_write_file: 'Register nicht schreibbar' })
 
       await expect(setRegister(SNAPSHOT as Snapshot, 'archivieren', '/a')).rejects.toThrow(
         'Register nicht schreibbar',
       )
-      expect(invoke).not.toHaveBeenCalledWith('measure', expect.anything())
+      expect(invoke).not.toHaveBeenCalledWith('port_trees_with', expect.anything())
+    })
+
+    /** A path nobody named is a decision about nothing, and it must not write one. */
+    it('refuses an empty path', async () => {
+      asAppWith(MEASURING)
+
+      await expect(setRegister(SNAPSHOT as Snapshot, 'archivieren', '  ')).rejects.toThrow(
+        'kein Pfad',
+      )
     })
 
     it('refuses in a window that has no shell', async () => {

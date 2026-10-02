@@ -16,6 +16,7 @@ import {
   mergeCatalogs,
   parseRegister,
   readQuestCatalog,
+  renderRegister,
   surveyHarbor,
 } from '@hafen/core'
 
@@ -72,10 +73,50 @@ export async function identities(): Promise<readonly string[]> {
   return own === '' ? [] : [own]
 }
 
-/** The register: what is put away, and which directories to treat as ships anyway. */
+/** The register: what is put away, what to treat as a ship anyway, and where to look. */
 export async function registerIn(store: string): Promise<Register> {
   const raw = await tauriPorts.fs.readFile(`${store}/register.md`)
-  return raw === null ? EMPTY_REGISTER : parseRegister(raw)
+  // A machine with no register has made no decisions, which is not the same as a broken one — and
+  // anything that is not text is the same answer: there is nothing here that was written by hand.
+  return typeof raw === 'string' ? parseRegister(raw) : EMPTY_REGISTER
+}
+
+/**
+ * Writes the register back.
+ *
+ * The format is `packages/core`'s, here as in the CLI — the window only reads it, changes it with
+ * `setArchived`, `setEnlisted` or `setRoot`, and writes what comes out. A second opinion about
+ * the shape of a file both of them edit is the one thing that must not exist.
+ *
+ * It went through the CLI before, which meant a stranger's machine could not record a decision at
+ * all: no `hafen` on the PATH, no archiving, no first-run answer.
+ */
+export async function writeRegister(store: string, register: Register): Promise<void> {
+  const failure = await tauriPorts.fs.writeFile(`${store}/register.md`, renderRegister(register))
+  if (failure !== null) {
+    throw new Error(failure)
+  }
+}
+
+/**
+ * Where to look, and in which order the two sources count.
+ *
+ * `$HAFEN_ROOT` **leads** where it is set: it is an override somebody typed on purpose, and an
+ * override a stored decision could beat would not be one. Otherwise the register, which is where
+ * the answer to the first-run question goes.
+ *
+ * Neither, and the answer is **nothing** — not `~/Projects`, not `~/src`, not `$HOME`. A guess
+ * list is what this tool does not do: "Wer eine Rateliste pflegt, hat die Messung gegen eine
+ * bessere Vermutung getauscht." An empty harbour that says nobody has been asked yet is a true
+ * drawing; a full one built out of a guess is not.
+ */
+export function rootsFor(places: Places, register: Register): readonly string[] {
+  return places.roots.length > 0 ? places.roots : register.roots
+}
+
+/** Whether this machine has ever been told where its projects are. */
+export function needsRoots(places: Places, register: Register): boolean {
+  return rootsFor(places, register).length === 0
 }
 
 /**
@@ -99,7 +140,7 @@ export async function surveyInWindow(
     identities(),
   ])
 
-  const ships = await surveyHarbor(tauriPorts, places.roots, {
+  const ships = await surveyHarbor(tauriPorts, rootsFor(places, register), {
     register,
     catalog: catalog.quests,
     ownEmails,
@@ -111,4 +152,31 @@ export async function surveyInWindow(
   })
 
   return { ships, overridden: catalog.overridden }
+}
+
+/**
+ * Ask the human where their projects are, once.
+ *
+ * The native folder picker, through the one global this file already reaches Tauri by — so the
+ * browser build still carries no Tauri code at all. `null` is "they closed it", which is an
+ * answer and not a failure.
+ *
+ * This is the measurement that replaces the guess. The CLI took `$HAFEN_ROOT` or two directories
+ * of one person's own convention; a list of `~/Projects`, `~/src`, `~/code` would be the tool
+ * trading a measurement for a better-looking assumption. Asking is cheap and it is *right*.
+ */
+export async function askForRoot(): Promise<string | null> {
+  const host = globalThis as {
+    __TAURI_INTERNALS__?: {
+      invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
+    }
+  }
+  const invoke = host.__TAURI_INTERNALS__?.invoke
+  if (invoke === undefined) {
+    return null
+  }
+  const chosen = await invoke('plugin:dialog|open', {
+    options: { directory: true, multiple: false, title: 'Wo liegen deine Projekte?' },
+  })
+  return typeof chosen === 'string' && chosen !== '' ? chosen : null
 }

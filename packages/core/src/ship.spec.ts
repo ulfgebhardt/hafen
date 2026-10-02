@@ -638,7 +638,7 @@ describe('surveyHarbor while it runs', () => {
     let total = 0
 
     await surveyHarbor(ports, ROOT, {
-      register: { archived: [], enlisted: [] },
+      register: { archived: [], enlisted: [], roots: [] },
       progress: { onCount: (count) => (total = count) },
     })
 

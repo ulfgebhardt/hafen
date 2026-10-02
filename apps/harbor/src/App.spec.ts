@@ -162,6 +162,18 @@ const MEASURES: Record<string, unknown> = {
   port_write_file: null,
 }
 
+/** One recorded call to a port command, as the mock keeps it. */
+type Wrote = { path?: string; contents?: string } | undefined
+
+/** Whether a recorded `port_write_file` call was aimed at the register. */
+const registerPath = (args: unknown): boolean =>
+  ((args as Wrote)?.path ?? '').endsWith('register.md')
+
+/** What such a call wrote. */
+const wrote = (call: readonly unknown[] | undefined): string => {
+  return (call?.[1] as Wrote)?.contents ?? ''
+}
+
 describe('acting on a ship', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -212,16 +224,7 @@ describe('acting on a ship', () => {
    * ship, and flipping it here as well would be a second opinion about a file just written.
    */
   it('archives the pinned ship through the register', async () => {
-    const away = {
-      ...snapshot,
-      ships: [{ ...snapshot.ships[0], archived: true }],
-    }
-    const invoke = bridge({
-      snapshot: read,
-      register: null,
-      measure: { json: JSON.stringify(away), error: null },
-      store: null,
-    })
+    const invoke = bridge({ ...MEASURES, snapshot: read })
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
@@ -237,10 +240,126 @@ describe('acting on a ship', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(invoke).toHaveBeenCalledWith('register', {
-      action: 'archivieren',
-      path: snapshot.ships[0]?.path,
+    /*
+     * Written here with core's own functions rather than through the CLI: a machine without
+     * `hafen` on the PATH could record no decision at all, and a register nobody can write is a
+     * decision nobody can make.
+     */
+    const written = invoke.mock.calls.find(
+      (call) => call[0] === 'port_write_file' && registerPath(call[1]),
+    )
+
+    expect(wrote(written)).toContain(String(snapshot.ships[0]?.path))
+  })
+})
+
+describe('a machine nobody has asked yet', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const read = {
+    path: '/cache/hafen/snapshot.json',
+    json: JSON.stringify(snapshot),
+    error: null,
+  }
+
+  /**
+   * An empty harbour and an unasked machine look alike, and only one of them has a remedy.
+   *
+   * Asked off the **register** rather than off an empty fleet: a fleet can honestly be empty —
+   * everything archived, a root that holds nothing yet — and asking somebody to answer a question
+   * they have already answered is worse than not asking at all.
+   */
+  it('asks where the projects are when nothing says so', async () => {
+    bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
     })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    expect(page.text()).toContain('Der Hafen ist noch leer')
+    expect(page.text()).toContain('/store/register.md')
+  })
+
+  /** And never again once it has been answered — the register is where that answer lives. */
+  it('does not ask a machine that has already said', async () => {
+    bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      port_read_file: '## Wurzeln\n\n- /home/wer/Projekte\n',
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    expect(page.text()).not.toContain('Der Hafen ist noch leer')
+  })
+
+  /** `$HAFEN_ROOT` is an override somebody typed on purpose, so it answers the question too. */
+  it('does not ask where a root was handed in from the environment', async () => {
+    bridge({ ...MEASURES, snapshot: read })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    expect(page.text()).not.toContain('Der Hafen ist noch leer')
+  })
+
+  /** The answer goes into the register, and the fleet is measured anew — not one repository. */
+  it('writes the chosen directory to the register and measures again', async () => {
+    /*
+     * A filesystem that remembers, because the point is the round trip: the answer is written to
+     * the register and the next measurement reads it **back** from there. One source of truth, and
+     * a fixture that forgot would be testing the opposite.
+     */
+    const written = new Map<string, string>()
+    const invoke = bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      'plugin:dialog|open': '/home/wer/Projekte',
+      port_write_file: (args?: Record<string, unknown>) => {
+        written.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) =>
+        written.get(String(args?.['path'])) ?? null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text().includes('Verzeichnis wählen'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(written.get('/store/register.md')).toContain('/home/wer/Projekte')
+    expect(invoke).toHaveBeenCalledWith('port_trees_with', expect.anything())
+    expect(page.text()).not.toContain('Der Hafen ist noch leer')
+  })
+
+  /** Closing the picker is an answer, and nothing is written for a question nobody answered. */
+  it('writes nothing when the picker is closed', async () => {
+    const invoke = bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      'plugin:dialog|open': null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text().includes('Verzeichnis wählen'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(invoke).not.toHaveBeenCalledWith('port_write_file', expect.anything())
+    expect(page.text()).toContain('Der Hafen ist noch leer')
   })
 })
 
@@ -260,12 +379,7 @@ describe('the register, from the window', () => {
    * nothing to click, because the whole point is a directory the survey does not find.
    */
   it('takes a typed directory into the register', async () => {
-    const invoke = bridge({
-      snapshot: read,
-      register: null,
-      measure: { json: JSON.stringify(snapshot), error: null },
-      store: null,
-    })
+    const invoke = bridge({ ...MEASURES, snapshot: read })
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
@@ -280,10 +394,11 @@ describe('the register, from the window', () => {
       ?.trigger('click')
     await flushPromises()
 
-    expect(invoke).toHaveBeenCalledWith('register', {
-      action: 'aufnehmen',
-      path: '/anderswo/ding',
-    })
+    const written = invoke.mock.calls.find(
+      (call) => call[0] === 'port_write_file' && registerPath(call[1]),
+    )
+
+    expect(wrote(written)).toContain('/anderswo/ding')
   })
 
   /** One choice, wherever it was made: the sheet's plan and the harbour mark the same box. */

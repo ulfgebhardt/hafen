@@ -15,12 +15,14 @@
   import { chosenKey } from './components/chosen'
   import ContractList from './components/ContractList.vue'
   import { filterByContract } from './components/contracts'
+  import FirstRun from './components/FirstRun.vue'
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import { filterShips } from './components/search'
   import ShipSheet from './components/ShipSheet.vue'
   import {
     availableTools,
+    currentPlaces,
     deleteBranch,
     inTauri,
     loadSnapshot,
@@ -31,17 +33,20 @@
     refetchForge,
     remeasure,
     setRegister,
+    setSearchRoot,
     SnapshotError,
     startTool,
     statsFor,
     stopMeasuring,
   } from './snapshot'
+  import { askForRoot, needsRoots, registerIn } from './survey'
 
   import type { Layout, Page, View } from './components/band'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
   import type { ToolName } from './components/tools'
   import type { Progress, Forge, RegisterAction, Snapshot } from './snapshot'
+  import type { Places } from './survey'
   import type { Ship } from '@hafen/core'
 
   const snapshot = ref<Snapshot | null>(null)
@@ -163,6 +168,39 @@
    * with itself, and the reader has no way to tell which half to believe.
    */
   const fleet = computed(() => snapshot.value?.ships ?? [])
+
+  /**
+   * Whether this machine has ever been told where its projects are.
+   *
+   * Asked once, after the snapshot is in, and **not** derived from "the fleet is empty": a fleet
+   * can honestly be empty — every repository archived, a root that holds nothing yet — and a
+   * window that answered the first-run question to somebody who already answered it would be
+   * asking them to say the same thing twice.
+   */
+  const unasked = ref(false)
+  const places = ref<Places | null>(null)
+
+  const askWhereTheProjectsAre = async (): Promise<void> => {
+    const chosen = await askForRoot()
+    if (chosen === null) {
+      // They closed it. An answer, not a failure — and nothing is written for a question nobody
+      // answered.
+      return
+    }
+    if (snapshot.value === null || busy.value) {
+      return
+    }
+    busy.value = true
+    trouble.value = null
+    try {
+      snapshot.value = await setSearchRoot(snapshot.value, chosen, true)
+      unasked.value = false
+    } catch (error) {
+      trouble.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy.value = false
+    }
+  }
 
   /**
    * What the search found — **marked** in the drawing rather than filtered out of it.
@@ -462,12 +500,45 @@
     tools.value = await availableTools()
     // After the picture too: a reading that was never taken is an empty panel, not an error.
     forge.value = await loadForge()
+
+    /*
+     * And the one question the harbour cannot measure, asked once.
+     *
+     * After the picture, so a machine that *has* been asked never waits on this; and off the
+     * register rather than off an empty fleet, because a fleet can honestly be empty.
+     */
+    if (inTauri()) {
+      try {
+        const where = await currentPlaces()
+        places.value = where
+        unasked.value = needsRoots(where, await registerIn(where.store))
+      } catch {
+        /*
+         * Swallowed on purpose, and this is the one place in this file where that is right.
+         *
+         * The question is a convenience; the harbour is the tool. A window that refused to draw
+         * because it could not work out whether to ask something would have the priorities exactly
+         * backwards — and somebody who has roots set sees their fleet either way.
+         */
+        unasked.value = false
+      }
+    }
   })
 </script>
 
 <template>
   <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
-    <template v-if="snapshot !== null">
+    <!--
+      Before the harbour, because an empty harbour and an unasked machine look alike and only one
+      of them has a remedy.
+    -->
+    <FirstRun
+      v-if="unasked"
+      :store="places?.store ?? ''"
+      :busy="busy"
+      @choose="askWhereTheProjectsAre"
+    />
+    <template v-else-if="snapshot !== null">
       <FleetBar
         :ships="narrowed"
         :at="snapshot.at"

@@ -96,7 +96,7 @@ Und `SurveyOptions.stop`: Abbrechen war ein Signal an einen Prozess. Ein Fenster
 misst, hat keinen Prozess zum Töten — also fragt der Suchlauf vor jedem Repository nach. Was
 gemessen ist, **bleibt**: eine bereits genommene Lesung ist wahr, ob der Rest folgte oder nicht.
 
-### 2. Erststart (Ziele 3, 6)
+### 2. Erststart (Ziele 3, 6) ✅
 
 Heute: `$HAFEN_ROOT`, sonst `~/.data/sources` und `~/.data/games` — eine persönliche Konvention,
 auf einem fremden Rechner leer.
@@ -113,6 +113,17 @@ fragen.
 **Config bleibt XDG auf jeder Plattform.** Nicht `~/Library/Application Support` auf macOS: die
 CLI und das Fenster müssen sich über den Ort einig sein, und zwei Pfadkonventionen sind zwei
 Meinungen über dieselbe Datei.
+
+Gebaut. `Register` trägt eine dritte Liste — **Wurzeln** —, und das Fenster schreibt das Register
+jetzt selbst: es ging vorher über die CLI, also konnte eine fremde Maschine *gar keine
+Entscheidung* festhalten. Kein `hafen` auf dem PATH, kein Archivieren, keine Erststart-Antwort.
+Das Format bleibt `packages/core`s: gelesen, mit `setArchived`/`setEnlisted`/`setRoot` geändert,
+zurückgeschrieben.
+
+`$HAFEN_ROOT` **führt**, wo es gesetzt ist — ein Override, den ein stored Register schlagen
+könnte, wäre keiner. Sonst das Register. Beides leer heißt **nichts**, und dann fragt das Fenster
+einmal, statt eine leere Flotte zu zeichnen: die beiden sehen gleich aus, und nur eine davon hat
+eine Abhilfe.
 
 ### 3. Bordmittel (Ziel 5)
 

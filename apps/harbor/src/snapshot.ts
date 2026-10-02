@@ -14,12 +14,12 @@
  * file rather than by this comment.
  */
 
-import { inspectShip, slugOf } from '@hafen/core'
+import { inspectShip, setArchived, setEnlisted, setRoot, slugOf } from '@hafen/core'
 
 import { tauriPorts } from './adapters/tauri'
 import { NOTHING_RUNNING } from './components/measuring'
 import { TOOLS } from './components/tools'
-import { demandsOf, identities, registerIn, surveyInWindow } from './survey'
+import { demandsOf, identities, registerIn, surveyInWindow, writeRegister } from './survey'
 
 import type { Progress } from './components/measuring'
 import type { ToolName } from './components/tools'
@@ -231,6 +231,21 @@ export function spliceShip(snapshot: Snapshot, fresh: Snapshot): Snapshot {
 }
 
 /**
+ * Where this window keeps its own files, as the Rust half resolves them.
+ *
+ * Asked rather than rebuilt: the rules are the host's — `$HOME`, the XDG variables, the overrides
+ * — and the CLI resolves the same three. Two path conventions for one store would be two opinions
+ * about where a register is.
+ */
+export async function currentPlaces(): Promise<Places> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster gibt es keine Pfade — es laeuft ohne Hafen-Huelle.')
+  }
+  return (await invoke('port_places')) as Places
+}
+
+/**
  * Measures again — the whole fleet, or one repository of it.
  *
  * The result is written to the cache before it is returned, so the next start shows what was just
@@ -345,12 +360,51 @@ export async function setRegister(
   if (invoke === null) {
     throw new Error('In diesem Fenster laesst sich das Register nicht aendern.')
   }
-
-  const failure = (await invoke('register', { action, path })) as string | null
-  if (failure !== null) {
-    throw new Error(failure)
+  if (path.trim() === '') {
+    throw new Error('kein Pfad angegeben')
   }
+
+  /*
+   * Written here, with `packages/core`'s own functions.
+   *
+   * It went through the CLI before, so on a machine without `hafen` on the PATH nothing could be
+   * archived, taken on or answered — a register nobody can write is a decision nobody can make.
+   * The *format* is still core's and nowhere else: this reads it, hands it to the function that
+   * changes it, and writes back what comes out.
+   */
+  const places = (await invoke('port_places')) as Places
+  const register = await registerIn(places.store)
+  await writeRegister(
+    places.store,
+    action === 'archivieren'
+      ? setArchived(register, path, true)
+      : action === 'reaktivieren'
+        ? setArchived(register, path, false)
+        : action === 'aufnehmen'
+          ? setEnlisted(register, path, true)
+          : setEnlisted(register, path, false),
+  )
   return await remeasure(current, path)
+}
+
+/**
+ * Takes a directory on as a place to look, or drops it again — and measures the fleet anew.
+ *
+ * The whole fleet and not one repository, because this is the one decision that changes *which*
+ * repositories there are.
+ */
+export async function setSearchRoot(
+  current: Snapshot,
+  path: string,
+  searched: boolean,
+): Promise<Snapshot> {
+  const invoke = caller()
+  if (invoke === null) {
+    throw new Error('In diesem Fenster laesst sich das Register nicht aendern.')
+  }
+  const places = (await invoke('port_places')) as Places
+  await writeRegister(places.store, setRoot(await registerIn(places.store), path, searched))
+  return await remeasure(current)
 }
 
 /**
