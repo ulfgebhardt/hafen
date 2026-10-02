@@ -9,6 +9,7 @@ import {
   CHECK_POINTS,
   CI_POINTS,
   coveredChecks,
+  fleetLines,
   fleetPoints,
   isActive,
   isClean,
@@ -510,5 +511,58 @@ describe(pointLines, () => {
     const mine = pointLines(subject).reduce((sum, line) => sum + (line.own?.points ?? 0), 0)
 
     expect(mine).toBe(shipPoints(subject).own)
+  })
+})
+
+describe(fleetLines, () => {
+  const met: QuestResult = {
+    id: 'lint',
+    chain: 'werft',
+    title: 'lint',
+    why: '',
+    verdict: 'met',
+    waitingOn: [],
+    checks: [],
+    reason: 'erfuellt',
+  }
+  const fleet = [
+    ship({
+      ledger: ledger({ byKind: { feat: 4 } }, { byKind: { feat: 3 }, pulls: 2 }),
+      rustDays: 2,
+    }),
+    ship({ ledger: ledger({ unscored: 9 }, { unscored: 5 }), rustDays: 400, quests: [met] }),
+    ship({ ledger: ledger({}, {}), rustDays: 900, stash: 1 }),
+  ]
+
+  /** A bill that does not add up is the thing it exists to answer. */
+  it('adds up to the total exactly', () => {
+    const points = fleetPoints(fleet)
+    const sum = fleetLines(points).reduce((total, line) => total + line.points, 0)
+
+    expect(sum).toBe(points.total)
+  })
+
+  /**
+   * The first line is what the band tabs add up to: their figures are each ship's own points, and
+   * the header was 3 012 above them with nothing on screen saying why.
+   */
+  it('opens with what the band tabs add up to', () => {
+    const tabs = fleet.reduce((total, one) => total + shipPoints(one).own, 0)
+
+    expect(fleetLines(fleetPoints(fleet))[0]).toMatchObject({ name: 'Arbeit', points: tabs })
+  })
+
+  /** The counts and rates behind each figure, so the line can be argued with. */
+  it('says what each figure was counted from', () => {
+    const lines = fleetLines(fleetPoints(fleet))
+
+    expect(lines.map((line) => line.name)).toStrictEqual([
+      'Arbeit',
+      'Breite',
+      'Ordnung',
+      'Forderungen',
+    ])
+    expect(lines[1]?.detail).toBe(`1 aktiv × ${String(BREADTH_POINTS)}`)
+    expect(lines[3]?.detail).toContain('1 von 1 erfüllt')
   })
 })

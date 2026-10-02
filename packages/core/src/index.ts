@@ -106,7 +106,7 @@ export {
   readLedger,
 } from './work'
 
-export type { PointLine, FleetPoints, ShipPoints } from './points'
+export type { FleetLine, PointLine, FleetPoints, ShipPoints } from './points'
 export {
   ACTIVE_WINDOW_DAYS,
   BREADTH_POINTS,
@@ -115,6 +115,7 @@ export {
   CHECK_POINTS,
   CI_POINTS,
   coveredChecks,
+  fleetLines,
   fleetPoints,
   isActive,
   isClean,

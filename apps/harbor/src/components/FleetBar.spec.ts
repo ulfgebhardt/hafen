@@ -83,6 +83,42 @@ describe('fleetBar', () => {
     expect(bar.html()).toContain('deine Punkte')
   })
 
+  /**
+   * The personal figure is the band tabs plus what only a fleet has, and the header says so:
+   * 23 779 above three tabs adding up to 20 767 looked wrong while being right.
+   */
+  it('works out the personal figure where it is shown', () => {
+    const bar = mount(FleetBar, {
+      props: {
+        at: AT,
+        source: SOURCE,
+        ships: [
+          ship({
+            rustDays: 2,
+            ledger: {
+              total: { ...NO_WORK, commits: 10, byKind: { feat: 10 } },
+              own: { ...NO_WORK, commits: 2, byKind: { feat: 2 } },
+            },
+          }),
+        ],
+      },
+    })
+    const title =
+      bar
+        .findAll('p')
+        .find((one) => one.attributes('title')?.includes('deine Punkte'))
+        ?.attributes('title') ?? ''
+
+    expect(title.split('\n').map((line) => line.split(':')[0])).toStrictEqual([
+      'Arbeit',
+      'Breite',
+      'Ordnung',
+      'Forderungen',
+      'deine Punkte',
+    ])
+    expect(title).toContain('die Summe der Reiter')
+  })
+
   it('draws an empty harbor without falling over', () => {
     const bar = mount(FleetBar, { props: { at: AT, source: SOURCE, ships: [] } })
 
