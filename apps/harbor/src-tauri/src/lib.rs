@@ -776,6 +776,75 @@ fn run_tool(name: String, path: String) -> Option<String> {
  * One at a time, and never a sweep: forty branches deleted by one click is forty decisions nobody
  * made.
  */
+/// The forges this window will open a page on, and nothing else.
+///
+/// The same two `packages/core/src/forge.ts` names, and the two have to agree: a host one of them
+/// knows and the other does not means the sheet offers a link that the window then refuses. A
+/// closed list rather than "any https address", because `open_url` takes a string from the page —
+/// and the promise in this file is that a string from the page only ever lands in the one position
+/// its caller put it in.
+const FORGES: &[&str] = &["github.com", "git.seefahrt.example"];
+
+/// Why this address may not be opened, or nothing.
+///
+/// Its own function so the checking can be tested without opening anything. Three refusals and
+/// each for its own reason: a scheme that is not `https` could be `file:` or worse, whitespace or
+/// a control character is how one argument becomes two, and a host nobody named is a stranger.
+fn refusal(url: &str) -> Option<String> {
+    if !url.starts_with("https://") {
+        return Some("nur https".to_owned());
+    }
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Some("keine Leerzeichen in einer Adresse".to_owned());
+    }
+    let rest = &url["https://".len()..];
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // No userinfo: `https://github.com@evil.example/` has a host nobody would read off it.
+    if host.contains('@') || host.is_empty() {
+        return Some("kein bekannter Forge-Host".to_owned());
+    }
+    let named = FORGES
+        .iter()
+        .any(|forge| host == *forge || host.ends_with(&format!(".{forge}")));
+    if named {
+        None
+    } else {
+        Some("kein bekannter Forge-Host".to_owned())
+    }
+}
+
+/// What opens an address on this platform.
+///
+/// Shelled out rather than taken from a plugin, which is what this file does for every other
+/// hand-off: the capability file says there is no shell permission and no filesystem plugin, and
+/// a plugin for one call would be the first exception to that sentence.
+fn opener() -> (&'static str, &'static [&'static str]) {
+    if cfg!(target_os = "macos") {
+        ("open", &[])
+    } else if cfg!(windows) {
+        // `start` is a shell builtin, so it needs the shell — and the empty string is the window
+        // title `start` otherwise takes the url for.
+        ("cmd", &["/c", "start", ""])
+    } else {
+        ("xdg-open", &[])
+    }
+}
+
+/// Opens a forge page in whatever the machine uses for that. The refusal, or nothing.
+#[tauri::command]
+fn open_url(url: String) -> Option<String> {
+    if let Some(why) = refusal(&url) {
+        return Some(why);
+    }
+    let (program, leading) = opener();
+    std::process::Command::new(program)
+        .args(leading)
+        .arg(&url)
+        .spawn()
+        .err()
+        .map(|error| format!("{program} nicht ausfuehrbar: {error}"))
+}
+
 #[tauri::command]
 fn branch_delete(path: String, branch: String) -> Option<String> {
     if path.trim().is_empty() || branch.trim().is_empty() {
@@ -824,6 +893,7 @@ pub fn run() {
             tools,
             run_tool,
             branch_delete,
+            open_url,
             // The window's own way to the outside world, so it needs no second program to
             // measure. See `ports.rs` — the allow list of readings is enforced there.
             ports::port_run,
@@ -844,6 +914,45 @@ mod tests {
     use std::sync::{Mutex, MutexGuard};
 
     use super::*;
+
+    /// The command the window has been calling since the forge panel grew its links — and which
+    /// did not exist, so every one of them answered "Command open_url not found".
+    #[test]
+    fn opens_a_page_on_a_forge_we_know() {
+        assert_eq!(refusal("https://github.com/ulfgebhardt/hafen"), None);
+        assert_eq!(refusal("https://git.seefahrt.example/Wattenmeer/spec/issues"), None);
+    }
+
+    /// A closed list, because `open_url` takes a string from the page. Any https address would be
+    /// a different promise than the one this file makes.
+    #[test]
+    fn refuses_a_host_nobody_named() {
+        assert!(refusal("https://example.org/x").is_some());
+        // Userinfo is how an address reads as one host and resolves to another.
+        assert!(refusal("https://github.com@evil.example/").is_some());
+    }
+
+    /// `file:` and `javascript:` are the reason the scheme is checked rather than assumed.
+    #[test]
+    fn refuses_anything_that_is_not_https() {
+        assert!(refusal("file:///etc/passwd").is_some());
+        assert!(refusal("http://github.com/x").is_some());
+        assert!(refusal("javascript:alert(1)").is_some());
+    }
+
+    /// Whitespace is how one argument becomes two.
+    #[test]
+    fn refuses_an_address_with_room_for_a_second_argument() {
+        assert!(refusal("https://github.com/x --flag").is_some());
+        assert!(refusal("https://github.com/x\nrm -rf /").is_some());
+    }
+
+    /// A subdomain of a named forge is that forge; a host merely ending in the same letters is not.
+    #[test]
+    fn tells_a_subdomain_from_a_lookalike() {
+        assert_eq!(refusal("https://raw.github.com/x"), None);
+        assert!(refusal("https://notgithub.com/x").is_some());
+    }
 
     /// One lock for every test that touches the environment.
     ///
