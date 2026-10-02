@@ -18,11 +18,28 @@ export interface ProcPort {
   which: (command: string) => Promise<string | null>
 }
 
+/**
+ * One entry of a directory, and what it is.
+ *
+ * `directory` is here because the listing already knows it and the caller was asking anyway.
+ * Measured over this fleet: a survey made 49 117 port calls and **42 441 of them were
+ * `isDirectory` on an entry that had just come out of a `readDir`** — 42 478 entries examined to
+ * find the 1 295 that are directories. Over a process boundary that is the whole budget.
+ *
+ * It means "resolves to a directory", like `isDirectory` does and unlike a raw dirent: a symbolic
+ * link to a repository is a repository here. Five of this machine's ships are reachable only
+ * through one.
+ */
+export interface DirEntry {
+  name: string
+  directory: boolean
+}
+
 export interface FsPort {
   /** File contents, or null when the file does not exist. Never throws on absence. */
   readFile: (path: string) => Promise<string | null>
-  /** Directory entry names, or null when the directory does not exist. */
-  readDir: (path: string) => Promise<readonly string[] | null>
+  /** Directory entries, or null when the directory does not exist. */
+  readDir: (path: string) => Promise<readonly DirEntry[] | null>
   isDirectory: (path: string) => Promise<boolean>
   /**
    * The path with every symbolic link resolved, or null when it cannot be resolved.

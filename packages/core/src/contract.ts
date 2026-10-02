@@ -149,7 +149,8 @@ async function expandWorkspaceGlob(
     return [pattern]
   }
   const parent = pattern.slice(0, -2)
-  const entries = await fs.readDir(`${shipPath}/${parent}`)
+  const listing = await fs.readDir(`${shipPath}/${parent}`)
+  const entries = listing?.map((one) => one.name) ?? null
   return entries === null ? [] : entries.map((entry) => `${parent}/${entry}`)
 }
 
@@ -585,7 +586,8 @@ function readCiRoles(
  */
 export async function readWorkflows(fs: FsPort, shipPath: string): Promise<readonly string[]> {
   const dir = `${shipPath}/.github/workflows`
-  const entries = await fs.readDir(dir)
+  const listing = await fs.readDir(dir)
+  const entries = listing?.map((one) => one.name) ?? null
   if (entries === null) {
     return []
   }

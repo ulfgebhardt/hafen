@@ -448,14 +448,15 @@ export async function readQuestCatalog(
   fs: Pick<FsPort, 'readDir' | 'readFile'>,
   store: string,
 ): Promise<QuestCatalog> {
-  const chains = await fs.readDir(`${store}/${QUESTS_DIR}`)
+  const chains = (await fs.readDir(`${store}/${QUESTS_DIR}`))?.map((one) => one.name) ?? null
   if (chains === null) {
     return { quests: [], unreadable: [] }
   }
 
   const found = await Promise.all(
     chains.map(async (chain) => {
-      const entries = await fs.readDir(`${store}/${QUESTS_DIR}/${chain}`)
+      const entries =
+        (await fs.readDir(`${store}/${QUESTS_DIR}/${chain}`))?.map((one) => one.name) ?? null
       return await Promise.all(
         (entries ?? [])
           .filter((entry) => entry.endsWith('.md'))

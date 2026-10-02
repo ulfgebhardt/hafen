@@ -123,17 +123,41 @@ pub fn port_read_file(path: String) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
 
-/// The names in a directory, or nothing where it does not exist.
+/// One entry of a directory, and what it is.
+#[derive(Serialize)]
+pub struct Entry {
+    pub name: String,
+    pub directory: bool,
+}
+
+/// The entries of a directory, or nothing where it does not exist.
+///
+/// **With the kind**, because the listing already knows it and the caller was asking anyway: a
+/// survey made 49 117 port calls and 42 441 of them were `isDirectory` on an entry that had just
+/// come out of a listing. Over a process boundary that is the whole budget.
+///
+/// "Resolves to a directory", like `port_is_directory`: `file_type` reports the *link's* kind, so
+/// a symbolic link to a repository would answer false and five of this machine's ships would
+/// vanish. One `metadata` per link and none per ordinary entry.
 #[tauri::command]
-pub fn port_read_dir(path: String) -> Option<Vec<String>> {
-    let mut names: Vec<String> = std::fs::read_dir(path)
+pub fn port_read_dir(path: String) -> Option<Vec<Entry>> {
+    let mut entries: Vec<Entry> = std::fs::read_dir(&path)
         .ok()?
-        .filter_map(|entry| Some(entry.ok()?.file_name().to_string_lossy().into_owned()))
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let kind = entry.file_type().ok()?;
+            Some(Entry {
+                directory: kind.is_dir()
+                    || (kind.is_symlink()
+                        && std::fs::metadata(entry.path()).is_ok_and(|it| it.is_dir())),
+                name: entry.file_name().to_string_lossy().into_owned(),
+            })
+        })
         .collect();
     // Sorted, because a survey that depends on the order a filesystem hands its entries back is a
     // survey that reads differently on two machines holding the same repositories.
-    names.sort();
-    Some(names)
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Some(entries)
 }
 
 #[tauri::command]

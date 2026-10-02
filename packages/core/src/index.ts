@@ -6,7 +6,7 @@
  * mock. A direct environment access here is a fault, not a shortcut.
  */
 
-export type { Ports, ProcPort, FsPort, HostPort, Clock, CommandResult } from './ports'
+export type { Ports, ProcPort, FsPort, HostPort, Clock, CommandResult, DirEntry } from './ports'
 
 export { daysSince } from './time'
 

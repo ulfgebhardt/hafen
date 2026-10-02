@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -95,10 +95,32 @@ describe('nodePorts', () => {
       await expect(nodePorts.fs.readFile(join(dir, 'weg.txt'))).resolves.toBeNull()
     })
 
-    it('lists a directory', async () => {
-      const entries = await nodePorts.fs.readDir(dir)
+    /**
+     * With the kind, because the listing already knows it. A survey asked `isDirectory` 42 441
+     * times on entries that had just come out of a listing — 86 % of all its port calls, to learn
+     * something it had already been told.
+     */
+    it('lists a directory and says what each entry is', async () => {
+      const entries = [...((await nodePorts.fs.readDir(dir)) ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )
 
-      expect([...(entries ?? [])].sort()).toStrictEqual(['file.txt', 'sub'])
+      expect(entries).toStrictEqual([
+        { name: 'file.txt', directory: false },
+        { name: 'sub', directory: true },
+      ])
+    })
+
+    /**
+     * A link to a directory is a directory here, which a dirent does not say: `withFileTypes`
+     * reports the *link's* own kind. Five of this machine's repositories are reachable only
+     * through one, and they would simply have vanished from the survey.
+     */
+    it('counts a link to a directory as a directory', async () => {
+      await symlink(join(dir, 'sub'), join(dir, 'link'))
+      const entries = (await nodePorts.fs.readDir(dir)) ?? []
+
+      expect(entries.find((one) => one.name === 'link')?.directory).toBe(true)
     })
 
     it('gives null for a missing directory', async () => {
