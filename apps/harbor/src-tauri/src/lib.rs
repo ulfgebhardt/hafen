@@ -902,6 +902,7 @@ pub fn run() {
             ports::port_read_dir,
             ports::port_is_directory,
             ports::port_real_path,
+            ports::port_trees_with,
             ports::port_write_file,
             ports::port_host
         ])

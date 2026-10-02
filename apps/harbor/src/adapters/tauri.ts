@@ -77,6 +77,13 @@ export const tauriPorts: Ports = {
       (await demand()('port_is_directory', { path })) as boolean,
     realPath: async (path): Promise<string | null> =>
       (await demand()('port_real_path', { path })) as string | null,
+    treesWith: async (root, marker, depth, skip): Promise<readonly string[] | null> =>
+      (await demand()('port_trees_with', {
+        root,
+        marker,
+        depth,
+        skip: [...skip],
+      })) as readonly string[] | null,
     writeFile: async (path, contents): Promise<string | null> =>
       (await demand()('port_write_file', { path, contents })) as string | null,
   },

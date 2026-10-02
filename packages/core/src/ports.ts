@@ -51,6 +51,36 @@ export interface FsPort {
    */
   realPath: (path: string) => Promise<string | null>
   /**
+   * Directories under `root` that hold a **directory** called `marker` — the search itself,
+   * handed to the side that has the filesystem.
+   *
+   * Here because the walk is the one thing in the survey that is *all* filesystem and no domain:
+   * done over the port it was 2 174 calls of the survey's 6 676, and over a process boundary that
+   * is 2 174 round trips to answer one question. Done here it is one call per root.
+   *
+   * **Stops at each tree it finds.** What lies inside a repository belongs to it — nine foreign
+   * deployments under `Leuchtturm/deployment/configurations`, four directus configs inside
+   * `peilung-app` — and listing those separately would count one project's contents as a fleet.
+   *
+   * `skip` is a hint and not the rule: a walker may prune those names to save time, and the
+   * caller filters the result properly afterwards. The rule for what is not a ship has a prefix
+   * case a path list cannot carry, and it stays in one place rather than being half here.
+   *
+   * A directory and not any entry, which is the difference between a repository and a carried
+   * one: a submodule's `.git` is a *file* pointing into `../.git/modules/…`. Those are measured
+   * as the tenders of the repository that carries them, and finding them here as well would list
+   * one project's parts beside it as if they were the fleet.
+   *
+   * `null` only when `root` itself cannot be read, which is the one case a caller must tell from
+   * "nothing there" — a typo in a second root would otherwise quietly halve the fleet.
+   */
+  treesWith: (
+    root: string,
+    marker: string,
+    depth: number,
+    skip: readonly string[],
+  ) => Promise<readonly string[] | null>
+  /**
    * Writes a file, creating the directories above it. The reason it failed, or `null` on success.
    *
    * The one writing call here, and it is not a hole in "der Hafen verändert kein Repository": what

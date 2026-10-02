@@ -86,6 +86,52 @@ export const nodePorts: Ports = {
         .then((entry) => entry.isDirectory())
         .catch(() => false),
     realPath: async (path) => await realpath(path).catch(() => null),
+    treesWith: async (root, marker, depth, skip) => {
+      const avoid = new Set(skip)
+      const found: string[] = []
+
+      /** Breadth-first, so the shallow and ordinary case costs what it always did. */
+      const walk = async (dir: string, left: number): Promise<void> => {
+        const entries = await readdir(dir, { withFileTypes: true }).catch(() => null)
+        if (entries === null) {
+          return
+        }
+        // A *directory* called `marker`: a submodule's `.git` is a file, and a submodule is a
+        // tender of the repository that carries it rather than a ship of its own.
+        if (entries.some((entry) => entry.name === marker && entry.isDirectory())) {
+          // A tree. Everything inside it belongs to it, so the search stops here.
+          found.push(dir)
+          return
+        }
+        if (left <= 0) {
+          return
+        }
+        await Promise.all(
+          entries.map(async (entry) => {
+            if (entry.name.startsWith('.') || avoid.has(entry.name)) {
+              return
+            }
+            const path = `${dir}/${entry.name}`
+            const directory = entry.isDirectory()
+              ? true
+              : entry.isSymbolicLink() &&
+                (await stat(path)
+                  .then((it) => it.isDirectory())
+                  .catch(() => false))
+            if (directory) {
+              await walk(path, left - 1)
+            }
+          }),
+        )
+      }
+
+      // The root's own readability is the one failure a caller has to be able to tell apart.
+      if ((await readdir(root).catch(() => null)) === null) {
+        return null
+      }
+      await walk(root, depth)
+      return found.sort()
+    },
     writeFile: async (path, contents) => {
       try {
         // The directory above it too: a register is written before anybody has made a store.
