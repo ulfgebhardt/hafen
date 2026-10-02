@@ -45,9 +45,24 @@ Die Antwort war keine Bündelung und kein Sidecar, sondern die fehlende Frage: `
 | Dauer in der CLI | 15,54 s | **10,21 s** |
 | Nutzlast | 4,8 MiB | 4,8 MiB |
 
-6 676 Aufrufe bei 0,1–0,5 ms Round-Trip sind 0,7 bis 3,3 s auf zehn Sekunden echte Arbeit. Das
-Gate ist genommen, der Sidecar bleibt unnötig — und die CLI ist nebenbei um ein Drittel
-schneller geworden, weil der Fehler nie an Tauri lag.
+Und der zweitgrößte Posten ging denselben Weg: die **Suche** war 2 174 der verbleibenden 6 676
+Aufrufe, und eine Suche ist ganz Dateisystem und keine Domäne. `treesWith` gibt sie an die Seite
+ab, die das Dateisystem hat — Node läuft seinen Baum, Rust läuft ihn in **einem** Aufruf.
+
+| | am Anfang | nach `readDir` | nach `treesWith` |
+| --- | --- | --- | --- |
+| Port-Aufrufe je Vollmessung | 49 117 | 6 676 | **4 931** |
+| davon für die Suche | 44 233 | 2 174 | **2** |
+| Suche in der CLI | — | 0,75 s | **0,10 s** |
+
+Dieselben 99 Repositories wie vorher, in einem Dreizehntel der Zeit. `find` wurde dafür gemessen
+und verworfen: beschnitten ist es zwar schnell (0,31 s), aber auf dieser Maschine ist `find` in
+Wahrheit **bfs 4.1.1**, auf Windows ist `find.exe` eine *Textsuche*, und die Ausschlussregel hat
+einen Präfix-Fall, den kein find-Ausdruck trägt.
+
+4 931 Aufrufe bei 0,1–0,5 ms Round-Trip sind 0,5 bis 2,5 s auf zehn Sekunden echte Arbeit. Das
+Gate ist genommen, der Sidecar bleibt unnötig — und die CLI ist nebenbei schneller geworden, weil
+der Fehler nie an Tauri lag.
 
 ## Die vier Baustellen
 
@@ -126,4 +141,4 @@ hier offen bleibt.
   Menschen kann das tun, und ohne ihn kann der Updater nichts prüfen.
 - **Apple-Developer-Account** — nur für Notarisierung nötig. Ohne ihn läuft die App, mit einem
   Umweg beim ersten Öffnen.
-- ~~**IPC-Kosten des Adapters**~~ — gemessen, siehe oben: 6 676 Aufrufe je Vollmessung.
+- ~~**IPC-Kosten des Adapters**~~ — gemessen, siehe oben: 4 931 Aufrufe je Vollmessung.

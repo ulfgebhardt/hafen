@@ -52,6 +52,40 @@ export function mockPorts(setup: MockSetup = {}): Ports {
       // Nothing is a link unless a test says so: a mock that resolved paths of its own would be
       // answering a question the test never asked.
       realPath: async (path) => setup.links?.[path] ?? path,
+      treesWith: async (root, marker, depth, skip) => {
+        if (!Object.hasOwn(dirs, root)) {
+          return null
+        }
+        const avoid = new Set(skip)
+        const found: string[] = []
+        const walk = (dir: string, left: number): void => {
+          const entries = dirs[dir]
+          if (entries === undefined) {
+            return
+          }
+          /*
+           * Existence is a key here, not an entry in a listing — and it has to be a *directory*,
+           * which in this world is a key of `dirs`. A submodule's `.git` is a file, and a
+           * submodule is a tender of the repository carrying it rather than a ship of its own.
+           */
+          if (Object.hasOwn(dirs, `${dir}/${marker}`)) {
+            // A tree. What is inside one belongs to it, so the search stops here.
+            found.push(dir)
+            return
+          }
+          if (left <= 0) {
+            return
+          }
+          for (const name of entries) {
+            if (name.startsWith('.') || avoid.has(name)) {
+              continue
+            }
+            walk(`${dir}/${name}`, left - 1)
+          }
+        }
+        walk(root, depth)
+        return found.sort()
+      },
       // Into the same table `readFile` reads from, so a test can write and read back.
       writeFile: async (path, contents) => {
         files[path] = contents

@@ -176,6 +176,74 @@ pub fn port_real_path(path: String) -> Option<String> {
         .map(|at| at.to_string_lossy().into_owned())
 }
 
+/// Directories under `root` holding a **directory** called `marker` — the search, in one call.
+///
+/// Done over the port one directory at a time it was 2 174 of a survey's 6 676 calls, and over a
+/// process boundary that is 2 174 round trips to answer one question. Here it is one.
+///
+/// **Stops at each tree it finds**: what lies inside a repository belongs to it, and listing those
+/// separately would count one project's contents as a fleet. `skip` is a hint the walk may prune
+/// on; the caller applies the real rule to what comes back.
+///
+/// A directory and not any entry: a submodule's `.git` is a *file*, and a submodule is a tender of
+/// the repository that carries it rather than a ship of its own.
+///
+/// `None` only when `root` itself cannot be read — the one case a caller must tell apart from
+/// "nothing there", because a typo in a second root would otherwise quietly halve the fleet.
+#[tauri::command]
+pub fn port_trees_with(
+    root: String,
+    marker: String,
+    depth: u32,
+    skip: Vec<String>,
+) -> Option<Vec<String>> {
+    if std::fs::read_dir(&root).is_err() {
+        return None;
+    }
+    let avoid: std::collections::HashSet<String> = skip.into_iter().collect();
+    let mut found = Vec::new();
+    walk(Path::new(&root), &marker, depth, &avoid, &mut found);
+    found.sort();
+    Some(found)
+}
+
+fn walk(
+    dir: &Path,
+    marker: &str,
+    left: u32,
+    avoid: &std::collections::HashSet<String>,
+    found: &mut Vec<String>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let entries: Vec<_> = entries.flatten().collect();
+    if entries
+        .iter()
+        .any(|one| one.file_name() == marker && one.file_type().is_ok_and(|it| it.is_dir()))
+    {
+        found.push(dir.to_string_lossy().into_owned());
+        return;
+    }
+    if left == 0 {
+        return;
+    }
+    for entry in entries {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') || avoid.contains(&name) {
+            continue;
+        }
+        // A link to a directory is a directory here, as everywhere else in this file: five of this
+        // machine's repositories are reachable only through one.
+        let Ok(kind) = entry.file_type() else { continue };
+        let directory = kind.is_dir()
+            || (kind.is_symlink() && std::fs::metadata(entry.path()).is_ok_and(|it| it.is_dir()));
+        if directory {
+            walk(&entry.path(), marker, left - 1, avoid, found);
+        }
+    }
+}
+
 /// Writes a file, creating the directories above it. The reason it failed, or nothing on success.
 ///
 /// The one writing call, and it is not a hole in "der Hafen verändert kein Repository": what goes

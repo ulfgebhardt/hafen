@@ -691,43 +691,28 @@ export const SEARCH_DEPTH = 4
  * Breadth-first, so the shallow and ordinary case costs what it always did.
  */
 export async function findShipPaths(ports: Ports, root: string): Promise<readonly string[]> {
-  const found: string[] = []
-  let level = [root]
-
-  for (let depth = 0; depth < SEARCH_DEPTH && level.length > 0; depth += 1) {
-    const next: string[] = []
-
-    await Promise.all(
-      level.map(async (dir) => {
-        const entries = await ports.fs.readDir(dir)
-        if (entries === null) {
-          return
-        }
-
-        await Promise.all(
-          entries.map(async (entry) => {
-            // The kind comes with the listing now. It used to be a call of its own per entry, and
-            // on this fleet that was 42 441 of the survey's 49 117 port calls — to learn something
-            // the directory had already said.
-            if (!entry.directory || isNotAShip(entry.name) || entry.name.startsWith('.')) {
-              return
-            }
-            const path = `${dir}/${entry.name}`
-            if (await ports.fs.isDirectory(`${path}/.git`)) {
-              // A repository. Everything inside it belongs to it, so the search stops here.
-              found.push(path)
-              return
-            }
-            next.push(path)
-          }),
-        )
-      }),
-    )
-
-    level = next
+  /*
+   * The walk itself is the port's, and that is the whole saving.
+   *
+   * Done here it was two calls per directory entry — 2 174 of the survey's 6 676, and over a
+   * process boundary 2 174 round trips to answer one question. The port does it in one call per
+   * root, with whatever its environment has: a walk in Rust, a walk in node.
+   *
+   * `NOT_A_SHIP` goes along as a **hint** so a walker can prune the common names cheaply. The
+   * rule is applied here afterwards, because it has a case a list of names cannot carry: a
+   * directory is also not a ship when its name *begins* with one of them before a `_` or a `-`.
+   * Half a rule in two places is how two answers to one question start.
+   */
+  const found = await ports.fs.treesWith(root, '.git', SEARCH_DEPTH, [...NOT_A_SHIP])
+  if (found === null) {
+    return []
   }
-
-  return found.sort()
+  return found
+    .filter((path) => {
+      const below = path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path
+      return !below.split('/').some((part) => isNotAShip(part) || part.startsWith('.'))
+    })
+    .sort()
 }
 
 export class UnreadableRootError extends Error {
