@@ -29,6 +29,7 @@ function contract(
     members: [{ dir: '.', checks: checks ?? mockChecks(measured) }],
     devEntry: 'script',
     builds: false,
+    buildsInCi: false,
     inCi: [],
     gaps,
   }

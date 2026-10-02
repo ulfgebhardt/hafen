@@ -451,6 +451,61 @@ describe('detectContract CI reading', () => {
   })
 })
 
+describe('detectContract CI build reading', () => {
+  function ship(scripts: Record<string, string>, workflow: string) {
+    return mockPorts({
+      commands: tracked('package.json'),
+      files: {
+        [`${SHIP}/package.json`]: manifest(scripts),
+        [`${SHIP}/.github/workflows/ci.yml`]: workflow,
+      },
+      dirs: { [`${SHIP}/.github/workflows`]: ['ci.yml'] },
+    })
+  }
+
+  it('finds a tool that builds, called straight from a step', async () => {
+    const ports = ship({}, 'jobs:\n  x:\n    steps:\n      - run: pnpm vite build\n')
+
+    expect((await detectContract(ports, SHIP)).buildsInCi).toBe(true)
+  })
+
+  /** IT4C.dev and eight more on 02.10.2026: the step names the script, the script names the tool. */
+  it('follows a step into the script it runs', async () => {
+    const ports = ship(
+      { build: 'vite build' },
+      'jobs:\n  x:\n    steps:\n      - run: npm install\n      - run: npm run build\n',
+    )
+
+    expect((await detectContract(ports, SHIP)).buildsInCi).toBe(true)
+  })
+
+  it('reads a block step line by line', async () => {
+    const ports = ship(
+      { build: 'vite build' },
+      'jobs:\n  x:\n    steps:\n      - run: |\n          npm install\n          npm run build\n',
+    )
+
+    expect((await detectContract(ports, SHIP)).buildsInCi).toBe(true)
+  })
+
+  /** And not in a job *called* build, which half the workflows on this fleet are. */
+  it('does not take a job name for a build step', async () => {
+    const ports = ship({}, 'jobs:\n  build:\n    steps:\n      - run: pnpm test\n')
+
+    expect((await detectContract(ports, SHIP)).buildsInCi).toBe(false)
+  })
+
+  /** A script called `build` that builds nothing is no build — the name is not the measurement. */
+  it('does not take a script name for a build', async () => {
+    const ports = ship(
+      { build: 'echo nothing to build' },
+      'jobs:\n  x:\n    steps:\n      - run: npm run build\n',
+    )
+
+    expect((await detectContract(ports, SHIP)).buildsInCi).toBe(false)
+  })
+})
+
 describe(contractChecks, () => {
   it('pairs every declared script with the member it runs in', async () => {
     // dreammall.earth: `test:lint` in the members, none at the root. Offering the bare

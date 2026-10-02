@@ -19,7 +19,6 @@
 
 import { CONTRACT_SCRIPTS, readWorkflows } from './contract'
 import { SHIP_TRAITS } from './quest'
-import { bodyBuilds } from './role'
 
 import type { Contract, ContractPorts } from './contract'
 import type { Quest, QuestCheck, ShipTrait } from './quest'
@@ -414,7 +413,8 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
      * And whether a workflow runs one — the other half of "somebody goes the whole way".
      *
      * Read out of the `run:` steps rather than by looking for the word `build`, which stands in
-     * half the job names on this fleet without anything being built.
+     * half the job names on this fleet without anything being built — and read by
+     * `detectContract`, which follows a step into the script it runs (`Contract.buildsInCi`).
      */
     case 'baut-in-ci': {
       if (facts.workflows.length === 0) {
@@ -425,17 +425,11 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
           null,
         )
       }
-      const hit = facts.workflows.some((body) =>
-        body
-          .split('\n')
-          .filter((line) => line.includes('run:'))
-          .some((line) => bodyBuilds(line.slice(line.indexOf('run:') + 4))),
-      )
       return say(
         'ein Workflow baut',
         `.github/workflows (${workflowNote(facts)})`,
-        hit ? 'ein Schritt baut' : 'kein Schritt baut',
-        hit,
+        contract.buildsInCi ? 'ein Schritt baut' : 'kein Schritt baut',
+        contract.buildsInCi,
       )
     }
 

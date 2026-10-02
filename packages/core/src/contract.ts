@@ -109,6 +109,16 @@ export interface Contract {
    * every repository that publishes its TypeScript as source — which owes no build at all.
    */
   builds: boolean
+  /**
+   * Whether a CI workflow builds one — straight from a step, or through the script it runs.
+   *
+   * Read here and not in the probe, because it is the same reading as `inCi`. Until 02.10.2026
+   * the probe matched each line holding `run:` on its own, and that lost both halves of what
+   * `inCi` already knew: a `run: |` block keeps its commands on the lines below, and
+   * `npm run build` hands off to a script instead of naming a tool. Measured over the fleet, nine
+   * ships had a workflow running their build and were told none did.
+   */
+  buildsInCi: boolean
 }
 
 /** Where a single-package repo tends to keep its app, used only when git has no answer. */
@@ -578,6 +588,29 @@ function readCiRoles(
 }
 
 /**
+ * Whether any CI step builds, read and resolved exactly like `readCiRoles`.
+ *
+ * Without `judges`, for the reason `bodyBuilds` gives: a build is not a judge, so there is no
+ * verdict for a flag to withhold.
+ */
+function readCiBuilds(
+  workflows: readonly string[],
+  scriptBuilds: (name: string) => boolean,
+): boolean {
+  return workflows.some((raw) =>
+    runSteps(raw).some((step) =>
+      splitCommands(step).some((command) => {
+        if (bodyBuilds(command)) {
+          return true
+        }
+        const delegation = delegationOf(command)
+        return delegation !== null && scriptBuilds(delegation.script)
+      }),
+    ),
+  )
+}
+
+/**
  * Every workflow file of a ship, as text.
  *
  * Exported because two questions need the same bytes: which roles the CI runs (`inCi`, here) and
@@ -647,6 +680,20 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
     return house !== null && declared.has(name) ? [...new Set([house, ...reached])] : reached
   }
 
+  /** Whether a script of that name builds, wherever it is declared — the build twin of the above. */
+  const scriptBuilds = (name: string): boolean =>
+    manifests.some((manifest) => {
+      const body = manifest.scripts[name]
+      return (
+        body !== undefined &&
+        reachedCommands(manifests, manifest.dir, name, body).commands.some((command) =>
+          bodyBuilds(command),
+        )
+      )
+    })
+
+  const workflows = await readWorkflows(fs, shipPath)
+
   return {
     kind,
     scripts,
@@ -654,8 +701,9 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
     builds: manifests.some((manifest) =>
       Object.values(manifest.scripts).some((body) => bodyBuilds(body)),
     ),
+    buildsInCi: readCiBuilds(workflows, scriptBuilds),
     devEntry,
-    inCi: readCiRoles(await readWorkflows(fs, shipPath), rolesOfScript),
+    inCi: readCiRoles(workflows, rolesOfScript),
     gaps: kind === 'other' ? [] : CHECK_ROLES.filter((role) => !scripts[role]),
   }
 }

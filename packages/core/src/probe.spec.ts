@@ -527,17 +527,15 @@ describe('whether anything here builds', () => {
     expect(runCheck(check('baut'), bare).ok).toBeNull()
   })
 
-  it('finds a build among the run steps of a workflow', () => {
-    const ci = facts({ workflows: ['jobs:\n  x:\n    steps:\n      - run: pnpm vite build\n'] })
+  /** The reading is `detectContract`'s — the probe only says it, with the workflows as place. */
+  it('says what the contract measured about the workflows', () => {
+    const workflows = ['jobs:\n  x:\n    steps:\n      - run: npm run build\n']
+    const builds = facts({ workflows, contract: mockContract({ buildsInCi: true }) })
+    const not = facts({ workflows, contract: mockContract({ buildsInCi: false }) })
 
-    expect(runCheck(check('baut-in-ci'), ci).ok).toBe(true)
-  })
-
-  /** And not in a job *called* build, which half the workflows on this fleet are. */
-  it('does not take a job name for a build step', () => {
-    const named = facts({ workflows: ['jobs:\n  build:\n    steps:\n      - run: pnpm test\n'] })
-
-    expect(runCheck(check('baut-in-ci'), named).ok).toBe(false)
+    expect(runCheck(check('baut-in-ci'), builds).ok).toBe(true)
+    expect(runCheck(check('baut-in-ci'), builds).evidence.found).toBe('ein Schritt baut')
+    expect(runCheck(check('baut-in-ci'), not).ok).toBe(false)
   })
 
   it('is unmeasured where the ship has no workflows', () => {
