@@ -36,7 +36,7 @@ import { boomLoaded, boomTip, carriesOut, craneCycle } from './crane'
 import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
 import { harbourOf } from './lanes'
-import { MARGIN, QUAY, reachOf, walksOf } from './moorings'
+import { reachOf, shoreOf, walksOf } from './moorings'
 import { BERTH, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { lanesOf, networkOf, PACE, routesOf, stepFrom } from './traffic'
@@ -245,12 +245,12 @@ function ground(harbour: Harbour, extent: Extent): Container {
    * harbour look cropped rather than enclosed. A frame says the thing that is true: the water ends
    * where the drawing does, and every dock reaches land because land is never far.
    */
-  const quay = (MARGIN.x + QUAY) * UNIT
+  const shore = shoreOf(width / UNIT, height / UNIT)
   const inner = {
-    x: quay,
-    y: (MARGIN.y + QUAY / 2) * UNIT,
-    right: width - (QUAY / 2) * UNIT,
-    bottom: height - (QUAY / 2) * UNIT,
+    x: shore.left * UNIT,
+    y: shore.top * UNIT,
+    right: shore.right * UNIT,
+    bottom: shore.bottom * UNIT,
   }
   const land = new Graphics()
   land.rect(0, 0, width, height).fill(hex(SCENE.land))
