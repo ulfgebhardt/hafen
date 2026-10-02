@@ -1,6 +1,6 @@
 [package]
 name = "hafen"
-version = "0.0.0"
+version = "1.0.0"
 edition = "2021"
 description = "Hafen — Übersicht über alle Repos einer Maschine"
 authors = ["Ulf Gebhardt"]
