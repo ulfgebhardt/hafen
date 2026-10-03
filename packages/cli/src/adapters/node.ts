@@ -10,6 +10,18 @@ const run = promisify(execFile)
 /** Long enough for `git log` on a large repo, short enough to not hang a survey. */
 const TIMEOUT_MS = 15_000
 
+/**
+ * The environment every call runs in: the caller's, with git's optional locks off.
+ *
+ * `git status` is a reading by its name only. Finding a file whose stat data is stale, it takes
+ * `.git/index.lock` and **rewrites `.git/index`** on its own initiative — a write into a tree that
+ * is often somebody else's, and an `index.lock: File exists` for the human working in it. The
+ * allow list checks the subcommand, so it could not see this; a reading is the command *and* the
+ * environment it runs in. Set for every program, because only git reads it.
+ */
+// eslint-disable-next-line n/no-process-env -- the caller's environment, handed on and not read
+const ENVIRONMENT = { ...process.env, GIT_OPTIONAL_LOCKS: '0' }
+
 async function runCommand(
   command: string,
   args: readonly string[],
@@ -18,6 +30,7 @@ async function runCommand(
   try {
     const { stdout, stderr } = await run(command, [...args], {
       ...(cwd === undefined ? {} : { cwd }),
+      env: ENVIRONMENT,
       timeout: TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024,
     })

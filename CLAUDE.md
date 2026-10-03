@@ -18,6 +18,13 @@ mit einer Lücke lässt sie einen Schreibvorgang still durch, während die Erlau
 schlimmsten Fall über einen neuen *lesenden* Aufruf stolpert. `git worktree list` ist der Beweis:
 auf das Wort `worktree` zu prüfen nannte ein Lesen ein Schreiben.
 
+**Lesend heißt Befehl *und* Umgebung.** `git status` steht zu Recht auf der Liste und schreibt
+trotzdem: findet es eine Datei mit veralteten stat-Daten, nimmt es `.git/index.lock` und
+schreibt `.git/index` neu — bis 03.10.2026 in jedem Baum, den der Hafen ansah. Beide Adapter des
+`ProcPort` (`node.ts`, `ports.rs`) setzen deshalb `GIT_OPTIONAL_LOCKS=0`, und je ein Test
+beweist am echten git, dass der Index danach Byte für Byte derselbe ist. Die Erlaubnisliste prüft
+den Unterbefehl; was er in seiner Umgebung tut, sieht sie nicht.
+
 Das gilt besonders, weil dieses Werkzeug in achtzig-plus Arbeitsbäumen läuft, die **nicht allein
 unsere** sind.
 

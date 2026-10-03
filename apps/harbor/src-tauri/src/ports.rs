@@ -92,6 +92,12 @@ pub fn port_run(command: String, args: Vec<String>, cwd: Option<String>) -> Resu
     }
     let mut call = Command::new(&command);
     call.args(&args);
+    // A reading is the command *and* the environment it runs in. `git status` is on the list by
+    // its name, yet finding a file whose stat data is stale it takes `.git/index.lock` and
+    // rewrites `.git/index` on its own initiative — a write into a tree that is often somebody
+    // else's, and an `index.lock: File exists` for the human working in it. Set for every
+    // program, because only git reads it.
+    call.env("GIT_OPTIONAL_LOCKS", "0");
     if let Some(dir) = cwd.as_deref() {
         call.current_dir(dir);
     }
@@ -431,6 +437,50 @@ mod tests {
         assert!(!reading("gh", &["repo".to_owned(), "delete".to_owned()]));
         // And curl with a method is a write however it is spelled.
         assert!(!reading("curl", &["-X".to_owned(), "POST".to_owned()]));
+    }
+
+    /// The case `GIT_OPTIONAL_LOCKS` is set for: a file whose stat data no longer matches the
+    /// index. Without it `git status` rewrites `.git/index` — measured, not assumed.
+    #[test]
+    fn status_reads_a_tree_without_rewriting_its_index() {
+        let tree = std::env::temp_dir().join(format!("hafen-ports-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tree);
+        std::fs::create_dir_all(&tree).unwrap();
+        let git = |args: &[&str]| {
+            let done = Command::new("git")
+                .args(["-c", "user.name=x", "-c", "user.email=x@example.org"])
+                .args(["-c", "commit.gpgsign=false"])
+                .args(args)
+                .current_dir(&tree)
+                .status()
+                .unwrap();
+            assert!(done.success(), "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        std::fs::write(tree.join("f"), "a\n").unwrap();
+        git(&["add", "f"]);
+        git(&["commit", "-qm", "x"]);
+        // A modification time the index cannot have recorded, so git sees the file as stale.
+        let stale = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_893_456_000);
+        std::fs::File::options()
+            .write(true)
+            .open(tree.join("f"))
+            .unwrap()
+            .set_modified(stale)
+            .unwrap();
+        let before = std::fs::read(tree.join(".git/index")).unwrap();
+
+        let ran = port_run(
+            "git".to_owned(),
+            vec!["status".to_owned(), "--porcelain".to_owned()],
+            Some(tree.to_string_lossy().into_owned()),
+        )
+        .unwrap();
+
+        let after = std::fs::read(tree.join(".git/index")).unwrap();
+        std::fs::remove_dir_all(&tree).unwrap();
+        assert_eq!((ran.code, ran.stdout.as_str()), (0, ""));
+        assert!(before == after, "git status hat den Index geschrieben");
     }
 
     /// `branch --merged` is a reading and `branch -D` is not, and they begin with the same word.
