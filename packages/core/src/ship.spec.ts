@@ -474,8 +474,8 @@ describe(findShipPaths, () => {
 
 describe(findAcrossRoots, () => {
   /**
-   * A machine keeps its projects in more than one place: this one has `~/.data/sources` and
-   * `~/.data/games`, and the second holds six real repositories. With one root they did not exist.
+   * A machine keeps its projects in more than one place: this one has `~/code/src` and
+   * `~/code/games`, and the second holds six real repositories. With one root they did not exist.
    */
   it('reads every root that was named', async () => {
     const ports = mockPorts({
@@ -497,7 +497,7 @@ describe(findAcrossRoots, () => {
     ])
   })
 
-  /** `~/.data` and `~/.data/sources` are a reasonable pair to hand in, and overlap. */
+  /** `~/code` and `~/code/src` are a reasonable pair to hand in, and overlap. */
   it('counts a repository found twice only once', async () => {
     const ports = mockPorts({
       dirs: {

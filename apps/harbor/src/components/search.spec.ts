@@ -6,12 +6,12 @@ import { ship } from './testing'
 const leuchtturm = ship({
   org: 'Leuchtturm-Verbund',
   name: 'Leuchtturm-Deploy-Aufbau',
-  path: '/home/x/.data/sources/Leuchtturm-Verbund/Leuchtturm-Deploy-Aufbau',
+  path: '/home/x/code/src/Leuchtturm-Verbund/Leuchtturm-Deploy-Aufbau',
 })
 const addons = ship({
   org: 'kombuese',
   name: 'AddOns',
-  path: '/home/x/.data/sources/kombuese/addons/AddOns',
+  path: '/home/x/code/src/kombuese/addons/AddOns',
 })
 
 describe(matches, () => {
