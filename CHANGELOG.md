@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/ulfgebhardt/hafen/compare/v1.2.0...v1.2.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **core:** git status schreibt den Index nicht mehr, GIT_OPTIONAL_LOCKS=0 am ProcPort ([#25](https://github.com/ulfgebhardt/hafen/issues/25)) ([c505380](https://github.com/ulfgebhardt/hafen/commit/c5053804f76260194d36053429bd177e5ea034f2))
+
 ## [1.2.0](https://github.com/ulfgebhardt/hafen/compare/v1.1.1...v1.2.0) (2026-10-03)
 
 
