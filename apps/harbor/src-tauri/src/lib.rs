@@ -625,7 +625,10 @@ mod tests {
     #[test]
     fn opens_a_page_on_a_forge_we_know() {
         assert_eq!(refusal("https://github.com/ulfgebhardt/hafen"), None);
-        assert_eq!(refusal("https://git.seefahrt.example/Wattenmeer/spec/issues"), None);
+        assert_eq!(
+            refusal("https://git.seefahrt.example/Wattenmeer/spec/issues"),
+            None
+        );
     }
 
     /// A closed list, because `open_url` takes a string from the page. Any https address would be
