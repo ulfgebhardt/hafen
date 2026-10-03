@@ -15,34 +15,46 @@
 
 export type Forge = 'github' | 'gitea' | 'unknown'
 
+/** A host this machine knows a forge on, and which kind runs there. */
+export interface ForgeHost {
+  host: string
+  forge: Exclude<Forge, 'unknown'>
+}
+
 /**
+ * The one forge every machine has, and the only one this tool names.
+ *
  * Matched as a substring, because both spellings occur: `git@github.com:org/repo.git` and
  * `https://github.com/org/repo`.
  *
- * How a self-hosted Gitea that is not `git.seefahrt.example` gets in here is a measurement nobody takes
- * yet — the decision is a probe against `/api/v1/version` whose answer the inventory notes, so
- * the survey stays free of the network. Until then a host that is not in this table is
- * `unknown`, which is honest rather than wrong.
+ * A self-hosted Gitea is a fact about *one* machine, so it lives in that machine's register
+ * (`## Forges`) and not here. Until 03.10.2026 a second host stood in this table — one person's
+ * Gitea, shipped to everybody. Whether an unknown host runs Gitea is a question for
+ * `/api/v1/version`, which the survey does not ask: it stays free of the network, and a host
+ * nobody named is `unknown`, which is honest rather than wrong.
  */
-const FORGES: readonly { host: string; forge: Exclude<Forge, 'unknown'> }[] = [
-  { host: 'github.com', forge: 'github' },
-  { host: 'git.seefahrt.example', forge: 'gitea' },
-]
+export const BUILTIN_FORGES: readonly ForgeHost[] = [{ host: 'github.com', forge: 'github' }]
 
 /** One match, read two ways — the host and the kind must never disagree about a remote. */
-function entryOf(remote: string | null): (typeof FORGES)[number] | null {
+function entryOf(remote: string | null, known: readonly ForgeHost[]): ForgeHost | null {
   if (remote === null) {
     return null
   }
-  return FORGES.find((entry) => remote.includes(entry.host)) ?? null
+  return known.find((entry) => remote.includes(entry.host)) ?? null
 }
 
-/** The host this remote is on, or `null` for one Werft has nothing to say about. */
-export function forgeHost(remote: string | null): string | null {
-  return entryOf(remote)?.host ?? null
+/** The host this remote is on, or `null` for one the harbor has nothing to say about. */
+export function forgeHost(
+  remote: string | null,
+  known: readonly ForgeHost[] = BUILTIN_FORGES,
+): string | null {
+  return entryOf(remote, known)?.host ?? null
 }
 
 /** Which forge that host runs. */
-export function forgeOf(remote: string | null): Forge {
-  return entryOf(remote)?.forge ?? 'unknown'
+export function forgeOf(
+  remote: string | null,
+  known: readonly ForgeHost[] = BUILTIN_FORGES,
+): Forge {
+  return entryOf(remote, known)?.forge ?? 'unknown'
 }

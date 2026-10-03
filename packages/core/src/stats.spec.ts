@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import { BUILTIN_FORGES } from './forge'
 import { mockPorts, mockRemote } from './mock'
 import { forgeLinks, guardOf, isRead, readStats, slugOf, slugsOf, statsFor } from './stats'
 
 import type { CommandMap } from './mock'
 import type { Ship } from './ship'
 import type { ForgeStats, Slug, Unread } from './stats'
+
+/** A self-hosted Gitea, the way a machine's register names it. */
+const GITEA = [...BUILTIN_FORGES, { host: 'git.seefahrt.example', forge: 'gitea' as const }]
 
 const HAFEN: Slug = { host: 'github.com', owner: 'seefahrt', repo: 'hafen' }
 
@@ -226,6 +230,8 @@ describe(readStats, () => {
         owner: 'Wattenmeer',
         repo: 'secrets',
       },
+      null,
+      GITEA,
     )
 
     expect(reasonOf(answer)).toContain('HAFEN_GITEA_TOKEN')
@@ -254,6 +260,8 @@ describe(readStats, () => {
         owner: 'org',
         repo: 'repo',
       },
+      null,
+      GITEA,
     )
 
     expect(answer).toMatchObject({ stars: 3, issues: 7, pulls: 4, language: 'Rust' })

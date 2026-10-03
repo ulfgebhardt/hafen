@@ -10,8 +10,8 @@ export type { Ports, ProcPort, FsPort, HostPort, Clock, CommandResult, DirEntry 
 
 export { daysSince } from './time'
 
-export type { Forge } from './forge'
-export { forgeHost, forgeOf } from './forge'
+export type { Forge, ForgeHost } from './forge'
+export { BUILTIN_FORGES, forgeHost, forgeOf } from './forge'
 
 export type { CheckRole, Delegation } from './role'
 export {
@@ -70,8 +70,10 @@ export { bindingQuests, evaluateQuests, unmeasuredQuests, violatedQuests } from 
 export type { Register } from './register'
 export {
   EMPTY_REGISTER,
+  forgesOf,
   parseRegister,
   renderRegister,
+  rootsFor,
   setArchived,
   setEnlisted,
   setRoot,

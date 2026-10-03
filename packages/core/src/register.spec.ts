@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   EMPTY_REGISTER,
+  forgesOf,
   parseRegister,
   renderRegister,
+  rootsFor,
   setArchived,
   setEnlisted,
   setRoot,
@@ -33,6 +35,7 @@ describe(parseRegister, () => {
       archived: ['/repos/org/alt', '/repos/org/tot'],
       enlisted: ['/games/wow'],
       roots: ['/home/wer/Projekte'],
+      forges: [],
     })
   })
 
@@ -67,6 +70,7 @@ describe(parseRegister, () => {
       archived: ['/repos/org/alt'],
       enlisted: [],
       roots: [],
+      forges: [],
     })
   })
 
@@ -79,19 +83,71 @@ describe(parseRegister, () => {
   })
 })
 
+describe('forges in the register', () => {
+  /** A Gitea is one machine's fact: named by its human, never shipped in the code. */
+  it('reads a host and what runs there', () => {
+    const text = '## Forges\n\n- git.example.org gitea\n- code.example.org github\n'
+
+    expect(parseRegister(text).forges).toStrictEqual([
+      { host: 'git.example.org', forge: 'gitea' },
+      { host: 'code.example.org', forge: 'github' },
+    ])
+  })
+
+  /** `unknown` is what an unnamed host already is, so a typo costs what no line would. */
+  it('drops a line that names no kind it knows, rather than guess', () => {
+    const text = '## Forges\n\n- git.example.org gittea\n- bare.example.org\n'
+
+    expect(parseRegister(text).forges).toStrictEqual([])
+  })
+
+  it("puts the shipped forge first and the machine's after it", () => {
+    const register = {
+      ...EMPTY_REGISTER,
+      forges: [{ host: 'git.example.org', forge: 'gitea' as const }],
+    }
+
+    expect(forgesOf(register).map((one) => one.host)).toStrictEqual([
+      'github.com',
+      'git.example.org',
+    ])
+  })
+})
+
+describe(rootsFor, () => {
+  /** What was typed on purpose leads; a stored decision that could beat it would make it no override. */
+  it('takes what was given over what is stored', () => {
+    expect(rootsFor(['/given'], { ...EMPTY_REGISTER, roots: ['/stored'] })).toStrictEqual([
+      '/given',
+    ])
+    expect(rootsFor([], { ...EMPTY_REGISTER, roots: ['/stored'] })).toStrictEqual(['/stored'])
+  })
+
+  /** Neither, and the answer is nothing — not one person's convention, not a guess list. */
+  it('answers nothing when nobody was asked', () => {
+    expect(rootsFor([], EMPTY_REGISTER)).toStrictEqual([])
+  })
+})
+
 describe(renderRegister, () => {
   it('survives a round trip', () => {
-    const register = { archived: ['/b', '/a'], enlisted: ['/games/wow'], roots: ['/home/wer/src'] }
+    const register = {
+      archived: ['/b', '/a'],
+      enlisted: ['/games/wow'],
+      roots: ['/home/wer/src'],
+      forges: [{ host: 'git.example.org', forge: 'gitea' as const }],
+    }
 
     expect(parseRegister(renderRegister(register))).toStrictEqual({
       archived: ['/a', '/b'],
       enlisted: ['/games/wow'],
       roots: ['/home/wer/src'],
+      forges: [{ host: 'git.example.org', forge: 'gitea' }],
     })
   })
 
   it('sorts, so two edits do not fight over line order', () => {
-    const text = renderRegister({ archived: ['/z', '/a'], enlisted: [], roots: [] })
+    const text = renderRegister({ archived: ['/z', '/a'], enlisted: [], roots: [], forges: [] })
 
     expect(text.indexOf('/a')).toBeLessThan(text.indexOf('/z'))
   })
@@ -104,7 +160,7 @@ describe(renderRegister, () => {
 describe(setArchived, () => {
   it('archives and un-archives without touching the other list', () => {
     const once = setArchived(
-      { archived: [], enlisted: ['/games/wow'], roots: [] },
+      { archived: [], enlisted: ['/games/wow'], roots: [], forges: [] },
       '/repos/org/alt',
       true,
     )
@@ -113,6 +169,7 @@ describe(setArchived, () => {
       archived: ['/repos/org/alt'],
       enlisted: ['/games/wow'],
       roots: [],
+      forges: [],
     })
     expect(setArchived(once, '/repos/org/alt', false).archived).toStrictEqual([])
   })
@@ -155,12 +212,13 @@ describe(setRoot, () => {
   })
 
   it('leaves the other two lists where they were', () => {
-    const register = { archived: ['/alt'], enlisted: ['/games/wow'], roots: [] }
+    const register = { archived: ['/alt'], enlisted: ['/games/wow'], roots: [], forges: [] }
 
     expect(setRoot(register, '/src', true)).toStrictEqual({
       archived: ['/alt'],
       enlisted: ['/games/wow'],
       roots: ['/src'],
+      forges: [],
     })
   })
 })

@@ -12,6 +12,7 @@
  */
 
 import {
+  BUILTIN_FORGES,
   EMPTY_REGISTER,
   isRead,
   mergeCatalogs,
@@ -19,6 +20,7 @@ import {
   readQuestCatalog,
   readStats,
   renderRegister,
+  rootsFor as rootsFrom,
   slugsOf,
   surveyHarbor,
 } from '@hafen/core'
@@ -27,7 +29,15 @@ import { tauriPorts } from './adapters/tauri'
 import { builtInCatalog } from './catalog'
 
 import type { Bordmittel } from './components/bordmittel'
-import type { ForgeReading, ForgeStats, Quest, Register, Ship, Unread } from '@hafen/core'
+import type {
+  ForgeHost,
+  ForgeReading,
+  ForgeStats,
+  Quest,
+  Register,
+  Ship,
+  Unread,
+} from '@hafen/core'
 
 /** Where the window's own files live, as the Rust half resolves them. */
 export interface Places {
@@ -103,19 +113,13 @@ export async function writeRegister(store: string, register: Register): Promise<
 }
 
 /**
- * Where to look, and in which order the two sources count.
+ * Where to look: `$HAFEN_ROOT` where it is set, else the register, else nothing.
  *
- * `$HAFEN_ROOT` **leads** where it is set: it is an override somebody typed on purpose, and an
- * override a stored decision could beat would not be one. Otherwise the register, which is where
- * the answer to the first-run question goes.
- *
- * Neither, and the answer is **nothing** — not `~/Projects`, not `~/src`, not `$HOME`. A guess
- * list is what this tool does not do: "Wer eine Rateliste pflegt, hat die Messung gegen eine
- * bessere Vermutung getauscht." An empty harbour that says nobody has been asked yet is a true
- * drawing; a full one built out of a guess is not.
+ * The rule itself is `rootsFor` in the core, and the CLI asks the same function — two front ends
+ * with two orders would be two answers to "where are my projects".
  */
 export function rootsFor(places: Places, register: Register): readonly string[] {
-  return places.roots.length > 0 ? places.roots : register.roots
+  return rootsFrom(places.roots, register)
 }
 
 /** Whether this machine has ever been told where its projects are. */
@@ -214,11 +218,12 @@ export async function bordmittel(): Promise<Bordmittel> {
 export async function askForges(
   ships: readonly Ship[],
   token: string | null,
+  known: readonly ForgeHost[] = BUILTIN_FORGES,
 ): Promise<ForgeReading> {
   const stats: ForgeStats[] = []
   const unread: Unread[] = []
   for (const slug of slugsOf(ships)) {
-    const answer = await readStats(tauriPorts, slug, token)
+    const answer = await readStats(tauriPorts, slug, token, known)
     if (isRead(answer)) {
       stats.push(answer)
     } else {

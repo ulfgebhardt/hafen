@@ -483,21 +483,46 @@ fn started(mut command: std::process::Command) -> Option<std::io::Error> {
  * One at a time, and never a sweep: forty branches deleted by one click is forty decisions nobody
  * made.
  */
-/// The forges this window will open a page on, and nothing else.
+/// The forge every machine has, and the only one this window names on its own.
 ///
-/// The same two `packages/core/src/forge.ts` names, and the two have to agree: a host one of them
+/// `packages/core/src/forge.ts` ships the same list, and the two have to agree: a host one of them
 /// knows and the other does not means the sheet offers a link that the window then refuses. A
 /// closed list rather than "any https address", because `open_url` takes a string from the page —
 /// and the promise in this file is that a string from the page only ever lands in the one position
-/// its caller put it in.
-const FORGES: &[&str] = &["github.com", "git.seefahrt.example"];
+/// its caller put it in. A self-hosted forge is added by the machine's register, below.
+const BUILTIN_FORGES: &[&str] = &["github.com"];
+
+/// The hosts a register's `## Forges` section names, in the shape `renderRegister` writes them.
+///
+/// Read here and not asked of the page, because the page is exactly what this list guards against;
+/// the file is the human's decision on this machine. Only the host and the kind are read, with the
+/// core's rule: a line that names neither `gitea` nor `github` is dropped, not guessed at. The
+/// writing stays in the CLI — this reads one section of a file it never edits.
+fn register_forges(text: &str) -> Vec<String> {
+    let mut inside = false;
+    let mut hosts = Vec::new();
+    for line in text.lines() {
+        if let Some(heading) = line.strip_prefix("## ") {
+            inside = heading.trim() == "Forges";
+            continue;
+        }
+        let Some(item) = line.strip_prefix("- ").filter(|_| inside) else {
+            continue;
+        };
+        let mut words = item.split_whitespace();
+        if let (Some(host), Some("gitea" | "github")) = (words.next(), words.next()) {
+            hosts.push(host.to_owned());
+        }
+    }
+    hosts
+}
 
 /// Why this address may not be opened, or nothing.
 ///
 /// Its own function so the checking can be tested without opening anything. Three refusals and
 /// each for its own reason: a scheme that is not `https` could be `file:` or worse, whitespace or
 /// a control character is how one argument becomes two, and a host nobody named is a stranger.
-fn refusal(url: &str) -> Option<String> {
+fn refusal(url: &str, known: &[&str]) -> Option<String> {
     if !url.starts_with("https://") {
         return Some("nur https".to_owned());
     }
@@ -510,7 +535,7 @@ fn refusal(url: &str) -> Option<String> {
     if host.contains('@') || host.is_empty() {
         return Some("kein bekannter Forge-Host".to_owned());
     }
-    let named = FORGES
+    let named = known
         .iter()
         .any(|forge| host == *forge || host.ends_with(&format!(".{forge}")));
     if named {
@@ -540,7 +565,17 @@ fn opener() -> (&'static str, &'static [&'static str]) {
 /// Opens a forge page in whatever the machine uses for that. The refusal, or nothing.
 #[tauri::command]
 fn open_url(url: String) -> Option<String> {
-    if let Some(why) = refusal(&url) {
+    // Read at the click and not at start: a forge added to the register while the window is open
+    // is known on the next link, the same way the survey reads the register on every run.
+    let register = std::fs::read_to_string(format!("{}/register.md", ports::port_places().store))
+        .unwrap_or_default();
+    let mine = register_forges(&register);
+    let known: Vec<&str> = BUILTIN_FORGES
+        .iter()
+        .copied()
+        .chain(mine.iter().map(String::as_str))
+        .collect();
+    if let Some(why) = refusal(&url, &known) {
         return Some(why);
     }
     let (program, leading) = opener();
@@ -624,42 +659,62 @@ mod tests {
     /// did not exist, so every one of them answered "Command open_url not found".
     #[test]
     fn opens_a_page_on_a_forge_we_know() {
-        assert_eq!(refusal("https://github.com/ulfgebhardt/hafen"), None);
         assert_eq!(
-            refusal("https://git.seefahrt.example/Wattenmeer/spec/issues"),
+            refusal("https://github.com/ulfgebhardt/hafen", BUILTIN_FORGES),
             None
         );
+        let mine = &["github.com", "git.example.org"];
+        assert_eq!(
+            refusal("https://git.example.org/org/repo/issues", mine),
+            None
+        );
+    }
+
+    /// A self-hosted forge is one machine's fact: unknown until its register names it.
+    #[test]
+    fn knows_a_self_hosted_forge_only_from_the_register() {
+        assert!(refusal("https://git.example.org/org/repo", BUILTIN_FORGES).is_some());
+    }
+
+    /// The exact text `renderRegister` writes — the two halves agree on the format or not at all.
+    #[test]
+    fn reads_the_forges_the_register_names() {
+        let text = "# Schiffsregister\n\n## Wurzeln\n\n- /home/wer/Projekte\n\n## Forges\n\n- git.example.org gitea\n- typo.example.org gittea\n";
+        assert_eq!(register_forges(text), vec!["git.example.org".to_owned()]);
+        assert!(register_forges("## Forges\n\n_leer_\n").is_empty());
+        // A path under another heading is not a host.
+        assert!(register_forges("## Wurzeln\n\n- /src gitea\n").is_empty());
     }
 
     /// A closed list, because `open_url` takes a string from the page. Any https address would be
     /// a different promise than the one this file makes.
     #[test]
     fn refuses_a_host_nobody_named() {
-        assert!(refusal("https://example.org/x").is_some());
+        assert!(refusal("https://example.org/x", BUILTIN_FORGES).is_some());
         // Userinfo is how an address reads as one host and resolves to another.
-        assert!(refusal("https://github.com@evil.example/").is_some());
+        assert!(refusal("https://github.com@evil.example/", BUILTIN_FORGES).is_some());
     }
 
     /// `file:` and `javascript:` are the reason the scheme is checked rather than assumed.
     #[test]
     fn refuses_anything_that_is_not_https() {
-        assert!(refusal("file:///etc/passwd").is_some());
-        assert!(refusal("http://github.com/x").is_some());
-        assert!(refusal("javascript:alert(1)").is_some());
+        assert!(refusal("file:///etc/passwd", BUILTIN_FORGES).is_some());
+        assert!(refusal("http://github.com/x", BUILTIN_FORGES).is_some());
+        assert!(refusal("javascript:alert(1)", BUILTIN_FORGES).is_some());
     }
 
     /// Whitespace is how one argument becomes two.
     #[test]
     fn refuses_an_address_with_room_for_a_second_argument() {
-        assert!(refusal("https://github.com/x --flag").is_some());
-        assert!(refusal("https://github.com/x\nrm -rf /").is_some());
+        assert!(refusal("https://github.com/x --flag", BUILTIN_FORGES).is_some());
+        assert!(refusal("https://github.com/x\nrm -rf /", BUILTIN_FORGES).is_some());
     }
 
     /// A subdomain of a named forge is that forge; a host merely ending in the same letters is not.
     #[test]
     fn tells_a_subdomain_from_a_lookalike() {
-        assert_eq!(refusal("https://raw.github.com/x"), None);
-        assert!(refusal("https://notgithub.com/x").is_some());
+        assert_eq!(refusal("https://raw.github.com/x", BUILTIN_FORGES), None);
+        assert!(refusal("https://notgithub.com/x", BUILTIN_FORGES).is_some());
     }
 
     /// One lock for every test that touches the environment.

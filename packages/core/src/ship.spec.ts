@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { BUILTIN_FORGES } from './forge'
 import { mockPorts } from './mock'
 import {
   countLines,
@@ -15,6 +16,9 @@ import {
 } from './ship'
 
 import type { Ports } from './ports'
+
+/** A self-hosted Gitea, the way a machine's register names it. */
+const GITEA = [...BUILTIN_FORGES, { host: 'git.seefahrt.example', forge: 'gitea' as const }]
 
 const ROOT = '/repos'
 const SHIP = '/repos/org/ship'
@@ -59,6 +63,7 @@ describe(inspectShip, () => {
         now: NOW,
       }),
       SHIP,
+      { forges: GITEA },
     )
 
     // Origin leads even where git printed it second, and the forge travels with each URL:
@@ -86,6 +91,7 @@ describe(inspectShip, () => {
         now: NOW,
       }),
       SHIP,
+      { forges: GITEA },
     )
 
     expect(mirrorsOf(ship.remotes)).toStrictEqual([
@@ -638,7 +644,7 @@ describe('surveyHarbor while it runs', () => {
     let total = 0
 
     await surveyHarbor(ports, ROOT, {
-      register: { archived: [], enlisted: [], roots: [] },
+      register: { archived: [], enlisted: [], roots: [], forges: [] },
       progress: { onCount: (count) => (total = count) },
     })
 

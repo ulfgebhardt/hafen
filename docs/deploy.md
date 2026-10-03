@@ -99,8 +99,10 @@ gemessen ist, **bleibt**: eine bereits genommene Lesung ist wahr, ob der Rest fo
 
 ### 2. Erststart (Ziele 3, 6) ✅
 
-Heute: `$HAFEN_ROOT`, sonst `~/.data/sources` und `~/.data/games` — eine persönliche Konvention,
-auf einem fremden Rechner leer.
+Vorher: `$HAFEN_ROOT`, sonst `~/.data/sources` und `~/.data/games` — eine persönliche Konvention,
+auf einem fremden Rechner leer. Seit 03.10.2026 auch in der CLI ohne Default: Argument, sonst
+`$HAFEN_ROOT`, sonst das Register (`hafen register wurzel <pfad>`), sonst eine Meldung, die alle
+drei Wege nennt — dieselbe Funktion (`rootsFor`) wie im Fenster.
 
 Beim ersten Start wird **einmal gefragt**, wo die Projekte liegen (Ordnerauswahl), und die Antwort
 kommt ins **Register**. Das passt ohne Umbau: im Register stehen "genau zwei Dinge: was archiviert

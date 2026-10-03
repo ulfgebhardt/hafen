@@ -14,7 +14,7 @@
  * file rather than by this comment.
  */
 
-import { inspectShip, setArchived, setEnlisted, setRoot, slugOf } from '@hafen/core'
+import { forgesOf, inspectShip, setArchived, setEnlisted, setRoot, slugOf } from '@hafen/core'
 
 import { tauriPorts } from './adapters/tauri'
 import { NOTHING_RUNNING } from './components/measuring'
@@ -287,6 +287,7 @@ async function inspectInWindow(
         ownEmails,
         archived: register.archived.includes(path),
         forge,
+        forges: forgesOf(register),
       }),
     ],
   }
@@ -515,7 +516,10 @@ export async function refetchForge(): Promise<Forge> {
    */
   const places = (await invoke('port_places')) as Places
   const current = await loadSnapshot()
-  const reading = await askForges(current.snapshot.ships, null)
+  // The machine's own forges, from its register — a self-hosted Gitea is named there and nowhere
+  // in the code, so without it every ship on that host would come back "keine Forge".
+  const known = forgesOf(await registerIn(places.store))
+  const reading = await askForges(current.snapshot.ships, null, known)
   const json = JSON.stringify(reading)
   const failure = await tauriPorts.fs.writeFile(beside(places.snapshot, 'forge.json'), json)
   if (failure !== null) {
