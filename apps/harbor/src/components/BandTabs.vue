@@ -62,6 +62,8 @@
    * that leaves three ships and a tab that still says 41 is a window disagreeing with itself.
    */
   const query = defineModel<string>('query', { default: '' })
+  /** Whether the search filters the harbour instead of marking it — see `onlyMatches` in App. */
+  const only = defineModel<boolean>('only', { default: false })
 
   const grouped = computed(() => byBand(ships))
   /** What each page that draws ships is worth — off `shipsOn`, so the tab and the drawing agree. */
@@ -257,6 +259,24 @@
         aria-label="Schiffe filtern"
         @keyup.escape="query = ''"
       />
+      <!--
+        Only while there is something to filter by: a switch for an empty search would change
+        nothing, and a control that does nothing reads as broken.
+      -->
+      <button
+        v-if="query !== ''"
+        class="font-mono text-[10px]"
+        :class="only ? 'text-slate-100 underline' : 'text-slate-600 hover:text-slate-300'"
+        :aria-pressed="only"
+        :title="
+          only
+            ? 'Nur die Treffer sind gezeichnet — klicken, um die ganze Flotte mit markierten Treffern zu zeigen'
+            : 'Die ganze Flotte, Treffer markiert — klicken, um nur die Treffer zu zeichnen'
+        "
+        @click="only = !only"
+      >
+        nur Treffer
+      </button>
       <button
         v-if="query !== ''"
         class="font-mono text-[10px] text-slate-600 hover:text-slate-300"

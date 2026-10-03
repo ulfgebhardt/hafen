@@ -83,6 +83,27 @@ export const BERTH = {
 } as const
 
 /**
+ * The whole of one berth, in units around the hull's centreline: pier, water and caption.
+ *
+ * One rectangle for two jobs — what a click hits and what a search frames — so the frame lands on
+ * the thing a click would pick by construction. The search used to draw a circle round the stern
+ * with half a hull for a radius: it held the back half of the boat and none of the pier, and the
+ * pier is where a repository's open debts stand.
+ *
+ * `side` mirrors it, the same way it mirrors the planking: at `1` the pier lies towards negative y.
+ */
+export function berthBox(side: Side): { x: number; y: number; width: number; height: number } {
+  const towardsPier = BERTH.pier + BERTH.laneCentre
+  const awayFromPier = BERTH.lane - BERTH.laneCentre + BERTH.caption
+  return {
+    x: -2,
+    y: side === 1 ? -towardsPier : -awayFromPier,
+    width: BERTH.pitch,
+    height: towardsPier + awayFromPier,
+  }
+}
+
+/**
  * One pier and the two rows of berths it serves, top to bottom.
  *
  * The pier, the row lying against its south side with their captions below them, the fairway, then

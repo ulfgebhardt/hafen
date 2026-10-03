@@ -103,6 +103,15 @@
    */
   const page = ref<Page>('active')
   const query = ref('')
+  /**
+   * Whether the search draws a harbour of its own instead of marking the whole one.
+   *
+   * A switch and not the default. Marking keeps the question a drawing exists for — where the
+   * matches lie and what lies around them — and filtering trades it for a harbour that holds only
+   * them: easier to read at twenty hits, and its kinship is then the kinship *among the matches*,
+   * not the fleet's. Both are honest answers to different questions, so the reader picks one.
+   */
+  const onlyMatches = ref(false)
 
   /**
    * Switching between the two questions the harbour answers.
@@ -269,10 +278,11 @@
    *
    * Filtering rebuilt the harbour out of whatever matched, which answers "what matched" and loses
    * the question a drawing exists for: where they are, and what lies around them. The fleet stays
-   * whole, the matches are ringed, and the view moves to hold exactly them.
+   * whole, the matches are framed, and the view moves to hold exactly them. Filtering is still
+   * there, as a switch the reader turns (`onlyMatches`) — and then there is nothing left to mark.
    */
   const found = computed(() =>
-    query.value.trim() === '' ? [] : filterShips(shown.value, query.value),
+    query.value.trim() === '' || onlyMatches.value ? [] : filterShips(shown.value, query.value),
   )
 
   /** How many the search finds in the whole fleet — the useful half of "none on this page". */
@@ -286,7 +296,12 @@
    * collapse to "32 verletzt, 32 im Geltungsbereich" the moment somebody clicked it — the page
    * would answer a question nobody asked and lose the one it exists for.
    */
-  const narrowed = computed(() => filterByContract(fleet.value, contract.value))
+  const narrowed = computed(() => {
+    const owing = filterByContract(fleet.value, contract.value)
+    // The search as a filter sits beside the contract pick and for the same reason: before the
+    // bands, so the tabs, their points and the header count what is drawn.
+    return onlyMatches.value && query.value.trim() !== '' ? filterShips(owing, query.value) : owing
+  })
 
   /**
    * Which arrangement is drawn, and it follows the page rather than a switch.
@@ -665,6 +680,7 @@
       <BandTabs
         v-model:view="view"
         v-model:query="query"
+        v-model:only="onlyMatches"
         :page="page"
         :ships="narrowed"
         :contract="contract"
@@ -696,7 +712,8 @@
       <p
         v-if="
           draws(page) &&
-          ((query.trim() !== '' && found.length === 0) || (contract !== null && shown.length === 0))
+          ((query.trim() !== '' && (onlyMatches ? shown.length : found.length) === 0) ||
+            (contract !== null && shown.length === 0))
         "
         class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
       >
@@ -720,8 +737,8 @@
         -->
         <template v-else-if="matchesAnywhere === 0">Kein Schiff passt zu „{{ query }}“.</template>
         <template v-else
-          >Auf dieser Seite ist keines zu „{{ query }}“ markiert —
-          {{ matchesAnywhere }} anderswo.</template
+          >Auf dieser Seite ist keines zu „{{ query }}“
+          {{ onlyMatches ? 'gezeichnet' : 'markiert' }} — {{ matchesAnywhere }} anderswo.</template
         >
       </p>
 
