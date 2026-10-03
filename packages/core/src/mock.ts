@@ -159,6 +159,7 @@ export function mockContract(overrides: Partial<Contract> = {}): Contract {
     builds: false,
     buildsInCi: false,
     unread: [],
+    ciCommands: [],
     gaps: CHECK_ROLES.filter((role) => !scripts[role]),
     ...overrides,
   }

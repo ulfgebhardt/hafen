@@ -113,6 +113,17 @@ function evaluate(
     }
   }
 
+  // Below the size the catalog names, the demand is not owed — and that is `notApplicable`, not a
+  // gap: a nine-component site without Storybook is not behind, it is not asked.
+  const size = facts.components?.components ?? 0
+  if (quest.minComponents !== null && size < quest.minComponents) {
+    return {
+      ...base,
+      verdict: 'notApplicable',
+      reason: `gilt ab ${String(quest.minComponents)} Komponenten — dieses Schiff hat ${String(size)}`,
+    }
+  }
+
   // A prerequisite that does not apply takes this one with it, and that is not the same as
   // waiting for it: `lint-standard` behind a `lint` a Rust crate does not owe is not a demand
   // that will arrive later, it is one that never applies here. Waiting would leave it in the

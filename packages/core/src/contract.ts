@@ -130,6 +130,15 @@ export interface Contract {
    * the command, which is also how the closed tables in `role.ts` learn what to add.
    */
   unread: readonly Unread[]
+  /**
+   * Every command a CI step runs, its own and — one level, as everywhere — those of the script
+   * it hands off to.
+   *
+   * For the questions the contract does not ask itself: whether a workflow builds the stories is
+   * a quest's business, and reading the workflows a second time in the probe would be a second
+   * answer to "what does the CI run".
+   */
+  ciCommands: readonly string[]
 }
 
 /** One script whose name says what it does and whose command does not let us check. */
@@ -634,6 +643,33 @@ function readCiBuilds(
   )
 }
 
+/** Every command the CI reaches. See `Contract.ciCommands`. */
+function readCiCommands(
+  workflows: readonly string[],
+  manifests: readonly ManifestScripts[],
+): readonly string[] {
+  const reached = workflows.flatMap((raw) =>
+    runSteps(raw).flatMap((step) =>
+      splitCommands(step).flatMap((command) => {
+        const delegation = delegationOf(command)
+        if (delegation === null) {
+          return [command]
+        }
+        return [
+          command,
+          ...manifests.flatMap((manifest) => {
+            const body = manifest.scripts[delegation.script]
+            return body === undefined
+              ? []
+              : reachedCommands(manifests, manifest.dir, delegation.script, body).commands
+          }),
+        ]
+      }),
+    ),
+  )
+  return [...new Set(reached)]
+}
+
 /** Every script name a CI step hands off to — the names, resolved nowhere. */
 function readCiScripts(workflows: readonly string[]): ReadonlySet<string> {
   return new Set(
@@ -784,5 +820,6 @@ export async function detectContract(ports: ContractPorts, shipPath: string): Pr
             (role) => !scripts[role] && !unread.some((one) => one.claims === role),
           ),
     unread,
+    ciCommands: readCiCommands(workflows, manifests),
   }
 }

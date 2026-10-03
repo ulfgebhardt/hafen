@@ -19,6 +19,7 @@
 
 import { CONTRACT_SCRIPTS, readWorkflows } from './contract'
 import { SHIP_TRAITS } from './quest'
+import { runsStories } from './role'
 
 import type { Contract, ContractPorts, Unread } from './contract'
 import type { Quest, QuestCheck, ShipTrait } from './quest'
@@ -84,6 +85,21 @@ export interface QuestFacts {
    * `nicht messbar`, which is what that verdict is for.
    */
   forge: ForgeStats | null
+  /**
+   * The component files git tracks and the stories beside them — `null` where no quest asked.
+   *
+   * A count and not a list: the threshold and the evidence need the number, and a list of every
+   * `.vue` file of Leuchtturm is 286 paths nobody reads.
+   */
+  components: ComponentCount | null
+}
+
+/** What `readComponents` counts. */
+export interface ComponentCount {
+  /** `*.vue`, `*.tsx`, `*.jsx`, `*.svelte` — without stories, specs and tests. */
+  components: number
+  /** `*.stories.*`, whatever the extension: CSF in TypeScript, JavaScript or MDX. */
+  stories: number
 }
 
 /**
@@ -559,6 +575,48 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
       )
     }
 
+    /**
+     * Whether the components have stories: Storybook declared, and stories tracked beside them.
+     *
+     * Both, because either alone is a different state. A dependency without a single story is an
+     * installation nobody uses, and stories without the dependency are files nothing renders.
+     */
+    case 'storybook': {
+      const counted = facts.components
+      if (contract.members.length === 0 || counted === null) {
+        return say('die Komponenten haben Stories', 'package.json', 'kein Manifest zu lesen', null)
+      }
+      const declared = facts.dependencies.some(
+        (name) => name === 'storybook' || name.startsWith('@storybook/'),
+      )
+      const ratio = `${String(counted.stories)} Stories zu ${String(counted.components)} Komponenten`
+      return say(
+        'die Komponenten haben Stories',
+        `package.json (${manifestNote(contract)}), git ls-files`,
+        declared ? ratio : `Storybook nicht deklariert, ${ratio}`,
+        declared && counted.stories > 0,
+      )
+    }
+
+    /** And whether a workflow builds or tests them, read off the commands the CI reaches. */
+    case 'storybook-in-ci': {
+      if (facts.workflows.length === 0) {
+        return say(
+          'ein Workflow baut oder testet die Stories',
+          '.github/workflows',
+          'keine Workflows — ob eine CI das tut, sagt dieses Repository nicht',
+          null,
+        )
+      }
+      const hit = contract.ciCommands.find(runsStories)
+      return say(
+        'ein Workflow baut oder testet die Stories',
+        `.github/workflows (${workflowNote(facts)})`,
+        hit ?? 'kein Schritt baut oder testet Stories',
+        hit !== undefined,
+      )
+    }
+
     case 'abhaengigkeit': {
       const name = check.args['paket'] ?? ''
       if (contract.members.length === 0) {
@@ -672,17 +730,64 @@ async function bundlesBinary(ports: ContractPorts, shipPath: string): Promise<bo
   return found.code === 0 && found.stdout.replaceAll('\0', '').trim() !== ''
 }
 
+/**
+ * The packages a UI is written in. Closed, and the runtime package rather than the meta-framework:
+ * a Nuxt or Next app declares vue or react as well, and a VuePress site that writes components
+ * declares vue for them.
+ */
+const UI_FRAMEWORKS: readonly string[] = [
+  'vue',
+  'react',
+  'svelte',
+  'solid-js',
+  'preact',
+  'lit',
+  '@angular/core',
+]
+
+/** The suffixes a component file carries. */
+const COMPONENT_FILES: readonly string[] = ['.vue', '.tsx', '.jsx', '.svelte']
+
+/**
+ * Component files and stories, asked of git in one call.
+ *
+ * Tracked files only, like the manifests: `node_modules` and build output hold thousands of
+ * `.vue` files that are nobody's components.
+ */
+async function readComponents(ports: ContractPorts, shipPath: string): Promise<ComponentCount> {
+  const found = await ports.proc.run(
+    'git',
+    ['ls-files', '-z', '--', ...COMPONENT_FILES.map((suffix) => `*${suffix}`), '*.stories.*'],
+    shipPath,
+  )
+  const paths = found.code === 0 ? found.stdout.split('\0').filter((path) => path !== '') : []
+  const name = (path: string): string => path.split('/').pop() ?? path
+  return {
+    components: paths.filter(
+      (path) =>
+        COMPONENT_FILES.some((suffix) => path.endsWith(suffix)) &&
+        !/\.(?:stories|spec|test)\./u.test(name(path)),
+    ).length,
+    stories: paths.filter((path) => name(path).includes('.stories.')).length,
+  }
+}
+
 /** What the ship is, of the traits a quest may ask for. */
 async function readTraits(
   ports: ContractPorts,
   shipPath: string,
   contract: Contract,
   asked: ReadonlySet<string>,
+  dependencies: readonly string[],
+  components: ComponentCount | null,
 ): Promise<readonly ShipTrait[]> {
   const has: Record<ShipTrait, boolean> = {
     node: contract.kind !== 'other',
     rust: (await ports.fs.readFile(`${shipPath}/Cargo.toml`)) !== null,
     tauri: asked.has('tauri') && (await bundlesBinary(ports, shipPath)),
+    frontend:
+      (components?.components ?? 0) > 0 &&
+      dependencies.some((name) => UI_FRAMEWORKS.includes(name)),
   }
   return SHIP_TRAITS.filter((trait) => has[trait])
 }
@@ -702,21 +807,30 @@ export async function measureQuests(
   forge: ForgeStats | null = null,
 ): Promise<QuestFacts> {
   const paths = wantedFiles(catalog)
-  const asksDependencies = catalog.some((quest) =>
-    quest.checks.some((check) => check.probe === 'abhaengigkeit'),
-  )
   // Which traits any quest gates on at all. The cheap ones are measured regardless; the ones that
   // cost a git call are not, and this is what tells them apart.
   const askedTraits = new Set(catalog.flatMap((quest) => quest.appliesTo))
+  const asksStories = catalog.some((quest) =>
+    quest.checks.some((check) => check.probe === 'storybook'),
+  )
+  const asksComponents =
+    asksStories ||
+    askedTraits.has('frontend') ||
+    catalog.some((quest) => quest.minComponents !== null)
+  const asksDependencies =
+    asksStories ||
+    askedTraits.has('frontend') ||
+    catalog.some((quest) => quest.checks.some((check) => check.probe === 'abhaengigkeit'))
 
-  const [files, dependencies, workflows, traits] = await Promise.all([
+  const [files, dependencies, workflows, components] = await Promise.all([
     Promise.all(
       paths.map(async (path) => [path, await ports.fs.readFile(`${shipPath}/${path}`)] as const),
     ),
     asksDependencies ? readDependencies(ports, shipPath, contract) : Promise.resolve([]),
     readWorkflows(ports.fs, shipPath),
-    readTraits(ports, shipPath, contract, askedTraits),
+    asksComponents ? readComponents(ports, shipPath) : Promise.resolve(null),
   ])
+  const traits = await readTraits(ports, shipPath, contract, askedTraits, dependencies, components)
 
   /*
    * And the files the workflows themselves name — a second pass, because their paths are not
@@ -746,5 +860,6 @@ export async function measureQuests(
     dependencies,
     workflows,
     forge,
+    components,
   }
 }

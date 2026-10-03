@@ -164,6 +164,7 @@ fordert eine frische Installation von Anfang an etwas:
 store/quests/werft/lint.md              # ein Schritt misst Lint, und die CI ruft ihn auf
 store/quests/werft/gitignore.md         # .gitignore liegt im Wurzelverzeichnis
 store/quests/werft/env-ignoriert.md     # sie nennt .env, bevor jemand eine anlegt
+store/quests/werft/storybook.md         # Stories für jedes Frontend ab 30 Komponenten
 store/quests/flagge/lizenz.md           # LICENSE, LICENCE oder COPYING — eine davon
 store/quests/auslauf/release-please.md  # der Release-Weg liegt im Repo
 ```
@@ -173,6 +174,10 @@ Technik, `auslauf` der Weg nach draußen, `flagge` was das Projekt über sich sa
 nennt ihre Prüfung im Frontmatter, ihre Begründung im Fließtext, und was sie **nicht** messen
 kann, benennt sie als `manuell` — der blinde Fleck soll klein und benannt sein, statt still zu
 wachsen.
+
+Wem eine Quest gilt, sagt sie selbst: `gilt_fuer` nennt gemessene Merkmale (`node`, `rust`,
+`tauri`, `frontend`), `ab_komponenten` eine Größe. Darunter ist sie `nicht anwendbar` — eine
+Seite mit neun Komponenten ohne Storybook ist nicht im Rückstand, sie wird nicht gefragt.
 
 Daneben steht der **Store**: `$HAFEN_STORE`, sonst `$XDG_DATA_HOME/hafen` (meist
 `~/.local/share/hafen`). Er ist eine Ergänzung und keine Voraussetzung — in ihm steht, was eine

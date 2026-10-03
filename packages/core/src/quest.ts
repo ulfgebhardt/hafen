@@ -50,8 +50,12 @@ export type ProbeKind = (typeof PROBE_KINDS)[number]
  * trait called `binary` would claim to recognise every repository that ships an executable, and
  * what the measurement sees is one bundler's config file — then a Go program with no self-update
  * would carry a gap it was never asked about. The narrow name is the honest one.
+ *
+ * `frontend` the same way: a UI framework among the dependencies *and* component files in the
+ * tree. Either alone is not enough — a lint config declares vue to test its rules without
+ * rendering anything, and a backend writes its mail templates as `*.tsx` without any UI.
  */
-export const SHIP_TRAITS = ['node', 'rust', 'tauri'] as const
+export const SHIP_TRAITS = ['node', 'rust', 'tauri', 'frontend'] as const
 
 export type ShipTrait = (typeof SHIP_TRAITS)[number]
 
@@ -85,6 +89,15 @@ export interface Quest {
   requires: readonly string[]
   /** Which ships owe it. Empty means every ship. */
   appliesTo: readonly ShipTrait[]
+  /**
+   * From how many components on a ship owes it, or `null` for any size.
+   *
+   * A decision, so it stands in the file (`ab_komponenten`) and not in the probe. Storybook was
+   * the case that needed it: measured on 02.10.2026, 25 ships carry a frontend, and the demand
+   * that pays off at Leuchtturm's 286 components is upkeep without return at pinne' six.
+   * Below the threshold the quest does not apply — it is not a gap a small site carries.
+   */
+  minComponents: number | null
   checks: readonly QuestCheck[]
   /** Why the fleet demands this. Shown beside the verdict — a demand without it is an order. */
   why: string
@@ -264,6 +277,7 @@ export function parseQuest(text: string): Quest | null {
   let why = ''
   let requires: readonly string[] = []
   let appliesTo: readonly string[] = []
+  let minComponents: number | null = null
   let kind: ProbeKind = 'datei'
   let checksAt = -1
 
@@ -288,6 +302,13 @@ export function parseQuest(text: string): Quest | null {
       case 'gilt_fuer':
         appliesTo = readList(lines, index, line.value)
         break
+      case 'ab_komponenten': {
+        // A number or nothing: a threshold that does not parse would otherwise read as zero and
+        // quietly demand the quest of every ship.
+        const parsed = Number.parseInt(value, 10)
+        minComponents = Number.isInteger(parsed) && parsed > 0 ? parsed : null
+        break
+      }
       case 'warum':
         why = value === '>' || value === '|' ? readBlockScalar(lines, index) : value
         break
@@ -327,6 +348,7 @@ export function parseQuest(text: string): Quest | null {
     appliesTo: appliesTo.filter((trait): trait is ShipTrait =>
       (SHIP_TRAITS as readonly string[]).includes(trait),
     ),
+    minComponents,
     checks: checksAt === -1 ? [] : readChecks(lines, checksAt, kind),
     why,
   }
@@ -392,6 +414,9 @@ export function renderQuest(quest: Quest): string {
   }
   if (quest.appliesTo.length > 0) {
     lines.push(`gilt_fuer: ${inlineList(quest.appliesTo)}`)
+  }
+  if (quest.minComponents !== null) {
+    lines.push(`ab_komponenten: ${String(quest.minComponents)}`)
   }
   lines.push(PRUEFUNG + ':', `  ${ART}: ${common}`, `  ${CHECKS}:`)
 

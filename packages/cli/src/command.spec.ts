@@ -36,6 +36,7 @@ function quest(id: string, overrides: Partial<Quest> = {}): Quest {
     title: id,
     requires: [],
     appliesTo: [],
+    minComponents: null,
     checks: [],
     why: 'weil es die Flotte fordert',
     ...overrides,
