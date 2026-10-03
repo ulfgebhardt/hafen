@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { BERTH, BLOCK, contentHeight, project, rowsAt, unproject, UNIT } from './plan'
+import { BERTH, berthBox, BLOCK, contentHeight, project, rowsAt, unproject, UNIT } from './plan'
 import { BERTH_SLACK, SIZE } from './vessel'
 
 describe(project, () => {
@@ -39,6 +39,38 @@ describe('what a berth holds', () => {
     expect(BERTH.laneCentre).toBeGreaterThan(SIZE.maxBeam / 2)
     // And room to lie off it, which is what the hygiene reading spends.
     expect(BERTH.lane - BERTH.laneCentre).toBeGreaterThan(BERTH_SLACK)
+  })
+})
+
+describe(berthBox, () => {
+  /**
+   * What a search frames is what a click picks. It used to be a circle round the stern with half a
+   * hull for a radius — the back half of the boat, and none of the pier her debts stand on.
+   */
+  it('holds the pier, the widest hull lying off and her caption', () => {
+    const box = berthBox(1)
+    const top = box.y
+    const bottom = box.y + box.height
+
+    expect(top).toBeLessThanOrEqual(-(BERTH.laneCentre + BERTH.pier))
+    expect(bottom).toBeGreaterThanOrEqual(SIZE.maxBeam / 2 + BERTH_SLACK + BERTH.caption)
+  })
+
+  it('holds the longest hull from stern to stem', () => {
+    const box = berthBox(1)
+
+    expect(box.x).toBeLessThanOrEqual(0)
+    expect(box.x + box.width).toBeGreaterThanOrEqual(SIZE.maxLength)
+  })
+
+  /** The two rows of a pier face each other, so one box is the other turned over. */
+  it('mirrors with the side of the pier', () => {
+    const north = berthBox(1)
+    const south = berthBox(-1)
+
+    expect(south.height).toBe(north.height)
+    expect(south.y).toBe(-(north.y + north.height))
+    expect(south.x).toBe(north.x)
   })
 })
 

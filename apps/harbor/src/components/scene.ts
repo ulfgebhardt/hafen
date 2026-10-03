@@ -37,7 +37,7 @@ import { cutOf, flagTint, fleetlets } from './flags'
 import { ageLabel, drift, fit } from './fleet'
 import { harbourOf } from './lanes'
 import { reachOf, shoreOf, walksOf } from './moorings'
-import { BERTH, project, UNIT } from './plan'
+import { BERTH, berthBox, project, UNIT } from './plan'
 import { HULL_COLOR, MARK_COLOR, SCENE, SEGMENT, VERDICT_COLOR } from './theme'
 import { lanesOf, networkOf, PACE, routesOf, stepFrom } from './traffic'
 import { livelinessOf, readingsOf, traitsOf } from './traits'
@@ -557,8 +557,10 @@ interface Placed {
   ship: Ship
   /** Where her berth sits in the drawing, in pixels — what `focus` centres the window on. */
   spot: { x: number; y: number }
-  /** The ring that says a search found her. Its own layer: a found ship may also be the chosen one. */
+  /** The frame that says a search found her. Its own layer: a found ship may also be the chosen one. */
   found: Graphics
+  /** Which way her berth is mirrored — the frame is drawn in the berth's own coordinates. */
+  side: Side
   /** The halo under the hull. */
   chosen: Graphics
   /** The ring around one box aboard — in the body, because the cargo moves with her. */
@@ -1465,14 +1467,8 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
       // wide, so two neighbours can never both claim a click.
       slot.eventMode = 'static'
       slot.cursor = 'pointer'
-      slot.hitArea = new Rectangle(
-        -2 * UNIT,
-        side === 1
-          ? -(BERTH.pier + BERTH.laneCentre) * UNIT
-          : -(BERTH.lane - BERTH.laneCentre + BERTH.caption) * UNIT,
-        BERTH.pitch * UNIT,
-        (BERTH.pier + BERTH.lane + BERTH.caption) * UNIT,
-      )
+      const box = berthBox(side)
+      slot.hitArea = new Rectangle(box.x * UNIT, box.y * UNIT, box.width * UNIT, box.height * UNIT)
       slot.on('pointerover', onEnter(berth.ship))
       slot.on('pointertap', onTap(berth.ship, hull, offset, reach, body, quayside))
 
@@ -1591,6 +1587,7 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         ship: berth.ship,
         spot: { x: flat.x + (BERTH.pitch / 2) * UNIT, y: flat.y },
         found,
+        side,
         chosen,
         aboard,
         ashore,
@@ -2042,10 +2039,13 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
         if (!wanted.has(entry.ship.path)) {
           continue
         }
-        // A ring round the whole berth and not a tint on the hull: the chosen ship already owns
-        // the hull's outline, and two marks on one shape would be one mark nobody can read.
+        // A frame round the whole berth and not a tint on the hull: the chosen ship already owns
+        // the hull's outline, and two marks on one shape would be one mark nobody can read. The
+        // berth and not the hull, because a search finds a repository, and what it still owes
+        // stands on the pier beside her.
+        const box = berthBox(entry.side)
         entry.found
-          .circle(0, 0, (entry.hull.length / 2 + 4) * UNIT)
+          .roundRect(box.x * UNIT, box.y * UNIT, box.width * UNIT, box.height * UNIT, 2 * UNIT)
           .stroke({ width: 3, color: accent, alpha: 0.75 })
       }
       frame(ships)

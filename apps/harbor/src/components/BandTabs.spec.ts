@@ -35,6 +35,32 @@ describe('filtering a page', () => {
 
     expect(tabs.emitted('update:query')?.at(-1)).toStrictEqual([''])
   })
+
+  /** Marking or filtering is the reader's choice, and it says which one is on. */
+  it('switches between marking the matches and drawing only them', async () => {
+    const tabs = mount(BandTabs, {
+      props: { page: 'active', view: 'dock', ships: [ship()], query: 'x', only: false },
+    })
+    const toggle = (): ReturnType<typeof tabs.find> =>
+      tabs.findAll('button').find((one) => one.text() === 'nur Treffer') ?? tabs.find('nope')
+
+    expect(toggle().attributes('aria-pressed')).toBe('false')
+
+    await toggle().trigger('click')
+
+    expect(tabs.emitted('update:only')).toStrictEqual([[true]])
+
+    await tabs.setProps({ only: true })
+
+    expect(toggle().attributes('aria-pressed')).toBe('true')
+  })
+
+  /** A switch for an empty search would change nothing, and a control that does nothing reads as broken. */
+  it('offers the switch only while something is searched for', () => {
+    const tabs = mount(BandTabs, { props: { page: 'active', view: 'dock', ships: [ship()] } })
+
+    expect(tabs.findAll('button').some((one) => one.text() === 'nur Treffer')).toBe(false)
+  })
 })
 
 describe('the two questions the bar offers pages for', () => {

@@ -1171,4 +1171,43 @@ describe('searching the harbour', () => {
     expect(page.text()).toContain('Kein Schiff passt zu')
     expect(page.findComponent({ name: 'HarborScene' }).props('ships') as unknown[]).toHaveLength(3)
   })
+
+  /**
+   * Filtering is still there, as a switch. Then the harbour is built out of the matches alone,
+   * and nothing is marked: every ship drawn is one, so a frame would say nothing.
+   */
+  it('draws only the matches once the reader asks for that', async () => {
+    const page = await open()
+
+    await page.find('input[type="search"]').setValue('hafen')
+    await flushPromises()
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'nur Treffer')
+      ?.trigger('click')
+    await flushPromises()
+
+    const scene = page.findComponent({ name: 'HarborScene' })
+
+    expect(
+      (scene.props('ships') as readonly { name: string }[]).map((one) => one.name),
+    ).toStrictEqual(['hafen', 'hafen-data'])
+    expect(scene.props('found')).toStrictEqual([])
+  })
+
+  /** Filtered to nothing, the window says so rather than drawing an empty basin. */
+  it('says so where the filter leaves nothing', async () => {
+    const page = await open()
+
+    await page.find('input[type="search"]').setValue('gibtesnicht')
+    await flushPromises()
+    await page
+      .findAll('button')
+      .find((one) => one.text() === 'nur Treffer')
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('Kein Schiff passt zu')
+    expect(page.findComponent({ name: 'HarborScene' }).props('ships')).toStrictEqual([])
+  })
 })
