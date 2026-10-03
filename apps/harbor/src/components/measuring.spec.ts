@@ -23,9 +23,7 @@ describe(shareOf, () => {
 
 describe(readingOf, () => {
   it('shortens a path to the two parts that name the repository', () => {
-    expect(readingOf({ ...NOTHING_RUNNING, path: '/home/x/.data/sources/org/ship' })).toBe(
-      'org/ship',
-    )
+    expect(readingOf({ ...NOTHING_RUNNING, path: '/home/x/code/src/org/ship' })).toBe('org/ship')
   })
 
   it('has nothing to say before the first one lands', () => {

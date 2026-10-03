@@ -31,8 +31,8 @@ import type { ForgeReading, ForgeStats, Ports, Quest, Register, Ship, Unread } f
  *
  * Comma-separated, the same shape `$HAFEN_EMAILS` uses — one convention for "several of these"
  * rather than two. An argument beats it, and it beats the register; neither and no register, and
- * the answer is nothing. Until 03.10.2026 the fallback was `~/.data/sources` and `~/.data/games`,
- * one person's habit shipped as everybody's default: a guess list with two entries.
+ * the answer is nothing. Until 03.10.2026 the fallback was two fixed directories of one person's
+ * own convention, shipped as everybody's default: a guess list with two entries.
  */
 // eslint-disable-next-line n/no-process-env -- the roots have to be movable without an argument
 export const GIVEN_ROOTS: readonly string[] = (process.env['HAFEN_ROOT'] ?? '')

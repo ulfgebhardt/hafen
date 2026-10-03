@@ -673,7 +673,7 @@ const NOT_A_SHIP = new Set([
   '.venv',
   'venv',
   // portmod keeps twelve package sources under `<game>/portmod/repos/`. Measured on this
-  // machine: one real project under `~/.data/games` and twelve of these.
+  // machine: one real project under `~/code/games` and twelve of these.
   'portmod',
 ])
 
@@ -878,11 +878,11 @@ export interface SurveyOptions extends InspectOptions {
  * Every repository under any of the roots, each of them once.
  *
  * Roots plural, because a machine keeps its projects in more than one place: this one has
- * `~/.data/sources` and `~/.data/games`, and the second holds exactly one real project among a
+ * `~/code/src` and `~/code/games`, and the second holds exactly one real project among a
  * dozen package caches. A single root meant that project simply did not exist.
  *
  * Deduplicated **after resolving links**, and the second half is what the first could not do.
- * Overlapping roots were always folded — `~/.data` and `~/.data/sources` are a reasonable pair to
+ * Overlapping roots were always folded — `~/code` and `~/code/src` are a reasonable pair to
  * hand in — but a link is invisible to a string comparison. Measured on this machine:
  * `kombuese/addons/AddOns` is linked into five game directories and drew as six identical ships
  * of 948 days, filling a third of the basin with one repository.
