@@ -3,10 +3,10 @@ import { BRANCH_FORMAT, defaultBranchOf, parseBranches } from './branches'
 import { mergeCatalogs, readShipCatalog } from './catalog'
 import { evaluateQuests } from './chain'
 import { detectContract } from './contract'
-import { forgeOf } from './forge'
+import { BUILTIN_FORGES, forgeOf } from './forge'
 import { measureLineage } from './lineage'
 import { measureQuests } from './probe'
-import { EMPTY_REGISTER } from './register'
+import { EMPTY_REGISTER, forgesOf } from './register'
 import { statsFor } from './stats'
 import { parseSubmodules } from './submodules'
 import { daysSince } from './time'
@@ -16,7 +16,7 @@ import { countStash, hasOpenWork, readWorking } from './working'
 import type { Branch } from './branches'
 import type { QuestResult } from './chain'
 import type { Contract } from './contract'
-import type { Forge } from './forge'
+import type { Forge, ForgeHost } from './forge'
 import type { Lineage } from './lineage'
 import type { Ports } from './ports'
 import type { Quest } from './quest'
@@ -253,7 +253,7 @@ async function git(ports: Ports, path: string, args: readonly string[]): Promise
  * position: a repository whose remotes are `upstream` and `fork` has none, and `remotes[0]`
  * would quietly promote a stranger.
  */
-function parseRemotes(output: string | null): readonly Remote[] {
+function parseRemotes(output: string | null, known: readonly ForgeHost[]): readonly Remote[] {
   if (output === null) {
     return []
   }
@@ -272,7 +272,7 @@ function parseRemotes(output: string | null): readonly Remote[] {
 
   return [...byName]
     .sort(([a], [b]) => Number(b === ORIGIN) - Number(a === ORIGIN))
-    .map(([name, url]) => ({ name, url, forge: forgeOf(url) }))
+    .map(([name, url]) => ({ name, url, forge: forgeOf(url, known) }))
 }
 
 /**
@@ -398,6 +398,8 @@ export interface InspectOptions {
    * which is the fifth verdict doing its job.
    */
   forge?: readonly ForgeStats[]
+  /** Which hosts run which forge — the shipped one and the register's. */
+  forges?: readonly ForgeHost[]
 }
 
 /**
@@ -442,7 +444,14 @@ export async function inspectShip(
   path: string,
   options: InspectOptions = {},
 ): Promise<Ship> {
-  const { catalog = [], ownEmails = [], archived = false, enlisted = false, forge = [] } = options
+  const {
+    catalog = [],
+    ownEmails = [],
+    archived = false,
+    enlisted = false,
+    forge = [],
+    forges = BUILTIN_FORGES,
+  } = options
   const segments = path.split('/').filter((segment) => segment !== '')
   const name = segments.at(-1) ?? path
   const org = segments.at(-2) ?? ''
@@ -569,7 +578,7 @@ export async function inspectShip(
    * only `origin` has nothing to compare against. See `lineage.ts`: until now every one of these
    * was called a mirror, and for the Leuchtturm upstreams that said the opposite of the truth.
    */
-  const lineage = await measureLineage(ports, path, parseRemotes(remotes), defaultBranch)
+  const lineage = await measureLineage(ports, path, parseRemotes(remotes, forges), defaultBranch)
   const rustDays = daysSince(lastCommit, ports.clock.now())
   const { ahead, behind } = parseTracking(tracking)
   // `dirty` is derived and no longer measured on its own: two readings of one porcelain would be
@@ -605,7 +614,7 @@ export async function inspectShip(
             path,
             contract,
             merged.quests,
-            statsFor(forge, parseRemotes(remotes)),
+            statsFor(forge, parseRemotes(remotes, forges)),
           ),
         )
 
@@ -613,7 +622,7 @@ export async function inspectShip(
     name,
     org,
     path,
-    remotes: parseRemotes(remotes),
+    remotes: parseRemotes(remotes, forges),
     lineage,
     branch,
     dirty,
@@ -978,6 +987,7 @@ export async function surveyHarbor(
       archived: archived.has(path),
       enlisted: adopted.has(path),
       forge,
+      forges: forgesOf(register),
     })
     measured.set(path, ship)
     progress.onShip?.(ship)

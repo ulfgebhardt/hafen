@@ -69,8 +69,12 @@ Technik, das Werkzeug ist der Hafen; kein Konflikt.
 - **Kein Zustand, der auch abgeleitet werden kann.** Rost aus `git log`, Verträge aus den
   Manifesten, Urteile aus den Quests. Ein gepflegtes Statusfeld kann falsch stehen, eine
   abgeleitete Antwort nicht.
-- **Keine Datenbank.** Im Register stehen genau zwei Dinge: was archiviert ist und welche
-  Verzeichnisse von Hand aufgenommen wurden. Beides sind Entscheidungen, keine Messungen.
+- **Keine Datenbank.** Im Register stehen nur Entscheidungen, keine Messungen: was archiviert
+  ist, welche Verzeichnisse von Hand aufgenommen wurden, wo die Projekte liegen (Wurzeln) und
+  welcher selbst gehostete Host welche Forge ist. Die letzten beiden stehen dort, weil sie Fakten
+  *einer* Maschine sind: bis 03.10.2026 rieten CLI und Code sie — zwei Verzeichnisse einer Person
+  als Default und deren Gitea in der Forge-Tabelle, ausgeliefert an jeden. Mitgeliefert wird nur
+  `github.com`; ohne Wurzel sagt die CLI, wie man eine angibt, statt zu raten.
 - **`git` wird als Kommando aufgerufen, nicht als Bibliothek.**
 - **Zusammengehörigkeit wird gemessen, nicht gefiltert** (`kin.ts`). Drei Kanten, alle schon
   irgendwo aufgeschrieben: ein geteilter Wurzel-Commit (`git rev-list --max-parents=0 HEAD`), ein

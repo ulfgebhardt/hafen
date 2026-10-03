@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import {
   EMPTY_REGISTER,
   FORGE_LANES,
+  forgesOf,
   inLanes,
   inspectShip,
   isRead,
@@ -13,8 +14,10 @@ import {
   readQuestCatalog,
   readStats,
   renderRegister,
+  rootsFor,
   setArchived,
   setEnlisted,
+  setRoot,
   slugsOf,
   surveyHarbor,
 } from '@hafen/core'
@@ -24,34 +27,25 @@ import { renderHarbor, renderPoints } from './render'
 import type { ForgeReading, ForgeStats, Ports, Quest, Register, Ship, Unread } from '@hafen/core'
 
 /**
- * Where to look for repositories — the one thing the harbor cannot derive.
+ * Where to look for repositories, if somebody said so in the environment.
  *
- * `$HAFEN_ROOT`, else `~/.data/sources`, and the argument beats both. The default is one
- * person's habit and is stated as such: a tool that only works for whoever wrote it is not a
- * tool, and every path here is overridable for exactly that reason.
+ * Comma-separated, the same shape `$HAFEN_EMAILS` uses — one convention for "several of these"
+ * rather than two. An argument beats it, and it beats the register; neither and no register, and
+ * the answer is nothing. Until 03.10.2026 the fallback was `~/.data/sources` and `~/.data/games`,
+ * one person's habit shipped as everybody's default: a guess list with two entries.
  */
 // eslint-disable-next-line n/no-process-env -- the roots have to be movable without an argument
-const GIVEN_ROOTS = process.env['HAFEN_ROOT']
+export const GIVEN_ROOTS: readonly string[] = (process.env['HAFEN_ROOT'] ?? '')
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter((entry) => entry !== '')
 
-/**
- * Where to look, as a list.
- *
- * Plural because a machine keeps its projects in more than one place: this one has
- * `~/.data/sources` and `~/.data/games`, and the second holds a real project among a dozen
- * package caches. With one root that project simply did not exist.
- *
- * Comma-separated in `$HAFEN_ROOT`, the same shape `$HAFEN_EMAILS` uses — one convention for
- * "several of these" rather than two.
- */
-export const DEFAULT_ROOTS: readonly string[] =
-  GIVEN_ROOTS === undefined || GIVEN_ROOTS === ''
-    ? [`${homedir()}/.data/sources`, `${homedir()}/.data/games`]
-    : GIVEN_ROOTS.split(',')
-        .map((entry) => entry.trim())
-        .filter((entry) => entry !== '')
-
-/** The first root, for the places that still name one — the usage line, and an error. */
-export const DEFAULT_ROOT = DEFAULT_ROOTS[0] ?? `${homedir()}/.data/sources`
+/** What the CLI says when nobody has told it where to look — every way to answer, once. */
+export const NO_ROOTS =
+  'hafen: keine Wurzel - wo liegen deine Projekte?\n' +
+  '  hafen <befehl> <wurzel>            einmalig\n' +
+  '  HAFEN_ROOT=<wurzel>[,<wurzel>]     fuer diese Shell\n' +
+  '  hafen register wurzel <wurzel>     dauerhaft, im Register (wie die Frage im Fenster)\n'
 
 /**
  * Where the fleet catalog lies — the quests, and the register.
@@ -97,9 +91,9 @@ export const USAGE = `hafen <befehl> [wurzel] [--json] [--evidenz]
   punkte          was die Projekte geleistet haben, und was davon deins ist
   schnappschuss   alles als JSON
   forge           was GitHub und Gitea zu den Repos sagen (eigene Datei, eigener Zeitpunkt)
-  register <was> <pfad>   archivieren | reaktivieren | aufnehmen | entfernen
+  register <was> <pfad>   archivieren | reaktivieren | aufnehmen | entfernen | wurzel | entwurzeln
 
-  wurzel      Default: ${DEFAULT_ROOTS.join(', ')}
+  wurzel      sonst HAFEN_ROOT, sonst die Wurzeln im Register
   --json      maschinenlesbar statt Text
   --evidenz   je Quest zeigen, was gelesen wurde
   --nur=PFAD  nur dieses eine Repository messen
@@ -117,8 +111,8 @@ eines Menschen, nie etwas Gemessenes.
 /**
  * What `register` can be told to do.
  *
- * Four words and not two flags, because the four are what a person says: a repository is put away
- * or fetched back, a directory is taken on or dropped. A `--archiviert=true` would be the same
+ * Words and not flags, because they are what a person says: a repository is put away or fetched
+ * back, a directory is taken on or dropped, a place is where projects grow or no longer. A `--archiviert=true` would be the same
  * thing written as a machine would write it.
  */
 export const REGISTER_ACTIONS = {
@@ -126,6 +120,8 @@ export const REGISTER_ACTIONS = {
   reaktivieren: { field: 'archived', on: false },
   aufnehmen: { field: 'enlisted', on: true },
   entfernen: { field: 'enlisted', on: false },
+  wurzel: { field: 'roots', on: true },
+  entwurzeln: { field: 'roots', on: false },
 } as const
 
 export type RegisterAction = keyof typeof REGISTER_ACTIONS
@@ -181,9 +177,6 @@ async function readForge(ports: Ports, flags: readonly string[]): Promise<readon
 export async function main(argv: readonly string[], ports: Ports): Promise<number> {
   const flags = argv.filter((arg) => arg.startsWith('--'))
   const [command, rootArg] = argv.filter((arg) => !arg.startsWith('--'))
-  // An argument names one root and replaces the list; without it, every default root is read.
-  const roots = rootArg === undefined ? DEFAULT_ROOTS : [rootArg]
-  const root = roots[0] ?? DEFAULT_ROOT
   const store = storeFrom(flags)
   const asJson = flags.includes('--json')
 
@@ -257,8 +250,22 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
     return raw === null ? EMPTY_REGISTER : parseRegister(raw)
   }
 
+  /**
+   * Where to look: the argument, else `$HAFEN_ROOT`, else the register — the same order the window
+   * uses, from the same function. `null` means nobody has said, and the caller says so.
+   */
+  const whereToLook = async (): Promise<readonly string[] | null> => {
+    const roots = rootsFor(rootArg === undefined ? GIVEN_ROOTS : [rootArg], await registry())
+    return roots.length > 0 ? roots : null
+  }
+
   switch (command) {
     case 'hafen': {
+      const roots = await whereToLook()
+      if (roots === null) {
+        process.stderr.write(NO_ROOTS)
+        return 2
+      }
       const ships = await surveyHarbor(ports, roots, {
         register: await registry(),
         catalog: await demands(),
@@ -272,6 +279,11 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       return 0
     }
     case 'punkte': {
+      const roots = await whereToLook()
+      if (roots === null) {
+        process.stderr.write(NO_ROOTS)
+        return 2
+      }
       const own = await identities()
       const ships = await surveyHarbor(ports, roots, {
         register: await registry(),
@@ -327,24 +339,34 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
             },
           }
         : {}
-      const ships =
-        one === undefined || one === ''
-          ? await surveyHarbor(ports, roots, {
-              register: await registry(),
+      const whole = one === undefined || one === ''
+      const roots = whole ? await whereToLook() : []
+      if (roots === null) {
+        process.stderr.write(NO_ROOTS)
+        return 2
+      }
+      const ships = whole
+        ? await surveyHarbor(ports, roots, {
+            register: await registry(),
+            catalog: await demands(),
+            ownEmails: await identities(),
+            progress,
+            forge,
+          })
+        : [
+            await inspectShip(ports, one, {
               catalog: await demands(),
               ownEmails: await identities(),
-              progress,
+              archived: (await registry()).archived.includes(one),
               forge,
-            })
-          : [
-              await inspectShip(ports, one, {
-                catalog: await demands(),
-                ownEmails: await identities(),
-                archived: (await registry()).archived.includes(one),
-                forge,
-              }),
-            ]
-      const snapshot: Snapshot = { at: ports.clock.now().toISOString(), root, ships }
+              forges: forgesOf(await registry()),
+            }),
+          ]
+      const snapshot: Snapshot = {
+        at: ports.clock.now().toISOString(),
+        root: roots[0] ?? '',
+        ships,
+      }
       write(snapshot)
       return 0
     }
@@ -361,7 +383,13 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
      * patches or deletes, and both tools use the login the person already has.
      */
     case 'forge': {
-      const ships = await surveyHarbor(ports, roots, { register: await registry() })
+      const roots = await whereToLook()
+      if (roots === null) {
+        process.stderr.write(NO_ROOTS)
+        return 2
+      }
+      const register = await registry()
+      const ships = await surveyHarbor(ports, roots, { register })
       const wanted = slugsOf(ships)
       const stats: ForgeStats[] = []
       const unread: Unread[] = []
@@ -369,7 +397,7 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       // eslint-disable-next-line n/no-process-env -- a token belongs in the environment, not a flag
       const token = process.env['HAFEN_GITEA_TOKEN'] ?? null
       await inLanes(wanted, FORGE_LANES, async (slug) => {
-        const answer = await readStats(ports, slug, token === '' ? null : token)
+        const answer = await readStats(ports, slug, token === '' ? null : token, forgesOf(register))
         if (isRead(answer)) {
           stats.push(answer)
         } else {
@@ -407,7 +435,11 @@ export async function main(argv: readonly string[], ports: Ports): Promise<numbe
       const { field, on } = REGISTER_ACTIONS[action as RegisterAction]
       const before = await registry()
       const after =
-        field === 'archived' ? setArchived(before, path, on) : setEnlisted(before, path, on)
+        field === 'archived'
+          ? setArchived(before, path, on)
+          : field === 'enlisted'
+            ? setEnlisted(before, path, on)
+            : setRoot(before, path, on)
 
       const failure = await ports.fs.writeFile(`${store}/register.md`, renderRegister(after))
       if (failure !== null) {

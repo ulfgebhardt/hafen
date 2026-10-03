@@ -87,6 +87,7 @@ describe(registerIn, () => {
       archived: [],
       enlisted: [],
       roots: [],
+      forges: [],
     })
   })
 })

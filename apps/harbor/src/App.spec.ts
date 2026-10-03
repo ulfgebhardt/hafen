@@ -836,12 +836,19 @@ describe('the forge, from the window', () => {
     port_run: { code: 0, stdout: GRAPHQL, stderr: '' },
     port_places: { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] },
     port_write_file: null,
+    // No register yet: the forges this machine knows are then the shipped one alone.
+    port_read_file: null,
   }
 
   /** The ship the reading is about: matched on `origin`, which is the only thing that matches. */
   const withOrigin = {
     ...snapshot,
-    ships: [{ ...ship(), remotes: [{ name: 'origin', url: 'git@github.com:org/ship.git' }] }],
+    ships: [
+      {
+        ...ship(),
+        remotes: [{ name: 'origin', url: 'git@github.com:org/ship.git', forge: 'github' }],
+      },
+    ],
   }
 
   /**
@@ -879,11 +886,17 @@ describe('the forge, from the window', () => {
    * "gefragt" over a reading missing a sixth of the fleet is the quiet kind of lie.
    */
   it('says how many went unanswered, and what the first one said', async () => {
-    /* A Gitea repository whose server refuses: `curl --fail` comes back non-zero. */
+    /*
+     * A Gitea repository whose server refuses: `curl --fail` comes back non-zero. The host is
+     * known because this machine's register names it — the code ships GitHub and nothing else.
+     */
     const gitea = {
       ...snapshot,
       ships: [
-        { ...ship(), remotes: [{ name: 'origin', url: 'git@git.seefahrt.example:org/zu.git' }] },
+        {
+          ...ship(),
+          remotes: [{ name: 'origin', url: 'git@git.example.org:org/zu.git', forge: 'gitea' }],
+        },
       ],
     }
     bridgeBy((command, args) => {
@@ -892,6 +905,9 @@ describe('the forge, from the window', () => {
       }
       if (command === 'port_places') {
         return { store: '/store', snapshot: '/cache/snapshot.json', roots: ['/repos'] }
+      }
+      if (command === 'port_read_file') {
+        return '## Forges\n\n- git.example.org gitea\n'
       }
       if (command === 'port_run') {
         return { code: 22, stdout: '', stderr: '401 Unauthorized' }

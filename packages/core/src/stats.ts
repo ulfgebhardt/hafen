@@ -15,8 +15,9 @@
  * host. The survey's promise is unchanged: the harbour changes no repository, here or there.
  */
 
-import { forgeOf } from './forge'
+import { BUILTIN_FORGES, forgeOf } from './forge'
 
+import type { ForgeHost } from './forge'
 import type { Ports } from './ports'
 import type { Ship } from './ship'
 
@@ -314,8 +315,9 @@ export async function readStats(
   ports: Ports,
   slug: Slug,
   token: string | null = null,
+  known: readonly ForgeHost[] = BUILTIN_FORGES,
 ): Promise<ForgeStats | Unread> {
-  const forge = forgeOf(`https://${slug.host}/`)
+  const forge = forgeOf(`https://${slug.host}/`, known)
   if (forge === 'unknown') {
     return { slug, reason: `${slug.host} ist keine Forge, die der Hafen kennt` }
   }
@@ -407,7 +409,9 @@ export function slugsOf(ships: readonly Ship[]): readonly Slug[] {
   for (const ship of ships) {
     const origin = ship.remotes.find((remote) => remote.name === 'origin')
     const slug = origin === undefined ? null : slugOf(origin.url)
-    if (slug !== null && forgeOf(origin?.url ?? null) !== 'unknown') {
+    // The forge her survey already named, with this machine's register — asked again here with the
+    // shipped list alone, a self-hosted origin would silently drop out of every forge reading.
+    if (slug !== null && origin?.forge !== undefined && origin.forge !== 'unknown') {
       seen.set(`${slug.host}/${slug.owner}/${slug.repo}`.toLowerCase(), slug)
     }
   }

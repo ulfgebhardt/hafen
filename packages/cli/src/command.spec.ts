@@ -2,7 +2,7 @@ import { mockPorts, readQuestCatalog, renderQuest } from '@hafen/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { nodePorts } from './adapters/node'
-import { BUILTIN_STORE, DEFAULT_ROOT, DEFAULT_STORE, main, USAGE } from './command'
+import { BUILTIN_STORE, DEFAULT_STORE, main, NO_ROOTS, USAGE } from './command'
 
 import type { MockSetup, Ports, ProcPort, Quest, Register } from '@hafen/core'
 
@@ -187,13 +187,42 @@ describe(main, () => {
     })
   })
 
-  it('falls back to the default root and store when given neither', async () => {
+  /**
+   * Nobody said where to look, and the CLI says so rather than guess. It used to fall back on two
+   * directories of one person's own convention — a guess list with two entries.
+   */
+  it('asks where to look instead of guessing, when nobody said', async () => {
     const stdout = out()
+    const stderr = err()
 
-    // Nothing is readable there in a mock, and an unreadable root is a fault worth throwing.
-    await expect(main(['hafen'], mockPorts())).rejects.toThrow(DEFAULT_ROOT)
-    expect(USAGE).toContain(DEFAULT_STORE)
+    await expect(main(['hafen', `--store=${STORE}`], mockPorts())).resolves.toBe(2)
+    expect(stderr()).toBe(NO_ROOTS)
     expect(stdout()).toBe('')
+    expect(USAGE).toContain(DEFAULT_STORE)
+  })
+
+  /** The register answers once the window or `register wurzel` was asked — the same order, the same function. */
+  it('looks where the register says, when nothing was given', async () => {
+    const stdout = out()
+    const setup = withShip({
+      files: { [`${STORE}/register.md`]: `## Wurzeln\n\n- ${ROOT}\n` },
+    })
+
+    await expect(main(['schnappschuss', `--store=${STORE}`], setup)).resolves.toBe(0)
+    expect(JSON.parse(stdout()) as unknown).toStrictEqual(
+      expect.objectContaining({ root: ROOT, ships: [expect.objectContaining({ name: 'ship' })] }),
+    )
+  })
+
+  /** What was typed leads: an argument beats the register, so an override stays one. */
+  it('takes an argument over the register', async () => {
+    const stdout = out()
+    const setup = withShip({
+      files: { [`${STORE}/register.md`]: '## Wurzeln\n\n- /anderswo\n' },
+    })
+
+    await expect(main(['schnappschuss', ROOT, `--store=${STORE}`], setup)).resolves.toBe(0)
+    expect((JSON.parse(stdout()) as { root: string }).root).toBe(ROOT)
   })
 
   it('measures the fleet against the catalog it was pointed at', async () => {
@@ -541,7 +570,27 @@ describe('register', () => {
     )
   })
 
-  /** A word it does not know is a refusal, never a guess at which of the four was meant. */
+  /** Where the projects are, said once on the command line — the window's first-run question. */
+  it('takes a root on and drops it again', async () => {
+    const setup = ports()
+    out()
+
+    await expect(
+      main(['register', 'wurzel', '/home/wer/Projekte', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+    await expect(setup.fs.readFile(`${STORE}/register.md`)).resolves.toContain(
+      '## Wurzeln\n\n- /home/wer/Projekte',
+    )
+
+    await expect(
+      main(['register', 'entwurzeln', '/home/wer/Projekte', `--store=${STORE}`], setup),
+    ).resolves.toBe(0)
+    await expect(setup.fs.readFile(`${STORE}/register.md`)).resolves.not.toContain(
+      '- /home/wer/Projekte',
+    )
+  })
+
+  /** A word it does not know is a refusal, never a guess at which one was meant. */
   it('refuses an action it does not know, and a missing path', async () => {
     const stderr = err()
 
@@ -573,8 +622,9 @@ describe('register', () => {
    * It was `{ archived, enlisted }` until `roots` came with the first-run question, and this test
    * went red the same day -- unnoticed for two days because turbo replays a cached log, so a
    * `pnpm test:unit` that ran nothing printed "88 passed" from before the field existed. Kept
-   * strict rather than loosened to `toMatchObject`: the three keys *are* the register, and a
-   * fourth appearing silently is exactly what this should stop.
+   * strict rather than loosened to `toMatchObject`: the keys *are* the register, and one more
+   * appearing silently is exactly what this should stop. `forges` was acknowledged here on
+   * 03.10.2026, when a self-hosted Gitea moved out of the code and into the machine's register.
    */
   it('answers with the register itself where asked to', async () => {
     const stdout = out()
@@ -586,6 +636,7 @@ describe('register', () => {
       archived: ['/x'],
       enlisted: [],
       roots: [],
+      forges: [],
     })
   })
 })

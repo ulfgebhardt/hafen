@@ -180,8 +180,18 @@ Entscheidung ist und keine Messung:
 
 ```
 ~/.local/share/hafen/
-  register.md          # welche Verzeichnisse aufgenommen und welche archiviert sind
+  register.md          # Wurzeln, archivierte und aufgenommene Verzeichnisse, eigene Forges
   quests/…             # zusätzliche Forderungen dieser Flotte
+```
+
+Wo die Projekte liegen, fragt das Fenster beim ersten Start; auf der Kommandozeile geht es mit
+`hafen register wurzel <pfad>`, einmalig als Argument oder per `$HAFEN_ROOT`. Ein Default gibt es
+nicht. Ein selbst gehostetes Gitea trägt man von Hand ein — mitgeliefert wird nur `github.com`:
+
+```markdown
+## Forges
+
+- git.example.org gitea
 ```
 
 Der Store bleibt **lokal**. `register.md` führt jedes Repo mit absolutem Pfad, und das ist eine
