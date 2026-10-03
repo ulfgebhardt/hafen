@@ -1,4 +1,14 @@
-import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -7,6 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { nodePorts } from './node'
 
 const MISSING = 'werft-kein-solches-binary'
+/** A modification time the index cannot have recorded, so git sees the file as stale. */
+const STALE = new Date('2030-01-01T00:00:00Z')
 
 /**
  * Against the real machine, not a mock: this file *is* the environment boundary, and a
@@ -73,6 +85,42 @@ describe('nodePorts', () => {
       const result = await nodePorts.proc.run('pwd', [], dir)
 
       expect(result.stdout.trim()).toBe(dir)
+    })
+
+    it('lets git status read a tree without rewriting its index', async () => {
+      // The case the variable exists for: a file whose stat data no longer matches the index.
+      // Without it git refreshes and rewrites `.git/index` — measured, not assumed; the same
+      // steps with a bare `git status` change the file.
+      // A directory of its own: the shared one is listed by the `fs` tests below.
+      const tree = await mkdtemp(join(tmpdir(), 'hafen-index-'))
+      const git = async (...args: string[]): Promise<void> => {
+        await nodePorts.proc.run(
+          'git',
+          [
+            '-c',
+            'user.name=x',
+            '-c',
+            'user.email=x@example.org',
+            '-c',
+            'commit.gpgsign=false',
+            ...args,
+          ],
+          tree,
+        )
+      }
+      await git('init', '-q')
+      await writeFile(join(tree, 'f'), 'a\n', 'utf8')
+      await git('add', 'f')
+      await git('commit', '-qm', 'x')
+      await utimes(join(tree, 'f'), STALE, STALE)
+      const before = await readFile(join(tree, '.git/index'))
+
+      const status = await nodePorts.proc.run('git', ['status', '--porcelain'], tree)
+      const after = await readFile(join(tree, '.git/index'))
+      await rm(tree, { recursive: true, force: true })
+
+      expect(status).toStrictEqual({ code: 0, stdout: '', stderr: '' })
+      expect(after).toStrictEqual(before)
     })
   })
 
