@@ -39,8 +39,7 @@ warum: >
 
 # Und er ist der Hausstandard: eslint-config-it4c
 
-Nicht erfunden, sondern aus `ulfgebhardt/werft` und der Einführung in `Wattenmeer/pinne`
-extrahiert. Beide erfüllen ihn, und damit ist er gegen zwei Schiffe abgeglichen statt gegen eine
+Nicht erfunden, sondern aus Werft und der Einführung in einem zweiten Repository extrahiert. Beide erfüllen ihn, und damit ist er gegen zwei Schiffe abgeglichen statt gegen eine
 Meinung.
 
 ## Die zwei Prüfungen von Hand, und warum sie es bleiben
@@ -52,13 +51,13 @@ führt `Contract` ihn heute nicht mit, und das zu ändern ist eine Entscheidung 
 und nicht über diesen Katalog — sie liegt in
 `0262-max-warnings-0-ist-messbar-sobald-der-ve`.
 
-**„Jede Abweichung mit Begründung".** Die Forderung lautet nicht „keine Overrides" — pinne
-braucht acht, und jeder davon ist echt (Nuxt leitet Komponentennamen aus Dateipfaden ab, `play()`
+**„Jede Abweichung mit Begründung".** Die Forderung lautet nicht „keine Overrides" — das zweite
+Repository braucht acht, und jeder davon ist echt (Nuxt leitet Komponentennamen aus Dateipfaden ab, `play()`
 lehnt aus Browser-Gründen ab, ein CLI schreibt auf stdout). Sie lautet „keine unbegründete", und
 dass ein Kommentar über einem `rules`-Block *stimmt*, ist nicht maschinell prüfbar. Der
 Blindfleck wird benannt, statt ihn zu simulieren.
 
-> Nebenbefund für `Wattenmeer/eslint-config-it4c`:
+> Nebenbefund für `eslint-config-it4c`:
 > `@eslint-community/eslint-comments/require-description` ist in `recommended` aus. Angeschaltet
 > wäre die Begründungspflicht für *inline* `eslint-disable` maschinell geprüft, und die zweite
 > Handprüfung schrumpfte auf die Config-Datei.

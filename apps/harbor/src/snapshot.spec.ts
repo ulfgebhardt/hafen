@@ -495,7 +495,7 @@ describe('the forge reading, beside the survey and never inside it', () => {
     at: '2026-09-30T08:00:00Z',
     stats: [
       {
-        slug: { host: 'github.com', owner: 'UlfGebhardt', repo: 'Hafen' },
+        slug: { host: 'github.com', owner: 'Seefahrt', repo: 'Hafen' },
         stars: 3,
         watchers: 2,
         forks: 1,
@@ -504,7 +504,9 @@ describe('the forge reading, beside the survey and never inside it', () => {
         language: 'TypeScript',
       },
     ],
-    unread: [{ slug: { host: 'git.seefahrt.example', owner: 'org', repo: 'zu' }, reason: 'nicht lesbar' }],
+    unread: [
+      { slug: { host: 'git.seefahrt.example', owner: 'org', repo: 'zu' }, reason: 'nicht lesbar' },
+    ],
   }
 
   /** A file that was never written is "never asked", which is a state and not a failure. */
@@ -609,13 +611,13 @@ describe('the forge reading, beside the survey and never inside it', () => {
      * Matched on the slug rather than merged into the ship: the two readings have different ages,
      * and folding one into the other gives the older number the younger timestamp.
      *
-     * Case-insensitively, because a remote's spelling is not the API's — `UlfGebhardt/Hafen` and
-     * `ulfgebhardt/hafen` are one repository, and the forge answers with its own capitalisation.
+     * Case-insensitively, because a remote's spelling is not the API's — `Seefahrt/Hafen` and
+     * `seefahrt/hafen` are one repository, and the forge answers with its own capitalisation.
      */
     it('finds the figures for a ship by what its origin points at', () => {
       const forge = READING as unknown as Forge
 
-      expect(statsFor(forge, withOrigin('git@github.com:ulfgebhardt/hafen.git'))?.stars).toBe(3)
+      expect(statsFor(forge, withOrigin('git@github.com:seefahrt/hafen.git'))?.stars).toBe(3)
     })
 
     /** No origin, an unreadable one, or one nobody asked about: null, never another ship's row. */
@@ -633,10 +635,10 @@ describe('the forge reading, beside the survey and never inside it', () => {
     it('hands the url to the side that checks it', async () => {
       const invoke = asAppWith({ open_url: null })
 
-      await openForge('https://github.com/ulfgebhardt/hafen')
+      await openForge('https://github.com/seefahrt/hafen')
 
       expect(invoke).toHaveBeenCalledWith('open_url', {
-        url: 'https://github.com/ulfgebhardt/hafen',
+        url: 'https://github.com/seefahrt/hafen',
       })
     })
 

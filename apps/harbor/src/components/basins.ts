@@ -226,7 +226,7 @@ function orgOf(ship: Ship): string {
  * What a family is called: **the biggest repository in it**.
  *
  * Two namings were tried and both named the wrong thing. `familiesOf` takes the alphabetically
- * first member, which is a tie-break and not a name — on this fleet that made `Lotsenverein-Movement`,
+ * first member, which is a tie-break and not a name — on this fleet that made `Lotsenverein`,
  * *one* repository, the name of a group of fourteen. Naming it after the organisation holding most
  * of it is a reading, and still not a *name*: three basins came out called `Wattenmeer`, because an
  * organisation can hold pieces of several projects and does.

@@ -1,4 +1,4 @@
-name: "pull request title"
+name: 'pull request title'
 
 # release-please liest die Commit-Typen, also muss der Titel eines Squash-Merges einer sein.
 # Ein PR mit dem Titel "fixes" landet sonst in keiner Changelog-Zeile und in keinem Release.
@@ -7,8 +7,8 @@ name: "pull request title"
 # nimmt (Settings → General). Mit Merge-Commits las release-please jeden Eintrag zweimal — den
 # Merge-Commit und den Commit im Zweig — und die Commits im Zweig prüft dieser Check nie.
 #
-# Der Changelog zeigt jeden Typ (`changelog-sections` in release-please-config.json, die Liste von
-# Leuchtturm). release-please blendet ab Werk ci, build, refactor, test, style und chore aus;
+# Der Changelog zeigt jeden Typ (`changelog-sections` in release-please-config.json, alle zwölf Typen
+# sichtbar). release-please blendet ab Werk ci, build, refactor, test, style und chore aus;
 # v1.1.0 hat dadurch #11 verschwiegen, den PR, der das arm64-Artefakt überhaupt erst baut.
 on:
   pull_request_target:
@@ -53,7 +53,7 @@ jobs:
             deps
           # Every changelog line then names the part it is about.
           requireScope: true
-          # Leuchtturm's `subjectPattern: ^(?![A-Z]).+$` is left out on purpose: the subjects here
+          # A common `subjectPattern: ^(?![A-Z]).+$` is left out on purpose: the subjects here
           # are German, and "Flotte ohne Archiv" (#7) or "Linux arm64" (#11) are correct with a
           # capital letter. The rule would demand a spelling error.
           headerPattern: '^(\w*)(?:\(([\w$.\-*/ ]*)\))?: (.*)$'

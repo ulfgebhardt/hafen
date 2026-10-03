@@ -14,7 +14,7 @@ pruefung:
       frage: 'ein CI-Workflow ruft ihn auf'
 warum: >
   Ohne Lint-Schritt wird jede Abnahme von Hand neu verhandelt, und das ist der Posten, der sich
-  pro Auftrag wiederholt statt einmal zu kosten. Die Einführung in Wattenmeer/pinne hat zwei
+  pro Auftrag wiederholt statt einmal zu kosten. Die Einführung in einem Nuxt-Repository hat zwei
   echte Fehler aufgedeckt, die vorher niemandem aufgefallen waren: einen Import ohne Dateiendung,
   an dem `npm run add` mit ERR_MODULE_NOT_FOUND abbrach, und einen Regex mit verschachteltem
   Quantor in der URL-Erkennung. Und einer, den niemand aufruft, ist keiner — er fällt erst auf,

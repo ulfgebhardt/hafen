@@ -882,7 +882,9 @@ describe('the forge, from the window', () => {
     /* A Gitea repository whose server refuses: `curl --fail` comes back non-zero. */
     const gitea = {
       ...snapshot,
-      ships: [{ ...ship(), remotes: [{ name: 'origin', url: 'git@git.seefahrt.example:org/zu.git' }] }],
+      ships: [
+        { ...ship(), remotes: [{ name: 'origin', url: 'git@git.seefahrt.example:org/zu.git' }] },
+      ],
     }
     bridgeBy((command, args) => {
       if (command === 'snapshot') {

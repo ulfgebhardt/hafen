@@ -42,7 +42,7 @@ import type { Ship } from '@hafen/core'
  * Hue per organisation, from the name.
  *
  * A 32-bit FNV-style walk rather than a sum of char codes: a sum gives `ab` and `ba` the same
- * answer, and on this fleet that collided `windstaerke` with `kompass` at four degrees apart.
+ * answer, and on this fleet that collided two organisations at four degrees apart.
  * Deliberately not random — the harbour is read repeatedly, and a colour that moved between two
  * readings would make every other colour untrustworthy too.
  */

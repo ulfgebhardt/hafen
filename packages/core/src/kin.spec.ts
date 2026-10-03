@@ -87,11 +87,11 @@ describe(familiesOf, () => {
   it('puts repositories that share a root commit in one family', () => {
     const families = familiesOf([
       ship({ name: 'windstaerke', org: 'windstaerke', roots: ['c0ffee11'] }),
-      ship({ name: 'brise.example', org: 'Brise-Net', roots: ['c0ffee11'] }),
+      ship({ name: 'brise.example', org: 'Brise', roots: ['c0ffee11'] }),
       ship({ name: 'alone', org: 'z', roots: ['ffffffff'] }),
     ])
 
-    expect(named(families)).toStrictEqual([['windstaerke', 'brise.example'], ['alone']])
+    expect(named(families)).toStrictEqual([['brise.example', 'windstaerke'], ['alone']])
   })
 
   /** A remote that names another ship of this fleet — measured twenty times here. */
@@ -101,7 +101,7 @@ describe(familiesOf, () => {
       ship({
         name: 'dalben',
         remotes: [
-          remote('git@github.com:dalben-earth/dalben.earth.git'),
+          remote('git@github.com:dalben/dalben.example.git'),
           remote('https://github.com/Wattenmeer/boilerplate', 'upstream'),
         ],
       }),

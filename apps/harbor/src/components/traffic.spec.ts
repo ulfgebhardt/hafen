@@ -46,7 +46,7 @@ const fleetOf = (sizes: Readonly<Record<string, number>>) =>
     ),
   )
 
-const REAL = { Wattenmeer: 18, ulfgebhardt: 15, werkstatt: 15, lehre: 9, kombuese: 6, einzel: 1 }
+const REAL = { Wattenmeer: 18, seefahrt: 15, werkstatt: 15, lehre: 9, kombuese: 6, einzel: 1 }
 const fleet = fleetlets(fleetOf(REAL))
 
 /** Both arrangements, because both emit the same graph and the rules are about the graph. */

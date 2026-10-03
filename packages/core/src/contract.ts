@@ -506,7 +506,7 @@ function coverage(check: MemberCheck): string {
  * Every check the ship actually offers, each with the directory it runs in and the name the
  * project gave it.
  *
- * A monorepo keeps its checks in its members — dalben.earth declares `test:lint` in four
+ * A monorepo keeps its checks in its members — dalben.example declares `test:lint` in four
  * of them and none at the root — so a check is only runnable together with a working
  * directory. Offering the bare script name produced a button that ran at the ship root and
  * reported "Missing script".

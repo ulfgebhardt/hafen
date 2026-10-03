@@ -169,7 +169,7 @@ describe(delegationOf, () => {
 describe(namedAsWriter, () => {
   it('refuses the writing twin of a check, whose flag is not always on the line', () => {
     // `A11Y_UPDATE_BASELINE=1 playwright test a11y` writes its baseline through an environment
-    // variable; gezeitenatlas and genossenschaft both offered it as a check.
+    // variable; gezeitenatlas and a second ship both offered it as a check.
     expect(namedAsWriter('test:e2e:a11y:update')).toBe(true)
     expect(namedAsWriter('test:lintfix')).toBe(true)
     expect(namedAsWriter('test:lint:locales:fix')).toBe(true)
@@ -228,7 +228,7 @@ describe(buildsArtifact, () => {
     expect(bodyBuilds('eslint . && vitest run')).toBe(false)
   })
 
-  /** Measured on 02.10.2026: Leuchtturm, Leitstand.example and vuepress-plugin-bilder built unseen. */
+  /** Measured on 02.10.2026: Leuchtturm, Leitstand.example and a vuepress plugin built unseen. */
   it('knows the builders the fleet runs without a subcommand', () => {
     expect(buildsArtifact('tsc')).toBe(true)
     expect(buildsArtifact('tsc -p tsconfig.build.json')).toBe(true)

@@ -201,7 +201,7 @@ describe('detectContract member discovery', () => {
       files: {
         [`${SHIP}/package.json`]: manifest({}),
         [`${SHIP}/backend/package.json`]: manifest({ 'test:unit': 'jest' }),
-        [`${SHIP}/deployment/configurations/wir.social/branding/package.json`]: manifest({
+        [`${SHIP}/deployment/configurations/windstaerke.example/branding/package.json`]: manifest({
           'test:e2e': 'playwright test',
         }),
       },
@@ -562,7 +562,7 @@ describe('detectContract unread scripts', () => {
 
 describe(contractChecks, () => {
   it('pairs every declared script with the member it runs in', async () => {
-    // dalben.earth: `test:lint` in the members, none at the root. Offering the bare
+    // dalben.example: `test:lint` in the members, none at the root. Offering the bare
     // script name ran it at the root, where it does not exist.
     const ports = mockPorts({
       commands: tracked('package.json', 'backend/package.json', 'frontend/package.json'),

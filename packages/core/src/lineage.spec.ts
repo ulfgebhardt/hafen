@@ -9,10 +9,7 @@ function remote(name: string, url: string): Remote {
   return { name, url, forge: 'github' }
 }
 
-const ORIGIN = remote(
-  'origin',
-  'git@github.com:kutter/Kutter-Leuchtturm-Deploy-Rebranding.git',
-)
+const ORIGIN = remote('origin', 'git@github.com:kutter/Kutter-Leuchtturm-Deploy-Rebranding.git')
 const SHIP = '/repos/kutter/Kutter-Leuchtturm-Deploy-Rebranding'
 
 /** The two counts and the roots, for one further remote, as `measureLineage` asks for them. */
@@ -206,10 +203,7 @@ describe(measureLineage, () => {
 
     const said = await measureLineage(ports, SHIP, [
       ORIGIN,
-      remote(
-        'leuchtturm',
-        'git@github.com:Leuchtturm-Verbund/Leuchtturm-Deploy-Rebranding.git',
-      ),
+      remote('leuchtturm', 'git@github.com:Leuchtturm-Verbund/Leuchtturm-Deploy-Rebranding.git'),
     ])
 
     expect(said).toHaveLength(1)

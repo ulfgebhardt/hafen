@@ -198,7 +198,7 @@ describe(nameFor, () => {
 
   /**
    * Two namings were tried and both named the wrong thing: the alphabetically first member made
-   * `Lotsenverein-Movement` — one repository — the name of a group of fourteen, and the organisation
+   * `Lotsenverein` — one repository — the name of a group of fourteen, and the organisation
    * holding most of it made three different basins called `Wattenmeer`.
    */
   it('names a family after the biggest repository in it', () => {

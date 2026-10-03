@@ -20,7 +20,7 @@ describe(hueOf, () => {
    * as a bug. The ladder makes two flags either the same colour or an obviously different one.
    */
   it('never lands two flags almost on top of each other', () => {
-    const names = ['Wattenmeer', 'ulfgebhardt', 'werkstatt', 'kombuese', 'kompass', 'ohne']
+    const names = ['Wattenmeer', 'seefahrt', 'werkstatt', 'kombuese', 'kompass', 'ohne']
     const step = 360 / RUNGS
 
     for (const name of names) {
@@ -36,7 +36,7 @@ describe(hueOf, () => {
 
   /**
    * A sum of character codes gives `ab` and `ba` the same answer, and on this fleet that put
-   * `windstaerke` and `kompass` four degrees apart.
+   * two organisations four degrees apart.
    */
   it('does not give an anagram the same flag', () => {
     const same = hueOf('ab') === hueOf('ba') && cutOf('ab') === cutOf('ba')
@@ -124,12 +124,12 @@ describe(kindredOf, () => {
   it('ties the organisations that hold pieces of one project', () => {
     const kindred = kindredOf([
       kin('leuchtturm', 'Leuchtturm-Verbund', ['c0ffee11']),
-      kin('brise', 'Brise-Net', ['c0ffee11']),
-      kin('notes', 'ulfgebhardt', ['ffffffff']),
+      kin('brise', 'Brise', ['c0ffee11']),
+      kin('notes', 'seefahrt', ['ffffffff']),
     ])
 
-    expect(kindred.get('Leuchtturm-Verbund')).toBe(kindred.get('Brise-Net'))
-    expect(kindred.get('ulfgebhardt')).not.toBe(kindred.get('Brise-Net'))
+    expect(kindred.get('Leuchtturm-Verbund')).toBe(kindred.get('Brise'))
+    expect(kindred.get('seefahrt')).not.toBe(kindred.get('Brise'))
   })
 
   /** Every organisation is in exactly one, including the ones nothing ties to anything. */
