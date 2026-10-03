@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0](https://github.com/ulfgebhardt/hafen/compare/v1.1.1...v1.2.0) (2026-10-03)
+
+
+### Features
+
+* **core:** eigene Forges und Wurzeln stehen im Register, nicht im Code ([#19](https://github.com/ulfgebhardt/hafen/issues/19)) ([5fc9676](https://github.com/ulfgebhardt/hafen/commit/5fc967637bb3b222bb6b89bd19c42122fb6dfc3f))
+* **core:** Storybook als eigene Prüfung, für Frontends ab 30 Komponenten ([#15](https://github.com/ulfgebhardt/hafen/issues/15)) ([7f9d072](https://github.com/ulfgebhardt/hafen/commit/7f9d072f383ad66df1205b6cdf439bc6450a5eed))
+* **ui:** die Suche rahmt den ganzen Liegeplatz, und auf Wunsch zeichnet sie nur die Treffer ([#18](https://github.com/ulfgebhardt/hafen/issues/18)) ([73888fa](https://github.com/ulfgebhardt/hafen/commit/73888fa640c0b31b25dd2a3d755ea85514bf534b))
+
+
+### Bug Fixes
+
+* **core:** die Erkennung liest Build und Rollen, die sie vorher übersah ([#14](https://github.com/ulfgebhardt/hafen/issues/14)) ([9d39c9e](https://github.com/ulfgebhardt/hafen/commit/9d39c9e90e40322ddd1d85cc6dbf3da9f9373057))
+
+
+### Miscellaneous Chores
+
+* **core:** Beispielnamen statt der echten Flotte ([#17](https://github.com/ulfgebhardt/hafen/issues/17)) ([cafa4b2](https://github.com/ulfgebhardt/hafen/commit/cafa4b2be3a0563dbb764f2674b0b63dfa11c460))
+* **core:** Beispielpfade statt einer persönlichen Verzeichniskonvention ([#20](https://github.com/ulfgebhardt/hafen/issues/20)) ([6e2f93c](https://github.com/ulfgebhardt/hafen/commit/6e2f93c62d70b0b662ac90a737711afba7ef7b2a))
+
 ## [1.1.1](https://github.com/ulfgebhardt/hafen/compare/v1.1.0...v1.1.1) (2026-10-02)
 
 
