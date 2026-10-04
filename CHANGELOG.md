@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2](https://github.com/ulfgebhardt/hafen/compare/v1.2.1...v1.2.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **tauri:** macOS-Bundle ad-hoc signiert, aarch64 galt sonst als beschädigt ([#27](https://github.com/ulfgebhardt/hafen/issues/27)) ([fd93d20](https://github.com/ulfgebhardt/hafen/commit/fd93d208f8c2cd5d8c15c32d42948403ea65d778))
+* **ui:** erster Start ohne Schnappschuss verwarf den gewählten Ordner ([#28](https://github.com/ulfgebhardt/hafen/issues/28)) ([a29bcc2](https://github.com/ulfgebhardt/hafen/commit/a29bcc23292f11b716f55557e151ef6a03d5386d))
+
 ## [1.2.1](https://github.com/ulfgebhardt/hafen/compare/v1.2.0...v1.2.1) (2026-10-03)
 
 
