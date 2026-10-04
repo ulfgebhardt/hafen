@@ -36,7 +36,10 @@
     "category": "DeveloperTool",
     "shortDescription": "Übersicht über alle Git-Repos einer Maschine",
     "longDescription": "Der Hafen misst alle Git-Repositories einer Maschine und zeichnet sie als Flotte: Liegezeit, Test-Vertrag und was die Flotte an Forderungen stellt — mit der Evidenz hinter jedem Urteil. Er misst und zeichnet, er tut nichts.",
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "signingIdentity": "-"
+    }
   },
   "plugins": {
     "updater": {
