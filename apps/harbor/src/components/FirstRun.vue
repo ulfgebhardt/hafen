@@ -17,6 +17,8 @@
     /** Where the window would write the answer, so the reader can see it before saying yes. */
     store: string
     busy?: boolean
+    /** Why the last answer did not take — said here, because the bar that says it elsewhere is not drawn yet. */
+    trouble?: string | null
   }>()
 
   const emit = defineEmits<{ choose: [] }>()
@@ -42,6 +44,9 @@
       >
         {{ busy ? 'misst …' : 'Verzeichnis wählen' }}
       </button>
+      <p v-if="trouble" class="mt-3 font-mono text-xs whitespace-pre-line text-red-400">
+        {{ trouble }}
+      </p>
 
       <!--
         Said out loud rather than hidden: the answer is a file somebody can read, edit and delete,
