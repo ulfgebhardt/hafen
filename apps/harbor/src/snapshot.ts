@@ -293,7 +293,7 @@ async function inspectInWindow(
   }
 }
 
-export async function remeasure(current: Snapshot, only?: string): Promise<Snapshot> {
+export async function remeasure(current: Snapshot | null, only?: string): Promise<Snapshot> {
   const invoke = caller()
   if (invoke === null) {
     throw new Error('In diesem Fenster laesst sich nicht messen — es laeuft ohne Hafen-Huelle.')
@@ -334,7 +334,8 @@ export async function remeasure(current: Snapshot, only?: string): Promise<Snaps
       root: places.roots.join(', '),
       ships: measured.ships,
     })
-    const next = only === undefined ? fresh : spliceShip(current, fresh)
+    // Nothing to fold into is a fleet that has never been measured, and the fresh reading is all of it.
+    const next = only === undefined || current === null ? fresh : spliceShip(current, fresh)
 
     const failure = await tauriPorts.fs.writeFile(places.snapshot, JSON.stringify(next))
     if (failure !== null) {
@@ -400,10 +401,11 @@ export async function setRegister(
  * Takes a directory on as a place to look, or drops it again — and measures the fleet anew.
  *
  * The whole fleet and not one repository, because this is the one decision that changes *which*
- * repositories there are.
+ * repositories there are. Which is also why it takes `null`: the machine that is asked where its
+ * projects are is the one that has never been measured.
  */
 export async function setSearchRoot(
-  current: Snapshot,
+  current: Snapshot | null,
   path: string,
   searched: boolean,
 ): Promise<Snapshot> {

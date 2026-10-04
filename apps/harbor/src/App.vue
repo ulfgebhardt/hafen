@@ -258,13 +258,25 @@
       // answered.
       return
     }
-    if (snapshot.value === null || busy.value) {
+    /*
+     * No snapshot is no reason to stop here — it is the normal case. A machine nobody has told
+     * where its projects are has never been measured either, and until 04.10.2026 this returned on
+     * `snapshot === null` without a word: the first run asked, then dropped the answer.
+     */
+    if (busy.value) {
       return
     }
     busy.value = true
     trouble.value = null
     try {
+      const first = snapshot.value === null
       snapshot.value = await setSearchRoot(snapshot.value, chosen, true)
+      if (first) {
+        // The missing file was the reason to ask, not a failure to show once it is answered.
+        failed.value = null
+        source.value = places.value?.snapshot ?? ''
+        page.value = firstBand(snapshot.value.ships)
+      }
       unasked.value = false
     } catch (error) {
       trouble.value = error instanceof Error ? error.message : String(error)
@@ -661,6 +673,7 @@
       v-else-if="unasked"
       :store="places?.store ?? ''"
       :busy="busy"
+      :trouble="trouble"
       @choose="askWhereTheProjectsAre"
     />
     <template v-else-if="snapshot !== null">

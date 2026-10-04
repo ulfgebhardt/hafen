@@ -494,6 +494,66 @@ describe('a machine nobody has asked yet', () => {
     expect(page.text()).not.toContain('Der Hafen ist noch leer')
   })
 
+  /**
+   * The machine that is asked is exactly the one without a snapshot — nothing has measured it yet.
+   *
+   * Until 04.10.2026 the answer was dropped there without a word: the window asked, wrote nothing
+   * and measured nothing, because it waited for a snapshot to fold the fleet into. Every fixture
+   * above had one, and so did the machine it was written on; the first install elsewhere did not.
+   */
+  it('takes the answer on a machine that has never been measured', async () => {
+    const written = new Map<string, string>()
+    const invoke = bridge({
+      ...MEASURES,
+      snapshot: { path: '/cache/hafen/snapshot.json', json: null, error: 'No such file' },
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      'plugin:dialog|open': '/home/wer/Projekte',
+      port_write_file: (args?: Record<string, unknown>) => {
+        written.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) =>
+        written.get(String(args?.['path'])) ?? null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text().includes('Verzeichnis wählen'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(written.get('/store/register.md')).toContain('/home/wer/Projekte')
+    expect(invoke).toHaveBeenCalledWith('port_trees_with', expect.anything())
+    expect(written.has('/s.json')).toBe(true)
+    expect(page.text()).not.toContain('Der Hafen ist noch leer')
+    // The missing file was the reason to ask, not a failure to show once it has been answered.
+    expect(page.text()).not.toContain('Kein Schnappschuss')
+  })
+
+  /** A measurement that fails on the first run says why — there is no bar yet to say it in. */
+  it('says why on the first run when the answer cannot be written', async () => {
+    bridge({
+      ...MEASURES,
+      snapshot: { path: '/cache/hafen/snapshot.json', json: null, error: 'No such file' },
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      'plugin:dialog|open': '/home/wer/Projekte',
+      port_write_file: 'Permission denied',
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await page
+      .findAll('button')
+      .find((one) => one.text().includes('Verzeichnis wählen'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('Der Hafen ist noch leer')
+    expect(page.text()).toContain('Permission denied')
+  })
+
   /** Closing the picker is an answer, and nothing is written for a question nobody answered. */
   it('writes nothing when the picker is closed', async () => {
     const invoke = bridge({
