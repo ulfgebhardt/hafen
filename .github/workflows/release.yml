@@ -44,6 +44,14 @@ jobs:
         include:
           # Apple Silicon und Intel getrennt: ein Universal-Binary wäre ein drittes
           # Artefakt, das niemand von beiden ist.
+          #
+          # Beide ad-hoc signiert (`bundle.macOS.signingIdentity: "-"` in tauri.conf.json).
+          # Ohne das trug nur das Binary die Linker-Signatur, nicht das Bundle um es herum, und
+          # Apple Silicon verlangt eine gültige: aarch64 aus einem Download meldete am 04.10.2026
+          # „Hafen.app ist beschädigt“, ohne Ausweg, während x64 unter Rosetta startete. Ad-hoc
+          # heißt „unverifizierter Entwickler“ statt „beschädigt“ -- öffnen lässt es sich unter
+          # Datenschutz & Sicherheit. Ohne jede Warnung ginge es nur mit Developer ID und
+          # Notarisierung, und das ist eine eigene Entscheidung.
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
           - platform: macos-latest
