@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { demandsOf, identities, registerIn, surveyInWindow } from './survey'
+import { demandsOf, identities, readRoots, registerIn, surveyInWindow } from './survey'
 
 /**
  * One fake Rust half, answering by command name.
@@ -107,5 +107,45 @@ describe(surveyInWindow, () => {
     const out = await surveyInWindow({ store: '/store', snapshot: '/snap.json', roots: [] })
 
     expect(out.ships).toStrictEqual([])
+  })
+})
+
+describe(readRoots, () => {
+  const register = { archived: [], enlisted: [], roots: ['/home/wer/src', '/mnt/alt'], forges: [] }
+  const places = { store: '/store', snapshot: '/s.json', roots: [] }
+
+  /** Resolved where it is a directory, and said to be none where it is not. */
+  it('reads every root of the register off the disk', async () => {
+    withInvoke({
+      port_is_directory: (args?: Record<string, unknown>) => args?.['path'] === '/home/wer/src',
+      port_real_path: () => '/data/src',
+    })
+
+    await expect(readRoots(places, register)).resolves.toStrictEqual({
+      readings: [
+        { path: '/home/wer/src', real: '/data/src' },
+        { path: '/mnt/alt', real: null },
+      ],
+      fixed: false,
+    })
+  })
+
+  /** A directory whose link cannot be resolved is still a directory, compared as given. */
+  it('keeps the path where it cannot be resolved', async () => {
+    withInvoke({ port_is_directory: true, port_real_path: null })
+
+    const found = await readRoots(places, { ...register, roots: ['/home/wer/src'] })
+
+    expect(found.readings).toStrictEqual([{ path: '/home/wer/src', real: '/home/wer/src' }])
+  })
+
+  /** `$HAFEN_ROOT` leads, and then the register's roots are not the ones in force. */
+  it('says when the roots come from the environment', async () => {
+    withInvoke({ port_is_directory: true, port_real_path: null })
+
+    const found = await readRoots({ ...places, roots: ['/env'] }, register)
+
+    expect(found.fixed).toBe(true)
+    expect(found.readings.map((one) => one.path)).toStrictEqual(['/env'])
   })
 })

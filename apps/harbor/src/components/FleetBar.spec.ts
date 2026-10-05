@@ -126,58 +126,95 @@ describe('fleetBar', () => {
   })
 })
 
-describe('taking a directory on', () => {
-  const bar = () =>
+describe('the roots', () => {
+  const ROOTS = [
+    { path: '/home/wer/src', ships: 41 },
+    { path: '/mnt/alt', ships: null },
+  ]
+  const withRoots = (props: Record<string, unknown> = {}) =>
     mount(FleetBar, {
-      props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache', canMeasure: true },
+      props: {
+        ships: [ship()],
+        at: '2026-09-30T00:00:00Z',
+        source: '/cache',
+        canMeasure: true,
+        roots: ROOTS,
+        ...props,
+      },
     })
-
-  /**
-   * Closed until asked for. It is the rarest action in the window, and a permanent input beside
-   * the fleet's figures reads as something to fill in.
-   */
-  it('keeps the field away until somebody asks for it', async () => {
-    const page = bar()
-
-    expect(page.find('input').exists()).toBe(false)
-
+  const open = async (page: ReturnType<typeof withRoots>): Promise<void> => {
     await page
       .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
+      .find((one) => one.text().startsWith('Wurzeln'))
       ?.trigger('click')
+  }
+  const button = (page: ReturnType<typeof withRoots>, text: string) =>
+    page.findAll('button').find((one) => one.text() === text)
 
-    expect(page.find('input').exists()).toBe(true)
+  /** Closed until asked for, and its count on the button so the closed state still says something. */
+  it('keeps the roots away until somebody asks for them', async () => {
+    const page = withRoots()
+
+    expect(page.text()).toContain('Wurzeln (2)')
+    expect(page.text()).not.toContain('/home/wer/src')
+
+    await open(page)
+
+    expect(page.text()).toContain('/home/wer/src')
+    expect(page.text()).toContain('41 Schiffe')
   })
 
-  it('hands the path up and puts itself away again', async () => {
-    const page = bar()
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
-      ?.trigger('click')
-    await page.find('input').setValue('  /anderswo/ding  ')
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'ok')
-      ?.trigger('click')
+  /** No directory is a fault with a remedy, and it is said beside the button that is the remedy. */
+  it('names a dead root instead of counting nothing under it', async () => {
+    const page = withRoots()
+    await open(page)
 
-    expect(page.emitted('enlist')).toStrictEqual([['/anderswo/ding']])
-    expect(page.find('input').exists()).toBe(false)
+    expect(page.text()).toContain('nicht gefunden')
+    expect(page.text()).not.toContain('0 Schiffe')
   })
 
-  /** An empty field is not a path, and adopting "" would put a line in the register nobody meant. */
-  it('does nothing for an empty path', async () => {
-    const page = bar()
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
-      ?.trigger('click')
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'ok')
-      ?.trigger('click')
+  /** Picked, not typed: the bar only asks for the dialog, the window opens it. */
+  it('asks for the folder dialog and puts the list away', async () => {
+    const page = withRoots()
+    await open(page)
+    await button(page, '+ hinzufügen')?.trigger('click')
 
-    expect(page.emitted('enlist')).toBeUndefined()
+    expect(page.emitted('add')).toStrictEqual([[]])
+    expect(page.text()).not.toContain('/home/wer/src')
+  })
+
+  it('hands up the root to let go of', async () => {
+    const page = withRoots()
+    await open(page)
+    await page.find('[aria-label="/mnt/alt entfernen"]').trigger('click')
+
+    expect(page.emitted('drop')).toStrictEqual([['/mnt/alt']])
+  })
+
+  it('holds both back while something runs', async () => {
+    const page = withRoots({ busy: true })
+    await open(page)
+
+    expect(button(page, '+ hinzufügen')?.attributes('disabled')).toBeDefined()
+    expect(page.find('[aria-label="/mnt/alt entfernen"]').attributes('disabled')).toBeDefined()
+  })
+
+  /** With `$HAFEN_ROOT` set the register is not read, so editing it here would change nothing. */
+  it('only shows roots that come from the environment, and says why', async () => {
+    const page = withRoots({ fixed: true })
+    await open(page)
+
+    expect(page.text()).toContain('$HAFEN_ROOT ist gesetzt')
+    expect(button(page, '+ hinzufügen')).toBeUndefined()
+    expect(page.find('[aria-label="/mnt/alt entfernen"]').exists()).toBe(false)
+  })
+
+  it('closes on escape', async () => {
+    const page = withRoots()
+    await open(page)
+    await page.find('[aria-expanded]').trigger('keyup.escape')
+
+    expect(page.text()).not.toContain('/home/wer/src')
   })
 
   /** Nothing to run, nothing to offer — the same rule the measure button follows. */
@@ -186,7 +223,7 @@ describe('taking a directory on', () => {
       props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache' },
     })
 
-    expect(page.text()).not.toContain('aufnehmen')
+    expect(page.text()).not.toContain('Wurzeln')
     expect(page.text()).not.toContain('neu messen')
   })
 })

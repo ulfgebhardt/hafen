@@ -8,6 +8,7 @@
   import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_ORDER } from './theme'
 
   import type { Progress } from './measuring'
+  import type { RootRow } from './roots'
   import type { Ship } from '@hafen/core'
 
   const {
@@ -18,6 +19,8 @@
     busy = false,
     forgeAt = '',
     progress = null,
+    roots = [],
+    fixed = false,
   } = defineProps<{
     ships: readonly Ship[]
     at: string
@@ -30,29 +33,29 @@
     forgeAt?: string
     /** How far a running survey has got, or `null` where none is running. */
     progress?: Progress | null
+    /** Where the survey looks, each with what was found under it. */
+    roots?: readonly RootRow[]
+    /** Whether they come from `$HAFEN_ROOT`, which leads — and then the list is not editable. */
+    fixed?: boolean
   }>()
 
-  const emit = defineEmits<{ measure: []; enlist: [string]; forge: []; stop: [] }>()
+  const emit = defineEmits<{ measure: []; add: []; drop: [string]; forge: []; stop: [] }>()
 
   /**
-   * Taking a directory on by hand — the other half of the register.
+   * The roots, closed until asked for.
    *
-   * A field rather than a dialog, and closed until asked for: it is the rarest action in the
-   * window, and a permanent input beside the fleet's figures would read as something to fill in.
-   * A path is typed because there is nothing to pick from — the whole point is a directory the
-   * survey does not find.
+   * What is already searched comes before the dialog that adds another, so a root is not added
+   * twice and a dead one is seen where it can be dropped. Closed after each choice: both start a
+   * survey, and the list it shows would be stale until that is done.
    */
-  const adopting = ref(false)
-  const path = ref('')
-
-  const adopt = (): void => {
-    const given = path.value.trim()
-    if (given === '') {
-      return
-    }
-    emit('enlist', given)
-    path.value = ''
-    adopting.value = false
+  const rooting = ref(false)
+  const add = (): void => {
+    rooting.value = false
+    emit('add')
+  }
+  const drop = (path: string): void => {
+    rooting.value = false
+    emit('drop', path)
   }
 
   const counts = computed(() => countVerdicts(ships))
@@ -199,36 +202,61 @@
       {{ forgeAt === '' ? 'Forge fragen' : 'Forge neu fragen' }}
     </button>
 
-    <button
-      v-if="canMeasure && !adopting"
-      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
-      title="Ein Verzeichnis ins Register aufnehmen, das die Messung nicht selbst findet"
-      @click="adopting = true"
-    >
-      aufnehmen
-    </button>
-    <span v-else-if="canMeasure" class="flex items-baseline gap-1">
-      <input
-        v-model="path"
-        class="w-64 border-b border-slate-700 bg-transparent font-mono text-[10px] text-slate-300 outline-none placeholder:text-slate-700"
-        placeholder="/pfad/zum/verzeichnis"
-        aria-label="Verzeichnis aufnehmen"
-        @keyup.enter="adopt"
-        @keyup.escape="adopting = false"
-      />
+    <!--
+      Where the survey looks, and the way to change it. A dead root is the one that matters most:
+      it fails every survey on purpose, and this list is the remedy for that error.
+    -->
+    <span v-if="canMeasure" class="relative" @keyup.escape="rooting = false">
       <button
-        class="font-mono text-[10px] text-slate-500 hover:text-slate-300"
-        :disabled="busy"
-        @click="adopt"
+        class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+        :aria-expanded="rooting"
+        title="Wo der Hafen nach Git-Repositories sucht"
+        @click="rooting = !rooting"
       >
-        ok
+        Wurzeln ({{ roots.length }}) {{ rooting ? '▴' : '▾' }}
       </button>
-      <button
-        class="font-mono text-[10px] text-slate-600 hover:text-slate-400"
-        @click="adopting = false"
+      <div
+        v-if="rooting"
+        class="absolute top-full right-0 z-10 mt-1 w-96 max-w-[90vw] border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] shadow-lg"
       >
-        ×
-      </button>
+        <ul>
+          <li v-for="root in roots" :key="root.path" class="flex items-baseline gap-2 py-0.5">
+            <span class="min-w-0 flex-1 truncate text-slate-300" :title="root.path">
+              {{ root.path }}
+            </span>
+            <span v-if="root.ships === null" class="whitespace-nowrap text-red-400">
+              nicht gefunden
+            </span>
+            <span v-else class="whitespace-nowrap text-slate-500">{{ root.ships }} Schiffe</span>
+            <button
+              v-if="!fixed"
+              class="text-slate-600 hover:text-slate-300 disabled:text-slate-800"
+              :disabled="busy"
+              :aria-label="`${root.path} entfernen`"
+              :title="`${root.path} nicht mehr durchsuchen — die Repositories bleiben, wo sie sind`"
+              @click="drop(root.path)"
+            >
+              ×
+            </button>
+          </li>
+        </ul>
+        <!--
+          Said rather than silently ignored: with the variable set, an entry added here would land
+          in the register and do nothing until it is unset.
+        -->
+        <p v-if="fixed" class="mt-1 text-slate-600">
+          $HAFEN_ROOT ist gesetzt und geht vor — das Register wird erst ohne sie gelesen.
+        </p>
+        <button
+          v-else
+          class="mt-1 text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          :disabled="busy"
+          title="Einen Ordner wählen, unter dem nach Git-Repositories gesucht wird"
+          @click="add"
+        >
+          + hinzufügen
+        </button>
+      </div>
     </span>
   </header>
 </template>

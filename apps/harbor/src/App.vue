@@ -23,6 +23,7 @@
   import FleetBar from './components/FleetBar.vue'
   import HarborScene from './components/HarborScene.vue'
   import NoGit from './components/NoGit.vue'
+  import { NO_ROOTS, rootRows } from './components/roots'
   import { filterShips } from './components/search'
   import ShipSheet from './components/ShipSheet.vue'
   import UpdateBanner from './components/UpdateBanner.vue'
@@ -45,13 +46,14 @@
     statsFor,
     stopMeasuring,
   } from './snapshot'
-  import { askForRoot, bordmittel, needsRoots, registerIn } from './survey'
+  import { askForRoot, bordmittel, needsRoots, readRoots, registerIn } from './survey'
   import { checkForUpdate, installUpdate, runningVersion } from './update'
 
   import type { Layout, Page, View } from './components/band'
   import type { Bordmittel } from './components/bordmittel'
   import type { Chosen } from './components/chosen'
   import type { ContractFilter } from './components/contracts'
+  import type { Roots } from './components/roots'
   import type { ToolName } from './components/tools'
   import type { Hold } from './components/viewport'
   import type { Progress, Forge, RegisterAction, Snapshot } from './snapshot'
@@ -251,13 +253,29 @@
    */
   const aboard = ref<Bordmittel | null>(null)
 
-  const askWhereTheProjectsAre = async (): Promise<void> => {
-    const chosen = await askForRoot()
-    if (chosen === null) {
-      // They closed it. An answer, not a failure — and nothing is written for a question nobody
-      // answered.
-      return
-    }
+  /**
+   * Where the survey looks, as the disk answers for each root. Read again after every change to
+   * the register's roots, never kept beside them.
+   */
+  const roots = ref<Roots>(NO_ROOTS)
+  const rootList = computed(() => rootRows(roots.value, snapshot.value?.ships ?? []))
+
+  /** The places, the register's answer to "where", and what the disk says about each root. */
+  const lookAgain = async (): Promise<void> => {
+    const where = await currentPlaces()
+    places.value = where
+    const register = await registerIn(where.store)
+    unasked.value = needsRoots(where, register)
+    roots.value = await readRoots(where, register)
+  }
+
+  /**
+   * Take a root on or let it go, and measure the fleet across what is left.
+   *
+   * Letting go of the last one brings the first-run question back — derived from the register by
+   * `lookAgain`, not decided here.
+   */
+  const changeRoot = async (path: string, searched: boolean): Promise<void> => {
     /*
      * No snapshot is no reason to stop here — it is the normal case. A machine nobody has told
      * where its projects are has never been measured either, and until 04.10.2026 this returned on
@@ -270,19 +288,39 @@
     trouble.value = null
     try {
       const first = snapshot.value === null
-      snapshot.value = await setSearchRoot(snapshot.value, chosen, true)
+      snapshot.value = await setSearchRoot(snapshot.value, path, searched)
       if (first) {
         // The missing file was the reason to ask, not a failure to show once it is answered.
         failed.value = null
         source.value = places.value?.snapshot ?? ''
         page.value = firstBand(snapshot.value.ships)
       }
-      unasked.value = false
     } catch (error) {
       trouble.value = error instanceof Error ? error.message : String(error)
     } finally {
       busy.value = false
     }
+    // After the survey and whatever it said: the register was written before it ran, so the list
+    // follows the register even where the survey failed.
+    try {
+      await lookAgain()
+    } catch (error) {
+      trouble.value ??= error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  /**
+   * Ask for a root and take it on — on the first run, and again from the bar for every further one.
+   * One path for both, so a root added later is searched exactly like the first.
+   */
+  const askWhereTheProjectsAre = async (title?: string): Promise<void> => {
+    const chosen = await askForRoot(title)
+    if (chosen === null) {
+      // They closed it. An answer, not a failure — and nothing is written for a question nobody
+      // answered.
+      return
+    }
+    await changeRoot(chosen, true)
   }
 
   /**
@@ -484,9 +522,8 @@
   /**
    * Take a directory on, or stop holding it.
    *
-   * The register's other half. Adopting one is the only action in the window that names a path
-   * nobody clicked on — there is nothing to click, because the whole point is a directory the
-   * survey does not find.
+   * The register's other half. Only letting go is offered here now: a directory is added as a
+   * root, picked in the dialog and searched, and what the register already holds stays honoured.
    */
   const enlist = async (path: string, hold: boolean): Promise<void> => {
     await act(hold ? 'aufnehmen' : 'entfernen', path)
@@ -628,9 +665,7 @@
     if (inTauri()) {
       try {
         aboard.value = await bordmittel()
-        const where = await currentPlaces()
-        places.value = where
-        unasked.value = needsRoots(where, await registerIn(where.store))
+        await lookAgain()
       } catch {
         /*
          * Swallowed on purpose, and this is the one place in this file where that is right.
@@ -674,7 +709,7 @@
       :store="places?.store ?? ''"
       :busy="busy"
       :trouble="trouble"
-      @choose="askWhereTheProjectsAre"
+      @choose="askWhereTheProjectsAre()"
     />
     <template v-else-if="snapshot !== null">
       <FleetBar
@@ -685,9 +720,12 @@
         :busy="busy"
         :forge-at="forge.at"
         :progress="progress"
+        :roots="rootList"
+        :fixed="roots.fixed"
         @measure="measure()"
         @stop="stop"
-        @enlist="enlist($event, true)"
+        @add="askWhereTheProjectsAre('Welchen Ordner hinzufügen?')"
+        @drop="changeRoot($event, false)"
         @forge="askForges"
       />
       <BandTabs

@@ -29,6 +29,7 @@ import { tauriPorts } from './adapters/tauri'
 import { builtInCatalog } from './catalog'
 
 import type { Bordmittel } from './components/bordmittel'
+import type { Roots } from './components/roots'
 import type {
   ForgeHost,
   ForgeReading,
@@ -122,6 +123,25 @@ export function rootsFor(places: Places, register: Register): readonly string[] 
   return rootsFrom(places.roots, register)
 }
 
+/**
+ * The roots in force, each with what the disk says about it.
+ *
+ * Asked of the disk rather than of the last survey: a root added a second ago has no ships in any
+ * snapshot yet, and a root that vanished is exactly the one the survey cannot report on — it
+ * throws instead.
+ */
+export async function readRoots(places: Places, register: Register): Promise<Roots> {
+  const readings = await Promise.all(
+    rootsFor(places, register).map(async (path) => ({
+      path,
+      real: (await tauriPorts.fs.isDirectory(path))
+        ? ((await tauriPorts.fs.realPath(path)) ?? path)
+        : null,
+    })),
+  )
+  return { readings, fixed: places.roots.length > 0 }
+}
+
 /** Whether this machine has ever been told where its projects are. */
 export function needsRoots(places: Places, register: Register): boolean {
   return rootsFor(places, register).length === 0
@@ -172,8 +192,10 @@ export async function surveyInWindow(
  * This is the measurement that replaces the guess. The CLI took `$HAFEN_ROOT` or two directories
  * of one person's own convention; a list of `~/Projects`, `~/src`, `~/code` would be the tool
  * trading a measurement for a better-looking assumption. Asking is cheap and it is *right*.
+ *
+ * The same dialog adds a further root later — only the question it is asked under differs.
  */
-export async function askForRoot(): Promise<string | null> {
+export async function askForRoot(title = 'Wo liegen deine Projekte?'): Promise<string | null> {
   const host = globalThis as {
     __TAURI_INTERNALS__?: {
       invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -184,7 +206,7 @@ export async function askForRoot(): Promise<string | null> {
     return null
   }
   const chosen = await invoke('plugin:dialog|open', {
-    options: { directory: true, multiple: false, title: 'Wo liegen deine Projekte?' },
+    options: { directory: true, multiple: false, title },
   })
   return typeof chosen === 'string' && chosen !== '' ? chosen : null
 }
