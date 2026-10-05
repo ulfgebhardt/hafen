@@ -172,8 +172,10 @@ export async function surveyInWindow(
  * This is the measurement that replaces the guess. The CLI took `$HAFEN_ROOT` or two directories
  * of one person's own convention; a list of `~/Projects`, `~/src`, `~/code` would be the tool
  * trading a measurement for a better-looking assumption. Asking is cheap and it is *right*.
+ *
+ * The same dialog adds a further root later — only the question it is asked under differs.
  */
-export async function askForRoot(): Promise<string | null> {
+export async function askForRoot(title = 'Wo liegen deine Projekte?'): Promise<string | null> {
   const host = globalThis as {
     __TAURI_INTERNALS__?: {
       invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -184,7 +186,7 @@ export async function askForRoot(): Promise<string | null> {
     return null
   }
   const chosen = await invoke('plugin:dialog|open', {
-    options: { directory: true, multiple: false, title: 'Wo liegen deine Projekte?' },
+    options: { directory: true, multiple: false, title },
   })
   return typeof chosen === 'string' && chosen !== '' ? chosen : null
 }

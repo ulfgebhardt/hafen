@@ -588,30 +588,46 @@ describe('the register, from the window', () => {
   }
 
   /**
-   * Adopting a directory is the only action here that names a path nobody clicked on — there is
-   * nothing to click, because the whole point is a directory the survey does not find.
+   * A further root, through the same dialog the first run asks with — and searched like the first:
+   * the register keeps both, and the fleet is measured anew across them.
    */
-  it('takes a typed directory into the register', async () => {
-    const invoke = bridge({ ...MEASURES, snapshot: read })
+  it('adds a picked folder as a further root and searches it', async () => {
+    const written = new Map<string, string>([
+      ['/store/register.md', '# Schiffsregister\n\n## Wurzeln\n\n- /home/wer/Projekte\n'],
+    ])
+    const invoke = bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      'plugin:dialog|open': '/home/wer/Kunden',
+      port_write_file: (args?: Record<string, unknown>) => {
+        written.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) =>
+        written.get(String(args?.['path'])) ?? null,
+    })
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
     await page
       .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
-      ?.trigger('click')
-    await page.find('input').setValue('/anderswo/ding')
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'ok')
+      .find((one) => one.text() === 'hinzufügen')
       ?.trigger('click')
     await flushPromises()
 
-    const written = invoke.mock.calls.find(
-      (call) => call[0] === 'port_write_file' && registerPath(call[1]),
-    )
+    expect(invoke).toHaveBeenCalledWith('plugin:dialog|open', {
+      options: { directory: true, multiple: false, title: 'Welchen Ordner hinzufügen?' },
+    })
 
-    expect(wrote(written)).toContain('/anderswo/ding')
+    const register = written.get('/store/register.md')
+
+    expect(register).toContain('- /home/wer/Projekte')
+    expect(register).toContain('- /home/wer/Kunden')
+    expect(invoke).toHaveBeenCalledWith(
+      'port_trees_with',
+      expect.objectContaining({ root: '/home/wer/Kunden' }),
+    )
   })
 
   /** One choice, wherever it was made: the sheet's plan and the harbour mark the same box. */

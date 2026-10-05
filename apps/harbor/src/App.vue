@@ -251,8 +251,12 @@
    */
   const aboard = ref<Bordmittel | null>(null)
 
-  const askWhereTheProjectsAre = async (): Promise<void> => {
-    const chosen = await askForRoot()
+  /**
+   * Ask for a root and take it on — on the first run, and again from the bar for every further one.
+   * One path for both, so a root added later is searched exactly like the first.
+   */
+  const askWhereTheProjectsAre = async (title?: string): Promise<void> => {
+    const chosen = await askForRoot(title)
     if (chosen === null) {
       // They closed it. An answer, not a failure — and nothing is written for a question nobody
       // answered.
@@ -484,9 +488,8 @@
   /**
    * Take a directory on, or stop holding it.
    *
-   * The register's other half. Adopting one is the only action in the window that names a path
-   * nobody clicked on — there is nothing to click, because the whole point is a directory the
-   * survey does not find.
+   * The register's other half. Only letting go is offered here now: a directory is added as a
+   * root, picked in the dialog and searched, and what the register already holds stays honoured.
    */
   const enlist = async (path: string, hold: boolean): Promise<void> => {
     await act(hold ? 'aufnehmen' : 'entfernen', path)
@@ -674,7 +677,7 @@
       :store="places?.store ?? ''"
       :busy="busy"
       :trouble="trouble"
-      @choose="askWhereTheProjectsAre"
+      @choose="askWhereTheProjectsAre()"
     />
     <template v-else-if="snapshot !== null">
       <FleetBar
@@ -687,7 +690,7 @@
         :progress="progress"
         @measure="measure()"
         @stop="stop"
-        @enlist="enlist($event, true)"
+        @add="askWhereTheProjectsAre('Welchen Ordner hinzufügen?')"
         @forge="askForges"
       />
       <BandTabs

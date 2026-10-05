@@ -132,52 +132,33 @@ describe('taking a directory on', () => {
       props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache', canMeasure: true },
     })
 
-  /**
-   * Closed until asked for. It is the rarest action in the window, and a permanent input beside
-   * the fleet's figures reads as something to fill in.
-   */
-  it('keeps the field away until somebody asks for it', async () => {
+  /** Picked, not typed: the bar only asks for the dialog, the window opens it. */
+  it('asks for the folder dialog', async () => {
     const page = bar()
 
-    expect(page.find('input').exists()).toBe(false)
-
     await page
       .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
+      .find((one) => one.text() === 'hinzufügen')
       ?.trigger('click')
 
-    expect(page.find('input').exists()).toBe(true)
-  })
-
-  it('hands the path up and puts itself away again', async () => {
-    const page = bar()
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
-      ?.trigger('click')
-    await page.find('input').setValue('  /anderswo/ding  ')
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'ok')
-      ?.trigger('click')
-
-    expect(page.emitted('enlist')).toStrictEqual([['/anderswo/ding']])
+    expect(page.emitted('add')).toStrictEqual([[]])
     expect(page.find('input').exists()).toBe(false)
   })
 
-  /** An empty field is not a path, and adopting "" would put a line in the register nobody meant. */
-  it('does nothing for an empty path', async () => {
-    const page = bar()
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'aufnehmen')
-      ?.trigger('click')
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'ok')
-      ?.trigger('click')
+  it('holds the button back while something runs', () => {
+    const page = mount(FleetBar, {
+      props: {
+        ships: [ship()],
+        at: '2026-09-30T00:00:00Z',
+        source: '/cache',
+        canMeasure: true,
+        busy: true,
+      },
+    })
 
-    expect(page.emitted('enlist')).toBeUndefined()
+    const add = page.findAll('button').find((one) => one.text() === 'hinzufügen')
+
+    expect(add?.attributes('disabled')).toBeDefined()
   })
 
   /** Nothing to run, nothing to offer — the same rule the measure button follows. */
@@ -186,7 +167,7 @@ describe('taking a directory on', () => {
       props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache' },
     })
 
-    expect(page.text()).not.toContain('aufnehmen')
+    expect(page.text()).not.toContain('hinzufügen')
     expect(page.text()).not.toContain('neu messen')
   })
 })

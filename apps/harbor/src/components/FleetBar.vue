@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { fleetLines, fleetPoints, projectPoints } from '@hafen/core'
-  import { computed, ref } from 'vue'
+  import { computed } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
   import { readingOf, shareOf } from './measuring'
@@ -32,28 +32,7 @@
     progress?: Progress | null
   }>()
 
-  const emit = defineEmits<{ measure: []; enlist: [string]; forge: []; stop: [] }>()
-
-  /**
-   * Taking a directory on by hand — the other half of the register.
-   *
-   * A field rather than a dialog, and closed until asked for: it is the rarest action in the
-   * window, and a permanent input beside the fleet's figures would read as something to fill in.
-   * A path is typed because there is nothing to pick from — the whole point is a directory the
-   * survey does not find.
-   */
-  const adopting = ref(false)
-  const path = ref('')
-
-  const adopt = (): void => {
-    const given = path.value.trim()
-    if (given === '') {
-      return
-    }
-    emit('enlist', given)
-    path.value = ''
-    adopting.value = false
-  }
+  const emit = defineEmits<{ measure: []; add: []; forge: []; stop: [] }>()
 
   const counts = computed(() => countVerdicts(ships))
 
@@ -199,36 +178,19 @@
       {{ forgeAt === '' ? 'Forge fragen' : 'Forge neu fragen' }}
     </button>
 
+    <!--
+      Another place to look, picked rather than typed — the same native dialog the first run asks
+      with, and the same answer: a root, searched for repositories. A repository picked by itself is
+      a root too, since the search stops at the first `.git` and that is the root's own.
+    -->
     <button
-      v-if="canMeasure && !adopting"
-      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
-      title="Ein Verzeichnis ins Register aufnehmen, das die Messung nicht selbst findet"
-      @click="adopting = true"
+      v-if="canMeasure"
+      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+      :disabled="busy"
+      title="Einen Ordner wählen, unter dem nach Git-Repositories gesucht wird"
+      @click="emit('add')"
     >
-      aufnehmen
+      hinzufügen
     </button>
-    <span v-else-if="canMeasure" class="flex items-baseline gap-1">
-      <input
-        v-model="path"
-        class="w-64 border-b border-slate-700 bg-transparent font-mono text-[10px] text-slate-300 outline-none placeholder:text-slate-700"
-        placeholder="/pfad/zum/verzeichnis"
-        aria-label="Verzeichnis aufnehmen"
-        @keyup.enter="adopt"
-        @keyup.escape="adopting = false"
-      />
-      <button
-        class="font-mono text-[10px] text-slate-500 hover:text-slate-300"
-        :disabled="busy"
-        @click="adopt"
-      >
-        ok
-      </button>
-      <button
-        class="font-mono text-[10px] text-slate-600 hover:text-slate-400"
-        @click="adopting = false"
-      >
-        ×
-      </button>
-    </span>
   </header>
 </template>
