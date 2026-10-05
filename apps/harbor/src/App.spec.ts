@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
 import { quest, ship } from './components/testing'
 
+import type { VueWrapper } from '@vue/test-utils'
+
 /**
  * The scene is stubbed: it mounts a WebGL canvas, which happy-dom has no renderer for. What it
  * *decides* is measured in `fleet.spec.ts` and `hull.spec.ts` — the point of this file is the
@@ -190,6 +192,14 @@ type Wrote = { path?: string; contents?: string } | undefined
 /** Whether a recorded `port_write_file` call was aimed at the register. */
 const registerPath = (args: unknown): boolean =>
   ((args as Wrote)?.path ?? '').endsWith('register.md')
+
+/** Opens the bar's list of roots. */
+const openRoots = async (page: VueWrapper): Promise<void> => {
+  await page
+    .findAll('button')
+    .find((one) => one.text().startsWith('Wurzeln'))
+    ?.trigger('click')
+}
 
 /** What such a call wrote. */
 const wrote = (call: readonly unknown[] | undefined): string => {
@@ -610,9 +620,10 @@ describe('the register, from the window', () => {
     const page = mount(App, { global: { stubs } })
     await flushPromises()
 
+    await openRoots(page)
     await page
       .findAll('button')
-      .find((one) => one.text() === 'hinzufügen')
+      .find((one) => one.text() === '+ hinzufügen')
       ?.trigger('click')
     await flushPromises()
 
@@ -628,6 +639,76 @@ describe('the register, from the window', () => {
       'port_trees_with',
       expect.objectContaining({ root: '/home/wer/Kunden' }),
     )
+  })
+
+  /** Letting go: the register forgets the root, and the fleet is measured across what is left. */
+  it('drops a root and searches only the rest', async () => {
+    const written = new Map<string, string>([
+      [
+        '/store/register.md',
+        '# Schiffsregister\n\n## Wurzeln\n\n- /home/wer/Projekte\n- /mnt/alt\n',
+      ],
+    ])
+    const invoke = bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      port_is_directory: (args?: Record<string, unknown>) => args?.['path'] !== '/mnt/alt',
+      port_write_file: (args?: Record<string, unknown>) => {
+        written.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) =>
+        written.get(String(args?.['path'])) ?? null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await openRoots(page)
+
+    expect(page.text()).toContain('nicht gefunden')
+
+    await page.find('[aria-label="/mnt/alt entfernen"]').trigger('click')
+    await flushPromises()
+
+    const register = written.get('/store/register.md')
+
+    expect(register).toContain('- /home/wer/Projekte')
+    expect(register).not.toContain('/mnt/alt')
+    expect(invoke).not.toHaveBeenCalledWith(
+      'port_trees_with',
+      expect.objectContaining({ root: '/mnt/alt' }),
+    )
+
+    await openRoots(page)
+
+    expect(page.text()).toContain('Wurzeln (1)')
+  })
+
+  /** The last one gone is the machine nobody has asked — and the window asks again. */
+  it('asks the first-run question again once the last root is dropped', async () => {
+    const written = new Map<string, string>([
+      ['/store/register.md', '# Schiffsregister\n\n## Wurzeln\n\n- /home/wer/Projekte\n'],
+    ])
+    bridge({
+      ...MEASURES,
+      snapshot: read,
+      port_places: { store: '/store', snapshot: '/s.json', roots: [] },
+      port_write_file: (args?: Record<string, unknown>) => {
+        written.set(String(args?.['path']), String(args?.['contents']))
+        return null
+      },
+      port_read_file: (args?: Record<string, unknown>) =>
+        written.get(String(args?.['path'])) ?? null,
+    })
+    const page = mount(App, { global: { stubs } })
+    await flushPromises()
+
+    await openRoots(page)
+    await page.find('[aria-label="/home/wer/Projekte entfernen"]').trigger('click')
+    await flushPromises()
+
+    expect(page.text()).toContain('Der Hafen ist noch leer')
   })
 
   /** One choice, wherever it was made: the sheet's plan and the harbour mark the same box. */

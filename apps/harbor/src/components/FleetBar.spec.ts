@@ -126,39 +126,95 @@ describe('fleetBar', () => {
   })
 })
 
-describe('taking a directory on', () => {
-  const bar = () =>
+describe('the roots', () => {
+  const ROOTS = [
+    { path: '/home/wer/src', ships: 41 },
+    { path: '/mnt/alt', ships: null },
+  ]
+  const withRoots = (props: Record<string, unknown> = {}) =>
     mount(FleetBar, {
-      props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache', canMeasure: true },
-    })
-
-  /** Picked, not typed: the bar only asks for the dialog, the window opens it. */
-  it('asks for the folder dialog', async () => {
-    const page = bar()
-
-    await page
-      .findAll('button')
-      .find((one) => one.text() === 'hinzufügen')
-      ?.trigger('click')
-
-    expect(page.emitted('add')).toStrictEqual([[]])
-    expect(page.find('input').exists()).toBe(false)
-  })
-
-  it('holds the button back while something runs', () => {
-    const page = mount(FleetBar, {
       props: {
         ships: [ship()],
         at: '2026-09-30T00:00:00Z',
         source: '/cache',
         canMeasure: true,
-        busy: true,
+        roots: ROOTS,
+        ...props,
       },
     })
+  const open = async (page: ReturnType<typeof withRoots>): Promise<void> => {
+    await page
+      .findAll('button')
+      .find((one) => one.text().startsWith('Wurzeln'))
+      ?.trigger('click')
+  }
+  const button = (page: ReturnType<typeof withRoots>, text: string) =>
+    page.findAll('button').find((one) => one.text() === text)
 
-    const add = page.findAll('button').find((one) => one.text() === 'hinzufügen')
+  /** Closed until asked for, and its count on the button so the closed state still says something. */
+  it('keeps the roots away until somebody asks for them', async () => {
+    const page = withRoots()
 
-    expect(add?.attributes('disabled')).toBeDefined()
+    expect(page.text()).toContain('Wurzeln (2)')
+    expect(page.text()).not.toContain('/home/wer/src')
+
+    await open(page)
+
+    expect(page.text()).toContain('/home/wer/src')
+    expect(page.text()).toContain('41 Schiffe')
+  })
+
+  /** No directory is a fault with a remedy, and it is said beside the button that is the remedy. */
+  it('names a dead root instead of counting nothing under it', async () => {
+    const page = withRoots()
+    await open(page)
+
+    expect(page.text()).toContain('nicht gefunden')
+    expect(page.text()).not.toContain('0 Schiffe')
+  })
+
+  /** Picked, not typed: the bar only asks for the dialog, the window opens it. */
+  it('asks for the folder dialog and puts the list away', async () => {
+    const page = withRoots()
+    await open(page)
+    await button(page, '+ hinzufügen')?.trigger('click')
+
+    expect(page.emitted('add')).toStrictEqual([[]])
+    expect(page.text()).not.toContain('/home/wer/src')
+  })
+
+  it('hands up the root to let go of', async () => {
+    const page = withRoots()
+    await open(page)
+    await page.find('[aria-label="/mnt/alt entfernen"]').trigger('click')
+
+    expect(page.emitted('drop')).toStrictEqual([['/mnt/alt']])
+  })
+
+  it('holds both back while something runs', async () => {
+    const page = withRoots({ busy: true })
+    await open(page)
+
+    expect(button(page, '+ hinzufügen')?.attributes('disabled')).toBeDefined()
+    expect(page.find('[aria-label="/mnt/alt entfernen"]').attributes('disabled')).toBeDefined()
+  })
+
+  /** With `$HAFEN_ROOT` set the register is not read, so editing it here would change nothing. */
+  it('only shows roots that come from the environment, and says why', async () => {
+    const page = withRoots({ fixed: true })
+    await open(page)
+
+    expect(page.text()).toContain('$HAFEN_ROOT ist gesetzt')
+    expect(button(page, '+ hinzufügen')).toBeUndefined()
+    expect(page.find('[aria-label="/mnt/alt entfernen"]').exists()).toBe(false)
+  })
+
+  it('closes on escape', async () => {
+    const page = withRoots()
+    await open(page)
+    await page.find('[aria-expanded]').trigger('keyup.escape')
+
+    expect(page.text()).not.toContain('/home/wer/src')
   })
 
   /** Nothing to run, nothing to offer — the same rule the measure button follows. */
@@ -167,7 +223,7 @@ describe('taking a directory on', () => {
       props: { ships: [ship()], at: '2026-09-30T00:00:00Z', source: '/cache' },
     })
 
-    expect(page.text()).not.toContain('hinzufügen')
+    expect(page.text()).not.toContain('Wurzeln')
     expect(page.text()).not.toContain('neu messen')
   })
 })

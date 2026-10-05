@@ -29,6 +29,7 @@ import { tauriPorts } from './adapters/tauri'
 import { builtInCatalog } from './catalog'
 
 import type { Bordmittel } from './components/bordmittel'
+import type { Roots } from './components/roots'
 import type {
   ForgeHost,
   ForgeReading,
@@ -120,6 +121,25 @@ export async function writeRegister(store: string, register: Register): Promise<
  */
 export function rootsFor(places: Places, register: Register): readonly string[] {
   return rootsFrom(places.roots, register)
+}
+
+/**
+ * The roots in force, each with what the disk says about it.
+ *
+ * Asked of the disk rather than of the last survey: a root added a second ago has no ships in any
+ * snapshot yet, and a root that vanished is exactly the one the survey cannot report on — it
+ * throws instead.
+ */
+export async function readRoots(places: Places, register: Register): Promise<Roots> {
+  const readings = await Promise.all(
+    rootsFor(places, register).map(async (path) => ({
+      path,
+      real: (await tauriPorts.fs.isDirectory(path))
+        ? ((await tauriPorts.fs.realPath(path)) ?? path)
+        : null,
+    })),
+  )
+  return { readings, fixed: places.roots.length > 0 }
 }
 
 /** Whether this machine has ever been told where its projects are. */
