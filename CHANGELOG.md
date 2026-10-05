@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/ulfgebhardt/hafen/compare/v1.2.2...v1.3.0) (2026-10-05)
+
+
+### Features
+
+* **ui:** Wurzeln in der Kopfzeile verwalten, hinzufügen durchsucht den Ordner ([#30](https://github.com/ulfgebhardt/hafen/issues/30)) ([22680fa](https://github.com/ulfgebhardt/hafen/commit/22680fa04efb8b4e9edbdfe1c8471c193f581225))
+
 ## [1.2.2](https://github.com/ulfgebhardt/hafen/compare/v1.2.1...v1.2.2) (2026-10-04)
 
 
