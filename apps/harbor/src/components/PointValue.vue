@@ -34,12 +34,16 @@
       where ARIA forbids it and screen readers drop it — and with the figure itself `aria-hidden`,
       what a screen reader got was nothing at all. axe found it on the first run against the
       rendered window (`aria-prohibited-attr`, every score in the bar and on the sheet).
+
+      `relative` holds the hidden text in place. `sr-only` is `position: absolute`, and without a
+      positioned ancestor it is placed against the viewport — outside the sheet's scroller, so a
+      score far down the sheet stretched the page and the whole window scrolled.
     -->
-    <span v-if="project !== 0" class="text-sky-300" title="Projektpunkte">
+    <span v-if="project !== 0" class="relative text-sky-300" title="Projektpunkte">
       <span aria-hidden="true">◆ {{ write(project) }}</span>
       <span class="sr-only">{{ write(project) }} Projektpunkte</span>
     </span>
-    <span v-if="personal !== 0" class="text-emerald-300" title="Deine Punkte">
+    <span v-if="personal !== 0" class="relative text-emerald-300" title="Deine Punkte">
       <span aria-hidden="true">● {{ write(personal) }}</span>
       <span class="sr-only">{{ write(personal) }} deine Punkte</span>
     </span>

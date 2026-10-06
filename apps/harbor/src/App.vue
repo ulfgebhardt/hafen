@@ -751,7 +751,7 @@
       -->
       <p
         v-if="forgeNote(aboard) !== null"
-        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-amber-600/80"
+        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-amber-600"
       >
         {{ forgeNote(aboard) }}
       </p>

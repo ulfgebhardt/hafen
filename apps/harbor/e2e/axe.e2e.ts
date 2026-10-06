@@ -25,68 +25,30 @@ type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21aa']
 
 /**
- * A finding that is known, open, and waits on a decision this check cannot make.
+ * Nothing axe objects to, and the window itself does not scroll.
  *
- * Both are coloured text, and the fix is a colour: mapping either to an `ink-*` role would drop
- * the meaning the colour carries (yours, a warning), and inventing a lighter shade is a design
- * call, not a test's. So they are named here, each by rule **and** class — never a whole rule off
- * and never an element excluded from every rule — and each is *required* to still occur: the day
- * one is fixed, its check goes red and asks for the line to be deleted. A list that only ever
- * grows is a list nobody reads.
+ * The second half is not WCAG but the same kind of promise: the window is a drawing sheet whose
+ * panes scroll on their own. A hidden screen-reader text placed against the viewport once escaped
+ * the sheet's scroller and made the whole page scroll — axe had nothing to say about that, and
+ * `overflow: hidden` on the body would only hide it, so the overflow is measured here.
  */
-interface Open {
-  rule: string
-  /** A class the offending element carries, as it stands in its template. */
-  token: string
-  why: string
-}
-
-/** ShipSheet, the bill's column head: `#004f3b` on `#0a1023`, 1.96:1 at 11 px against 4.5:1. */
-const DEINE_HEAD: Open = {
-  rule: 'color-contrast',
-  token: 'text-emerald-900',
-  why: 'Kopf der Spalte "deine" in der Punkteabrechnung — gedämpftes Grün, braucht eine Farbentscheidung',
-}
-
-/** ContractList, a demand that answers nothing: `#b55c05` on `#020618`, 4.31:1 at 11 px. */
-const SILENT_NOTE: Open = {
-  rule: 'color-contrast',
-  token: 'text-amber-600/80',
-  why: 'Hinweis "kein Urteil auf dieser Flotte" — Warnfarbe mit Deckkraft, braucht eine Farbentscheidung',
-}
-
-interface Scan {
-  /** Everything axe found that is not on the open list — the gate. */
-  found: readonly string[]
-  /** Which of the expected open findings did occur. */
-  open: readonly Open[]
-}
-
-async function scan(page: Page, expected: readonly Open[] = []): Promise<Scan> {
+async function judged(page: Page): Promise<void> {
   const results: AxeResults = await new AxeBuilder({ page }).withTags(TAGS).analyze()
-  const found: string[] = []
-  const open = new Set<Open>()
-  for (const violation of results.violations) {
-    for (const node of violation.nodes) {
-      const known = expected.find(
-        (one) => one.rule === violation.id && node.html.includes(one.token),
-      )
-      if (known === undefined) {
-        const said = (node.failureSummary ?? '').replaceAll('\n', ' ')
-        found.push(`${violation.id}: ${node.target.join(' ')} — ${said}`)
-      } else {
-        open.add(known)
-      }
-    }
-  }
-  return { found, open: expected.filter((one) => open.has(one)) }
-}
-
-/** Nothing new, and every open finding still where it was said to be. */
-async function judged(page: Page, expected: readonly Open[] = []): Promise<void> {
-  const { found, open } = await scan(page, expected)
+  const found = results.violations.flatMap((violation) =>
+    violation.nodes.map(
+      (node) =>
+        `${violation.id}: ${node.target.join(' ')} — ${(node.failureSummary ?? '').replaceAll('\n', ' ')}`,
+    ),
+  )
   expect(found).toStrictEqual([])
-  expect(open).toStrictEqual(expected)
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement
+    return {
+      down: root.scrollHeight - root.clientHeight,
+      across: root.scrollWidth - root.clientWidth,
+    }
+  })
+  expect(overflow).toStrictEqual({ down: 0, across: 0 })
 }
 
 /**
@@ -194,13 +156,13 @@ test.describe('im Browser', () => {
   test('Datenblatt eines Schiffs', async ({ page }) => {
     await pick(page, LEUCHTTURM.path)
     await reading(page)
-    await judged(page, [DEINE_HEAD])
+    await judged(page)
   })
 
   test('Verträge', async ({ page }) => {
     await page.getByRole('button', { name: /Verträge/ }).click()
     await expect(page.locator('main canvas')).toHaveCount(0)
-    await judged(page, [SILENT_NOTE])
+    await judged(page)
   })
 })
 
@@ -226,6 +188,6 @@ test.describe('im Fenster', () => {
   test('Datenblatt mit Werkzeugen', async ({ page }) => {
     await pick(page, LEUCHTTURM.path)
     await reading(page)
-    await judged(page, [DEINE_HEAD])
+    await judged(page)
   })
 })
