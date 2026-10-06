@@ -4,7 +4,15 @@ export default [
   // `target/**` because cargo generates JS in there: after any `cargo build` the lint would
   // otherwise fail on Tauri's own generated API script, which nobody wrote and nobody can fix.
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', '**/.turbo/**', 'target/**'],
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      '**/.turbo/**',
+      '**/test-results/**',
+      '**/playwright-report/**',
+      'target/**',
+    ],
   },
   ...config,
   ...vitest,
@@ -53,6 +61,15 @@ export default [
         '/(^|:)text-(slate|gray|zinc|neutral|stone)-\\d+/',
         '/^(?!disabled:)(.*:)?text-ink-off$/',
       ],
+    },
+  },
+  {
+    files: ['apps/harbor/e2e/**'],
+    rules: {
+      // The end-to-end checks stand beside the app and not in it, and they reach in on purpose:
+      // for the same `Ship` fixtures the unit specs use, so the invented fleet cannot drift from
+      // the type, and for the snapshot's shape.
+      'import-x/no-relative-parent-imports': 'off',
     },
   },
 ]

@@ -27,24 +27,21 @@
 <template>
   <span class="inline-flex items-baseline gap-2 font-mono text-xs whitespace-nowrap">
     <!--
-      The mark carries the distinction for the eye, the label carries it for everything else: a
+      The mark carries the distinction for the eye, the words carry it for everything else: a
       glyph alone is silent to a screen reader and invisible in a copied line of text.
+
+      Spelled out as hidden text and not as an `aria-label`. The label stood on a bare `<span>`,
+      where ARIA forbids it and screen readers drop it — and with the figure itself `aria-hidden`,
+      what a screen reader got was nothing at all. axe found it on the first run against the
+      rendered window (`aria-prohibited-attr`, every score in the bar and on the sheet).
     -->
-    <span
-      v-if="project !== 0"
-      class="text-sky-300"
-      :aria-label="`${write(project)} Projektpunkte`"
-      title="Projektpunkte"
-    >
+    <span v-if="project !== 0" class="text-sky-300" title="Projektpunkte">
       <span aria-hidden="true">◆ {{ write(project) }}</span>
+      <span class="sr-only">{{ write(project) }} Projektpunkte</span>
     </span>
-    <span
-      v-if="personal !== 0"
-      class="text-emerald-300"
-      :aria-label="`${write(personal)} deine Punkte`"
-      title="Deine Punkte"
-    >
+    <span v-if="personal !== 0" class="text-emerald-300" title="Deine Punkte">
       <span aria-hidden="true">● {{ write(personal) }}</span>
+      <span class="sr-only">{{ write(personal) }} deine Punkte</span>
     </span>
   </span>
 </template>

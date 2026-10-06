@@ -12,6 +12,7 @@
     "test:lint": "eslint --max-warnings 0 .",
     "test:lint:typecheck": "vue-tsc --noEmit",
     "test:unit": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "tauri": "tauri",
     "app": "tauri dev",
     "app:build": "tauri build",
@@ -23,8 +24,10 @@
     "vue": "^3.5.22"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.7",
     "@vue/test-utils": "^2.4.10",
@@ -33,7 +36,6 @@
     "typescript": "~5.7.2",
     "vite": "^7.1.14",
     "vitest": "^4.1.7",
-    "vue-tsc": "^3.1.2",
-    "@tauri-apps/cli": "^2"
+    "vue-tsc": "^3.1.2"
   }
 }
