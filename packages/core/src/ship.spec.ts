@@ -9,6 +9,7 @@ import {
   inspectShip,
   mirrorsOf,
   originOf,
+  SEARCH_DEPTH,
   SURVEY_LANES,
   surveyHarbor,
   surveyOrder,
@@ -453,20 +454,34 @@ describe(findShipPaths, () => {
     ).resolves.toStrictEqual([])
   })
 
+  /**
+   * A chain of directories `levels` deep under `/repos`, with a repository at the bottom.
+   *
+   * Built from `SEARCH_DEPTH` and not spelled out: the old fixture was five names long and went
+   * green or red with the constant instead of with the rule.
+   */
+  const chain = (levels: number): { deep: string; ports: ReturnType<typeof mockPorts> } => {
+    const names = Array.from({ length: levels }, (_, at) => `d${String(at)}`)
+    const dirs: Record<string, string[]> = {}
+    let at = '/repos'
+    for (const name of names) {
+      dirs[at] = [name]
+      at = `${at}/${name}`
+    }
+    dirs[at] = []
+    dirs[`${at}/.git`] = []
+    return { deep: at, ports: mockPorts({ dirs }) }
+  }
+
+  it('reaches a repository exactly at the search depth', async () => {
+    const { deep, ports } = chain(SEARCH_DEPTH)
+
+    await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([deep])
+  })
+
   /** A limit so a stray symlink cannot turn the survey into a walk of the whole disk. */
   it('gives up below the search depth', async () => {
-    const deep = '/repos/a/b/c/d/e'
-    const ports = mockPorts({
-      dirs: {
-        '/repos': ['a'],
-        '/repos/a': ['b'],
-        '/repos/a/b': ['c'],
-        '/repos/a/b/c': ['d'],
-        '/repos/a/b/c/d': ['e'],
-        [deep]: [],
-        [`${deep}/.git`]: [],
-      },
-    })
+    const { ports } = chain(SEARCH_DEPTH + 1)
 
     await expect(findShipPaths(ports, '/repos')).resolves.toStrictEqual([])
   })

@@ -698,11 +698,17 @@ function isNotAShip(entry: string): boolean {
 /**
  * How deep below the root a repository is still looked for.
  *
- * Four, measured: `<org>/<repo>` is two, and the deepest real project on this machine is
- * `kombuese/addons/AddOns` at three. The limit exists so a stray symlink or a deeply nested
- * cache cannot turn the survey into a full disk walk.
+ * Ten. It was four, measured on one machine: `<org>/<repo>` is two, and the deepest project there
+ * sat at three. On a second machine that was too shallow, because the layout of somebody else's
+ * project folder is not this one's — and a repository the search does not reach is not missing
+ * from the picture, it is a picture that says it does not exist.
+ *
+ * Depth is cheap here, measured on 06.10.2026: the walk stops at every repository and prunes
+ * `NOT_A_SHIP`, so over 93 repositories ten levels found the same 93 in 85 ms instead of 25 ms.
+ * The limit still exists so a stray symlink loop or a deeply nested cache cannot turn the survey
+ * into a full disk walk.
  */
-export const SEARCH_DEPTH = 4
+export const SEARCH_DEPTH = 10
 
 export class UnreadableRootError extends Error {
   constructor(readonly root: string) {
