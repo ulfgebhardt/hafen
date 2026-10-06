@@ -257,7 +257,7 @@
         class="w-48 border-b border-slate-700 bg-transparent py-0.5 font-mono text-[11px] text-ink outline-none focus:border-slate-500 placeholder:text-ink-faint"
         placeholder="suchen …"
         aria-label="Schiffe filtern"
-        @keyup.escape="query = ''"
+        @keydown.escape.stop="query = ''"
       />
       <!--
         Only while there is something to filter by: a switch for an empty search would change

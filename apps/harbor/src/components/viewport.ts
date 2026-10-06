@@ -41,6 +41,42 @@ export const MIN_ZOOM = 0.35
 export const ZOOM_STEP = 1.15
 
 /**
+ * What a browser reports for one notch of a mouse wheel, in pixels.
+ *
+ * Chromium and WebKit send 100 per notch; Firefox sends three lines, which `wheelPixels` turns
+ * into 48. A trackpad sends the distance the fingers moved, a few pixels per event and dozens of
+ * events per second.
+ */
+const NOTCH = 100
+
+/** Lines are the browser's unit when it reports them; 16 px is the CSS default line box. */
+const LINE = 16
+
+/**
+ * A wheel delta in pixels, whatever unit the browser chose for it.
+ *
+ * `deltaMode` is 0 (pixels), 1 (lines) or 2 (pages). Read as pixels regardless, a Firefox wheel
+ * turned the view by three pixels a notch, and a page-wise one by one.
+ */
+export function wheelPixels(delta: number, mode: number, page: number): number {
+  return mode === 1 ? delta * LINE : mode === 2 ? delta * page : delta
+}
+
+/**
+ * The zoom factor for one wheel event: proportional to how far it went.
+ *
+ * It was one `ZOOM_STEP` per *event*. A mouse sends one event per notch, so that was right for a
+ * mouse — and a trackpad pinch sends dozens of tiny ones a second, so on a MacBook every twitch of
+ * two fingers was a 15 % jump and a pinch shot from one end of the range to the other. Now the
+ * distance decides: a notch of 100 px is still exactly one `ZOOM_STEP`, a 3 px pinch event is a
+ * sliver of one. Capped at one notch, so an accelerated wheel cannot leap either.
+ */
+export function wheelZoom(pixels: number): number {
+  const travel = Math.min(Math.max(pixels, -NOTCH), NOTCH)
+  return ZOOM_STEP ** (-travel / NOTCH)
+}
+
+/**
  * The scale at which the whole drawing fits, with no floor at all.
  *
  * Separate from `fitScale` because the two answer different questions: `fitScale` picks the

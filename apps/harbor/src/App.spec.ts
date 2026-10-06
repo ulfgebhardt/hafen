@@ -125,6 +125,51 @@ describe('app', () => {
     expect(app.text()).toContain('Schiffsdatenblatt')
     expect(app.text()).toContain('/repos/org/ship')
   })
+
+  it('lets go of the pinned ship on Escape', async () => {
+    answersWith(snapshot)
+
+    const app = mount(App, { global: { stubs }, attachTo: document.body })
+    await flushPromises()
+    const scene = app.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+
+    expect(app.text()).toContain('Schiffsdatenblatt')
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(app.text()).toContain('Ein Schiff anfahren')
+
+    app.unmount()
+  })
+
+  it('leaves Escape to a control that used it', async () => {
+    answersWith(snapshot)
+
+    const app = mount(App, { global: { stubs }, attachTo: document.body })
+    await flushPromises()
+    const scene = app.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    const search = app.find('input[type="search"]')
+    await search.setValue('ship')
+    await search.trigger('keydown', { key: 'Escape' })
+
+    expect((search.element as HTMLInputElement).value).toBe('')
+    expect(app.text()).toContain('Schiffsdatenblatt')
+
+    app.unmount()
+  })
 })
 
 /**
