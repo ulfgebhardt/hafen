@@ -61,7 +61,7 @@ Ohne Argument steht die Hilfe da. Die Wurzel ist als zweites Argument überschre
 
 <!-- x-release-please-start-version -->
 
-**Aktuell: v1.3.0** — Changelog und alle Dateien am **[Release](https://github.com/ulfgebhardt/hafen/releases/latest)**
+**Aktuell: v1.3.1** — Changelog und alle Dateien am **[Release](https://github.com/ulfgebhardt/hafen/releases/latest)**
 
 <!-- x-release-please-end -->
 
@@ -81,12 +81,12 @@ Ohne Argument steht die Hilfe da. Die Wurzel ist als zweites Argument überschre
 -->
 <!-- x-release-please-start-version -->
 
-[appimage]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_amd64.AppImage
-[deb]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_amd64.deb
-[dmg-arm]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_aarch64.dmg
-[dmg-intel]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_x64.dmg
-[exe]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_x64-setup.exe
-[msi]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.0_x64_en-US.msi
+[appimage]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_amd64.AppImage
+[deb]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_amd64.deb
+[dmg-arm]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_aarch64.dmg
+[dmg-intel]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_x64.dmg
+[exe]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_x64-setup.exe
+[msi]: https://github.com/ulfgebhardt/hafen/releases/latest/download/Hafen_1.3.1_x64_en-US.msi
 
 <!-- x-release-please-end -->
 
