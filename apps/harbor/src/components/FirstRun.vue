@@ -33,7 +33,7 @@
         nicht tut. Er misst, was da ist; wo er suchen soll, kann nur ein Mensch sagen.
       </p>
       <p class="mt-3 text-sm leading-relaxed text-ink-muted">
-        Wähle das Verzeichnis, unter dem deine Git-Repositories liegen. Gesucht wird bis vier Ebenen
+        Wähle das Verzeichnis, unter dem deine Git-Repositories liegen. Gesucht wird bis zehn Ebenen
         tief, und bei jedem Repository hört die Suche auf — was darin liegt, gehört ihm.
       </p>
 
