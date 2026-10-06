@@ -1,10 +1,14 @@
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue()],
   test: {
     environment: 'happy-dom',
+    // Playwright's, run by `test:e2e` against a built window. Named `.e2e.ts` so the default
+    // pattern misses them already; excluded anyway, so a renamed file cannot slip into the wrong
+    // runner and fail there for reasons that have nothing to do with it.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     css: { include: [/\.css\?raw$/] },
     coverage: {
       provider: 'v8',
