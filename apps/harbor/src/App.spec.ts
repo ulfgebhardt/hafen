@@ -17,9 +17,9 @@ const stubs = {
     template: '<div class="scene-stub" />',
     // Declared so a spec can read what the window handed the drawing — chiefly which ships are on
     // it and which of them a search found.
-    props: ['ships', 'found', 'layout', 'centre', 'hold', 'forge'],
+    props: ['ships', 'found', 'layout', 'centre', 'hold', 'forge', 'quest'],
     // Declared so the stub can hand a ship up the same way the real scene does.
-    emits: ['update:picked'],
+    emits: ['update:picked', 'update:hovered', 'update:quest'],
   },
 }
 
@@ -124,6 +124,90 @@ describe('app', () => {
 
     expect(app.text()).toContain('Schiffsdatenblatt')
     expect(app.text()).toContain('/repos/org/ship')
+  })
+
+  it('lets go of the pinned ship on Escape', async () => {
+    answersWith(snapshot)
+
+    const app = mount(App, { global: { stubs }, attachTo: document.body })
+    await flushPromises()
+    const scene = app.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    // Clicked, and the pointer still on her: picked *and* hovered, which is the case that kept the
+    // sheet open — letting go of the pick alone fell back to the hover.
+    scene.$emit('update:hovered', snapshot.ships[0])
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    await flushPromises()
+
+    expect(app.text()).toContain('Schiffsdatenblatt')
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(app.text()).toContain('Ein Schiff anfahren')
+
+    app.unmount()
+  })
+
+  /** One step per press: the container on the ship first, the ship second, then nothing. */
+  it('lets go of a chosen container before the ship', async () => {
+    answersWith(snapshot)
+
+    const app = mount(App, { global: { stubs }, attachTo: document.body })
+    await flushPromises()
+    const found = app.findComponent({ name: 'HarborScene' })
+    const scene = found.vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    scene.$emit('update:quest', { kind: 'mark', mark: 'staged' })
+    await flushPromises()
+    const escape = async (): Promise<void> => {
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await flushPromises()
+    }
+
+    expect(found.props('quest')).toStrictEqual({ kind: 'mark', mark: 'staged' })
+
+    await escape()
+
+    expect(found.props('quest')).toBeNull()
+    expect(app.text()).toContain('Schiffsdatenblatt')
+
+    await escape()
+
+    expect(app.text()).toContain('Ein Schiff anfahren')
+
+    await escape()
+
+    expect(app.text()).toContain('Ein Schiff anfahren')
+
+    app.unmount()
+  })
+
+  it('leaves Escape to a control that used it', async () => {
+    answersWith(snapshot)
+
+    const app = mount(App, { global: { stubs }, attachTo: document.body })
+    await flushPromises()
+    const scene = app.findComponent({ name: 'HarborScene' }).vm as {
+      $emit: (event: string, ...args: readonly unknown[]) => void
+    }
+    scene.$emit('update:picked', snapshot.ships[0])
+    await flushPromises()
+
+    const search = app.find('input[type="search"]')
+    await search.setValue('ship')
+    await search.trigger('keydown', { key: 'Escape' })
+
+    expect((search.element as HTMLInputElement).value).toBe('')
+    expect(app.text()).toContain('Schiffsdatenblatt')
+
+    app.unmount()
   })
 })
 

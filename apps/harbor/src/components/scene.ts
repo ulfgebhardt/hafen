@@ -71,9 +71,10 @@ import {
   fitScale,
   heldView,
   isPannable,
+  wheelPixels,
+  wheelZoom,
   wholeScale,
   zoomAt,
-  ZOOM_STEP,
 } from './viewport'
 
 import type { Layout } from './band'
@@ -1936,24 +1937,60 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     settle()
   }
 
+  /** Zoom by a factor around a point on the canvas, given in client coordinates. */
+  const zoomBy = (factor: number, clientX: number, clientY: number): void => {
+    const view = viewOf()
+    const from = zoom ?? fitScale(extent, view)
+    // The floor is "everything fits", measured: a fleet large enough to need less than the
+    // standing minimum can still be zoomed out until the whole harbour is on screen.
+    const to = clampZoom(from * factor, wholeScale(extent, view))
+    const rect = canvas.getBoundingClientRect()
+    pan = zoomAt(pan, from, to, { x: clientX - rect.left, y: clientY - rect.top })
+    zoom = to
+    settle()
+  }
+
+  /*
+   * WebKit's own pinch: `gesturestart` / `gesturechange` with a running `scale`, which Safari and
+   * the macOS window send for a trackpad pinch. Taken here and prevented, so the pinch zooms the
+   * harbour and not the page; and while one runs, a ctrl-wheel is not taken as a second zoom of
+   * the same gesture.
+   */
+  let pinch: number | null = null
+  interface Gesture extends UIEvent {
+    scale: number
+    clientX: number
+    clientY: number
+  }
+  const onGestureStart = (event: Event): void => {
+    event.preventDefault()
+    pinch = (event as Gesture).scale
+  }
+  const onGestureChange = (event: Event): void => {
+    event.preventDefault()
+    const gesture = event as Gesture
+    if (pinch !== null && pinch > 0 && gesture.scale > 0) {
+      zoomBy(gesture.scale / pinch, gesture.clientX, gesture.clientY)
+    }
+    pinch = gesture.scale
+  }
+  const onGestureEnd = (event: Event): void => {
+    event.preventDefault()
+    pinch = null
+  }
+
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault()
+    const page = viewOf().height
+    const dx = wheelPixels(event.deltaX, event.deltaMode, page)
+    const dy = wheelPixels(event.deltaY, event.deltaMode, page)
 
     // Ctrl-wheel zooms, plain wheel scrolls — what every editor and map does, and what a
     // trackpad's pinch already sends.
     if (event.ctrlKey || event.metaKey) {
-      const view = viewOf()
-      const from = zoom ?? fitScale(extent, view)
-      // The floor is "everything fits", measured: a fleet large enough to need less than the
-      // standing minimum can still be zoomed out until the whole harbour is on screen.
-      const to = clampZoom(
-        from * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP),
-        wholeScale(extent, view),
-      )
-      const rect = canvas.getBoundingClientRect()
-      pan = zoomAt(pan, from, to, { x: event.clientX - rect.left, y: event.clientY - rect.top })
-      zoom = to
-      settle()
+      if (pinch === null) {
+        zoomBy(wheelZoom(dy), event.clientX, event.clientY)
+      }
       return
     }
 
@@ -1967,12 +2004,15 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
        * Asking whether there is a horizontal delta *first* covers both browsers and a trackpad,
        * which sends both at once.
        */
-      x: pan.x - (event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0),
-      y: pan.y - (event.deltaX === 0 && event.shiftKey ? 0 : event.deltaY),
+      x: pan.x - (dx !== 0 ? dx : event.shiftKey ? dy : 0),
+      y: pan.y - (dx === 0 && event.shiftKey ? 0 : dy),
     }
     settle()
   }
   canvas.addEventListener('wheel', onWheel, { passive: false })
+  canvas.addEventListener('gesturestart', onGestureStart)
+  canvas.addEventListener('gesturechange', onGestureChange)
+  canvas.addEventListener('gestureend', onGestureEnd)
 
   let dragging: { x: number; y: number } | null = null
   const onDown = (event: PointerEvent): void => {
@@ -2159,6 +2199,9 @@ export async function mountScene(canvas: HTMLCanvasElement): Promise<Scene> {
     },
     destroy: () => {
       canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('gesturestart', onGestureStart)
+      canvas.removeEventListener('gesturechange', onGestureChange)
+      canvas.removeEventListener('gestureend', onGestureEnd)
       canvas.removeEventListener('pointerdown', onDown)
       globalThis.removeEventListener('pointermove', onMove)
       globalThis.removeEventListener('pointerup', onUp)

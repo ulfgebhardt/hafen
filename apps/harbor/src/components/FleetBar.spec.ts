@@ -212,7 +212,7 @@ describe('the roots', () => {
   it('closes on escape', async () => {
     const page = withRoots()
     await open(page)
-    await page.find('[aria-expanded]').trigger('keyup.escape')
+    await page.find('[aria-expanded]').trigger('keydown.escape')
 
     expect(page.text()).not.toContain('/home/wer/src')
   })
