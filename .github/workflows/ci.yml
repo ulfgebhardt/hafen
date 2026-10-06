@@ -46,7 +46,8 @@ jobs:
       - name: Build frontend
         run: pnpm --filter @hafen/harbor build
 
-  # axe gegen das gebaute Fenster in Chromium: `pnpm test:e2e`, dieselbe Zeile wie lokal.
+  # axe und Layout gegen das gebaute Fenster in Chromium und WebKit (die Mac-Engine):
+  # `pnpm test:e2e`, dieselbe Zeile wie lokal.
   # Eigener Job, weil nur er einen Browser braucht — und weil ein roter Kontrast eine andere
   # Nachricht ist als ein roter Linter. Kein turbo-Cache (`cache: false`): der Browser liegt
   # außerhalb dessen, was turbo hasht, und ein zurückgespieltes „passed“ wäre keine Messung.
@@ -68,8 +69,8 @@ jobs:
 
       # Die Fassung aus dem Lockfile, nicht die neueste: `playwright install` über das Paket
       # holt genau den Browser, gegen den `@playwright/test` gebaut ist.
-      - name: Install Chromium
-        run: pnpm --filter @hafen/harbor exec playwright install --with-deps chromium
+      - name: Install Chromium und WebKit
+        run: pnpm --filter @hafen/harbor exec playwright install --with-deps chromium webkit
 
       - name: test:e2e
         run: pnpm test:e2e

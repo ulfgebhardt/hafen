@@ -1113,7 +1113,7 @@ describe('the forge, from the window', () => {
     // Nothing asked on start: drawing the harbour must not wait on somebody else's server.
     expect(invoke).not.toHaveBeenCalledWith('port_run', expect.anything())
 
-    await clicking(page, 'Forge fragen')
+    await clicking(page, 'Forge')
     await pick(page, withOrigin.ships[0])
 
     expect(page.text()).toContain('442')
@@ -1158,7 +1158,7 @@ describe('the forge, from the window', () => {
 
     const page = mount(App, { global: { stubs } })
     await flushPromises()
-    await clicking(page, 'Forge fragen')
+    await clicking(page, 'Forge')
 
     expect(page.text()).toContain('1 Repositories konnten nicht gefragt werden')
   })

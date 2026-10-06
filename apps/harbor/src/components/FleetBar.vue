@@ -1,13 +1,15 @@
 <script setup lang="ts">
   import { fleetLines, fleetPoints, projectPoints } from '@hafen/core'
-  import { computed, ref } from 'vue'
+  import { computed, onUnmounted, ref, useTemplateRef } from 'vue'
 
   import { bindingQuests, countVerdicts } from './fleet'
   import { readingOf, shareOf } from './measuring'
   import PointValue from './PointValue.vue'
+  import { placePopup } from './popup'
   import { VERDICT_COLOR, VERDICT_LABEL, VERDICT_ORDER } from './theme'
 
   import type { Progress } from './measuring'
+  import type { Placed } from './popup'
   import type { RootRow } from './roots'
   import type { Ship } from '@hafen/core'
 
@@ -49,6 +51,34 @@
    * survey, and the list it shows would be stale until that is done.
    */
   const rooting = ref(false)
+
+  /** Where the roots open, measured from their button each time they do (`popup.ts`). */
+  const rootsButton = useTemplateRef<HTMLButtonElement>('rootsButton')
+  const placed = ref<Placed | null>(null)
+  const place = (): void => {
+    const button = rootsButton.value
+    placed.value =
+      button === null
+        ? null
+        : placePopup(button.getBoundingClientRect(), document.documentElement.clientWidth, 384)
+  }
+  const toggleRoots = (): void => {
+    rooting.value = !rooting.value
+    if (rooting.value) {
+      place()
+    }
+  }
+  // A resize moves the button, and a popup left where it was would hang beside nothing.
+  const onResize = (): void => {
+    if (rooting.value) {
+      place()
+    }
+  }
+  globalThis.addEventListener('resize', onResize)
+  onUnmounted(() => {
+    globalThis.removeEventListener('resize', onResize)
+  })
+
   const add = (): void => {
     rooting.value = false
     emit('add')
@@ -91,6 +121,20 @@
    * timestamp claims to be current, and this one is exactly as old as the last `schnappschuss`.
    */
   const taken = computed(() => new Date(at).toLocaleString('de-DE'))
+  /**
+   * The same moment, short enough for the bar to stay on one line: day, month, minute.
+   *
+   * The year and the seconds are what made the bar wrap, and neither is what somebody glancing at
+   * it asks. They stay in the tooltip, together with the word "vollständig".
+   */
+  const takenShort = computed(() =>
+    new Date(at).toLocaleString('de-DE', {
+      day: 'numeric',
+      month: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  )
 
   // Both readings of it live in `measuring.ts`, where a test can hold them.
   const share = computed(() => shareOf(progress))
@@ -98,7 +142,19 @@
 </script>
 
 <template>
-  <header class="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-800 px-4 py-2">
+  <!--
+    One row of items that wrap where they must, so the bar takes as few lines as the window allows.
+    It was split into two groups for a while, to keep the roots button at the right edge; a group
+    that no longer fits takes the whole width, and the bar went from two lines to three. The popup
+    places itself instead (`popup.ts`), wherever the button lands.
+
+    `relative z-20` lifts the whole bar, popup included, above what lies below it. The popup's own
+    z-index counted only against its siblings in the page: the datasheet's sticky head carries the
+    same `z-10`, comes later in the document, and so was drawn over the roots list.
+  -->
+  <header
+    class="relative z-20 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-slate-800 px-4 py-2"
+  >
     <h1 class="font-mono text-sm tracking-widest text-ink-strong uppercase">Hafen</h1>
     <p class="font-mono text-xs text-ink-muted">{{ ships.length }} Schiffe</p>
 
@@ -130,8 +186,11 @@
       Measuring one repository used to stamp the other ninety-one with a minute they were not read
       in, which is the one lie a timestamp exists to prevent.
     -->
-    <p class="ml-auto font-mono text-[11px] text-ink-faint" :title="source">
-      vollständig gemessen {{ taken }}
+    <p
+      class="ml-auto font-mono text-[11px] text-ink-faint"
+      :title="`vollständig gemessen ${taken} · ${source}`"
+    >
+      gemessen {{ takenShort }}
     </p>
 
     <!--
@@ -199,25 +258,33 @@
       "
       @click="emit('forge')"
     >
-      {{ forgeAt === '' ? 'Forge fragen' : 'Forge neu fragen' }}
+      Forge
     </button>
 
     <!--
       Where the survey looks, and the way to change it. A dead root is the one that matters most:
       it fails every survey on purpose, and this list is the remedy for that error.
     -->
-    <span v-if="canMeasure" class="relative" @keydown.escape.stop="rooting = false">
+    <span v-if="canMeasure" @keydown.escape.stop="rooting = false">
       <button
+        ref="rootsButton"
         class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
         :aria-expanded="rooting"
+        aria-controls="wurzeln"
         title="Wo der Hafen nach Git-Repositories sucht"
-        @click="rooting = !rooting"
+        @click="toggleRoots"
       >
         Wurzeln ({{ roots.length }}) {{ rooting ? '▴' : '▾' }}
       </button>
       <div
-        v-if="rooting"
-        class="absolute top-full right-0 z-10 mt-1 w-96 max-w-[90vw] border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] shadow-lg"
+        v-if="rooting && placed !== null"
+        id="wurzeln"
+        class="fixed border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] shadow-lg"
+        :style="{
+          top: `${String(placed.top)}px`,
+          left: `${String(placed.left)}px`,
+          width: `${String(placed.width)}px`,
+        }"
       >
         <ul>
           <li v-for="root in roots" :key="root.path" class="flex items-baseline gap-2 py-0.5">
