@@ -206,7 +206,7 @@
       Where the survey looks, and the way to change it. A dead root is the one that matters most:
       it fails every survey on purpose, and this list is the remedy for that error.
     -->
-    <span v-if="canMeasure" class="relative" @keyup.escape="rooting = false">
+    <span v-if="canMeasure" class="relative" @keydown.escape.stop="rooting = false">
       <button
         class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
         :aria-expanded="rooting"

@@ -9,7 +9,10 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   MIN_ZOOM,
+  wheelPixels,
+  wheelZoom,
   wholeScale,
+  ZOOM_STEP,
   zoomAt,
 } from './viewport'
 
@@ -182,5 +185,41 @@ describe(heldView, () => {
     const view = heldView({ x: 400, y: 300, scale: 99 }, { x: 100, y: 50 }, MIN_ZOOM)
 
     expect(view.pan.x + 100 * view.zoom).toBe(400)
+  })
+})
+
+describe(wheelPixels, () => {
+  it('passes pixels through', () => {
+    expect(wheelPixels(42, 0, 800)).toBe(42)
+  })
+
+  it('turns lines and pages into pixels', () => {
+    expect(wheelPixels(3, 1, 800)).toBe(48)
+    expect(wheelPixels(-1, 2, 800)).toBe(-800)
+  })
+})
+
+describe(wheelZoom, () => {
+  it('is one step for one notch of a mouse wheel, in either direction', () => {
+    expect(wheelZoom(-100)).toBeCloseTo(ZOOM_STEP)
+    expect(wheelZoom(100)).toBeCloseTo(1 / ZOOM_STEP)
+  })
+
+  /**
+   * The trackpad case. A pinch arrives as many small events, and each of them used to be a whole
+   * step: thirty events, thirty steps, a factor of 66 for one gesture.
+   */
+  it('is a sliver of a step for the few pixels a pinch event carries', () => {
+    const pinch = Array.from({ length: 30 }, () => wheelZoom(-3)).reduce((a, b) => a * b, 1)
+
+    expect(pinch).toBeCloseTo(ZOOM_STEP ** 0.9)
+  })
+
+  it('never goes further than one notch per event', () => {
+    expect(wheelZoom(-1000)).toBeCloseTo(ZOOM_STEP)
+  })
+
+  it('changes nothing for no movement', () => {
+    expect(wheelZoom(0)).toBe(1)
   })
 })

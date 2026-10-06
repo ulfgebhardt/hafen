@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
+  import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watch } from 'vue'
 
   import {
     bandOf,
@@ -94,6 +94,39 @@
   }
 
   const sheet = computed(() => picked.value ?? hovered.value)
+
+  /**
+   * Escape lets go one step at a time: first what was chosen on the ship, then the ship.
+   *
+   * A container or a demand is a choice made *inside* a pinned ship, so one press takes back that
+   * choice and leaves her sheet open; the next lets go of her. With nothing chosen it does nothing.
+   *
+   * The ship step clears the hover as well. The sheet shows `picked ?? hovered`, and right after a
+   * click the pointer still rests on the ship it clicked — letting go of the pick alone fell back to
+   * the hover: the mark went, the sheet stayed. The scene sets a hover again on the next ship the
+   * pointer enters.
+   *
+   * On the window and not on the scene: a canvas has no focus to receive a key, so the one place
+   * that hears it whatever was last clicked is the window. A control that has its own use for the
+   * key — the search clears itself, a popup closes — stops it there, so one press does one thing.
+   */
+  const letGo = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape' || event.defaultPrevented) {
+      return
+    }
+    if (demand.value !== null) {
+      demand.value = null
+      return
+    }
+    picked.value = null
+    hovered.value = null
+  }
+  onMounted(() => {
+    globalThis.addEventListener('keydown', letGo)
+  })
+  onUnmounted(() => {
+    globalThis.removeEventListener('keydown', letGo)
+  })
 
   /**
    * Which page is open, and what is on it.
@@ -751,7 +784,7 @@
       -->
       <p
         v-if="forgeNote(aboard) !== null"
-        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-amber-600/80"
+        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-amber-600"
       >
         {{ forgeNote(aboard) }}
       </p>

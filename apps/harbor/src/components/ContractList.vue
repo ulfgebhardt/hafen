@@ -193,7 +193,7 @@
             and it is never drawn as a failure. But one that answers nothing anywhere looks exactly
             like a working one until somebody counts, and two of thirteen are in that state.
           -->
-          <p v-if="row.silent" class="mt-1 font-mono text-[11px] text-amber-600/80">
+          <p v-if="row.silent" class="mt-1 font-mono text-[11px] text-amber-600">
             kein Urteil auf dieser Flotte — diese Forderung misst hier nichts
           </p>
         </li>

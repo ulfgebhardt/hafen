@@ -28,6 +28,18 @@ describe('pointValue', () => {
     expect(mount(PointValue, { props: { personal: 3 } }).text()).not.toContain('+')
   })
 
+  /**
+   * In words, as text and not as an `aria-label` on a `<span>` — there the label is dropped, and
+   * with the figure `aria-hidden` a screen reader was told nothing.
+   */
+  it('names each score in words a screen reader reads', () => {
+    const both = mount(PointValue, { props: { project: 1200, personal: 3, signed: true } })
+    const said = both.findAll('.sr-only').map((one) => one.text())
+
+    expect(said).toStrictEqual(['+1.200 Projektpunkte', '+3 deine Punkte'])
+    expect(both.find('[aria-label]').exists()).toBe(false)
+  })
+
   it('groups a large number so it can be read', () => {
     expect(mount(PointValue, { props: { project: 151703 } }).text()).toContain('151.703')
   })
