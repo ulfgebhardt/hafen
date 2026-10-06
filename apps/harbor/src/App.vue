@@ -96,7 +96,11 @@
   const sheet = computed(() => picked.value ?? hovered.value)
 
   /**
-   * Escape lets go of the chosen ship and what was chosen on her.
+   * Escape lets go of the chosen ship and what was chosen on her — and of the hover.
+   *
+   * The sheet shows `picked ?? hovered`, and right after a click the pointer still rests on the
+   * ship it clicked. Letting go of the pick alone fell back to the hover: the mark went, the sheet
+   * stayed. The scene sets a hover again on the next ship the pointer enters.
    *
    * On the window and not on the scene: a canvas has no focus to receive a key, so the one place
    * that hears it whatever was last clicked is the window. A control that has its own use for the
@@ -107,6 +111,7 @@
       return
     }
     picked.value = null
+    hovered.value = null
     demand.value = null
   }
   onMounted(() => {

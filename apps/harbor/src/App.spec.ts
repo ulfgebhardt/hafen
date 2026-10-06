@@ -19,7 +19,7 @@ const stubs = {
     // it and which of them a search found.
     props: ['ships', 'found', 'layout', 'centre', 'hold', 'forge'],
     // Declared so the stub can hand a ship up the same way the real scene does.
-    emits: ['update:picked'],
+    emits: ['update:picked', 'update:hovered'],
   },
 }
 
@@ -134,6 +134,9 @@ describe('app', () => {
     const scene = app.findComponent({ name: 'HarborScene' }).vm as {
       $emit: (event: string, ...args: readonly unknown[]) => void
     }
+    // Clicked, and the pointer still on her: picked *and* hovered, which is the case that kept the
+    // sheet open — letting go of the pick alone fell back to the hover.
+    scene.$emit('update:hovered', snapshot.ships[0])
     scene.$emit('update:picked', snapshot.ships[0])
     await flushPromises()
 
