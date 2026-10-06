@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.1](https://github.com/ulfgebhardt/hafen/compare/v1.3.0...v1.3.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **core:** Repos bis zehn Ebenen tief suchen statt vier ([#37](https://github.com/ulfgebhardt/hafen/issues/37)) ([d52a389](https://github.com/ulfgebhardt/hafen/commit/d52a389415ed2d8c2e70c4ecced126d3a4f1a58b))
+* **ui:** Esc hebt die Auswahl auf, Trackpad-Zoom proportional statt in Sprüngen ([#36](https://github.com/ulfgebhardt/hafen/issues/36)) ([203da40](https://github.com/ulfgebhardt/hafen/commit/203da40b466cd88dbc336912481d966b081d55f6))
+* **ui:** Kopfzeile kompakter, Wurzel-Popup im Fenster und über dem Datenblatt; e2e auch in WebKit ([#38](https://github.com/ulfgebhardt/hafen/issues/38)) ([f346189](https://github.com/ulfgebhardt/hafen/commit/f346189b65a9e0fc1a163e46df8e324b4f7a247f))
+* **ui:** Textfarben als gemessene Rollen, Kleingedrucktes erreicht WCAG AA ([#32](https://github.com/ulfgebhardt/hafen/issues/32)) ([fc946f9](https://github.com/ulfgebhardt/hafen/commit/fc946f940f1343c657d2cee94dbeb58a3f61cd33))
+
+
+### Tests
+
+* **ui:** axe prüft Kontrast am echten Rendering ([#34](https://github.com/ulfgebhardt/hafen/issues/34)) ([779926a](https://github.com/ulfgebhardt/hafen/commit/779926a571914a2ba34541e96c0aec95318f200e))
+* **ui:** Palettengrau in Templates verboten, ink-off nur hinter disabled: ([#33](https://github.com/ulfgebhardt/hafen/issues/33)) ([25a81c2](https://github.com/ulfgebhardt/hafen/commit/25a81c26ea02dd6a46956f2ac70bc2cfa68bcbb0))
+
 ## [1.3.0](https://github.com/ulfgebhardt/hafen/compare/v1.2.2...v1.3.0) (2026-10-05)
 
 
