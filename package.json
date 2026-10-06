@@ -10,6 +10,7 @@
     "test:lint:eslint": "eslint --max-warnings 0 .",
     "test:lint:typecheck": "turbo test:lint:typecheck",
     "test:unit": "turbo test:unit",
+    "test:e2e": "turbo test:e2e",
     "hafen": "pnpm --filter @hafen/cli exec tsx src/index.ts"
   },
   "devDependencies": {

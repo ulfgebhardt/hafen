@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+# Playwright: traces and screenshots of a failed run, local to the machine that ran it.
+test-results/
+playwright-report/
 .turbo/
 *.tsbuildinfo
 # Measured, not authored: `pnpm --filter @hafen/harbor snapshot` writes it, and it carries every

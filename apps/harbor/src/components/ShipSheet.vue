@@ -373,7 +373,7 @@
           <tr class="text-[11px] text-ink-faint">
             <th class="text-left font-normal" colspan="3">das Repo</th>
             <th class="text-right font-normal">Punkte</th>
-            <th class="pl-2 text-right font-normal text-emerald-900">deine</th>
+            <th class="pl-2 text-right font-normal text-emerald-300/80">deine</th>
           </tr>
         </thead>
         <tbody>
