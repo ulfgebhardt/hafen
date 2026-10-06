@@ -41,4 +41,18 @@ export default [
       'no-catch-all/no-catch-all': 'off',
     },
   },
+  {
+    files: ['apps/harbor/**/*.vue'],
+    rules: {
+      // Text colour is a role from `style.css`, and only the roles are measured for contrast
+      // (`style.spec.ts`). A palette grey here would be the one colour nobody checked — which is
+      // how the small print ended up at 1.7 : 1. `ink-off` is exempt from contrast only because
+      // a disabled control is, so it may appear only behind `disabled:`.
+      'vue/no-restricted-class': [
+        'error',
+        '/(^|:)text-(slate|gray|zinc|neutral|stone)-\\d+/',
+        '/^(?!disabled:)(.*:)?text-ink-off$/',
+      ],
+    },
+  },
 ]
