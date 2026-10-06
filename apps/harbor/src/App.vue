@@ -714,7 +714,7 @@
 </script>
 
 <template>
-  <div class="flex h-screen w-screen flex-col bg-slate-950 text-ink">
+  <div class="flex h-screen w-full flex-col bg-slate-950 text-ink">
     <!--
       Above everything, including the two views that replace the harbour: a newer version can be
       exactly the remedy for the state somebody is looking at.

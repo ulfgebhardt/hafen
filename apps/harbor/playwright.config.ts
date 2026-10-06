@@ -1,15 +1,20 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * End-to-end checks against the built window, Chromium only.
+ * End-to-end checks against the built window, in both engines it ships in.
  *
  * `vite preview` over a fresh build and not the dev server, for two reasons. It is what Tauri
  * embeds (`frontendDist=../dist`), so the CSS that is judged is the CSS that ships. And the dev
  * server optimises dependencies on the first request and may then reload the page — a reload in
  * the middle of a check is a flake by construction, not by bad luck.
  *
- * Chromium only: the window is a WebView, and a second engine here would test browsers the
- * application never runs in, at twice the CI time.
+ * Chromium and WebKit, because those are the window: WebKitGTK on Linux, WKWebView on the Mac,
+ * WebView2 (Chromium) on Windows. Chromium alone missed the Mac: on 06.10.2026 the bar wrapped,
+ * the roots popup opened past the window's edge and the window scrolled, all of it in WebKit.
+ *
+ * WebKit needs system libraries a non-Ubuntu host may lack. There, run the checks in the image CI
+ * uses: `docker run --rm -v "$PWD":/w -w /w/apps/harbor mcr.microsoft.com/playwright:v1.63.0-noble
+ * pnpm test:e2e` (after a `pnpm install` inside it).
  */
 
 // eslint-disable-next-line n/no-process-env -- port, timeout and CI are the runner's to say
@@ -46,7 +51,10 @@ export default defineConfig({
     baseURL: BASE,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
   webServer: {
     command: `vite build && vite preview --host 127.0.0.1 --port ${String(PORT)} --strictPort`,
     url: BASE,

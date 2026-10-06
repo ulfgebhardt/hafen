@@ -51,7 +51,8 @@ describe('fleetBar', () => {
     const bar = mount(FleetBar, { props: { at: AT, source: SOURCE, ships: [ship()] } })
 
     expect(bar.text()).toContain('gemessen')
-    expect(bar.text()).toContain('2026')
+    // Day and minute in the bar, the full moment — year included — in its tooltip.
+    expect(bar.find('[title^="vollständig gemessen"]').attributes('title')).toContain('2026')
   })
 
   /**
@@ -296,7 +297,8 @@ describe('while a survey runs', () => {
   it('carries the age of the whole fleet and nothing else', () => {
     const bar = mount(FleetBar, { props: { ships: [ship()], at: AT, source: '/cache' } })
 
-    expect(bar.text()).toContain('vollständig gemessen')
+    expect(bar.text()).toContain('gemessen')
+    expect(bar.find('[title^="vollständig gemessen"]').exists()).toBe(true)
     expect(bar.text()).not.toContain('einzeln')
   })
 })
