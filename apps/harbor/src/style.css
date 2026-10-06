@@ -1,5 +1,26 @@
 @import 'tailwindcss';
 
+/*
+ * Text colour is a role, not a palette step.
+ *
+ * Until 06.10.2026 the chrome chose greys straight from the palette, and the small print sat at
+ * slate-600 and slate-700: 2.4 and 1.7 to 1 on the sheet, where WCAG AA asks 4.5 — at 10 px,
+ * where even 4.5 is little. Every role here is measured against every surface text sits on
+ * (`style.spec.ts`), and the lint forbids palette greys in templates, so a new grey has to come
+ * through here and be measured.
+ *
+ * `off` is the one exception, and it is named: a disabled control is exempt from the contrast
+ * requirement (WCAG 1.4.3), and it has to look different from an enabled one. It may only be
+ * used behind `disabled:`.
+ */
+@theme {
+  --color-ink-strong: oklch(96.8% 0.007 247.896);
+  --color-ink: oklch(86.9% 0.022 252.894);
+  --color-ink-muted: oklch(70.4% 0.04 256.788);
+  --color-ink-faint: oklch(63% 0.045 257.3);
+  --color-ink-off: oklch(44.6% 0.043 257.281);
+}
+
 /* A drawing sheet, not a page: the scene owns the background, the chrome stays out of its way. */
 html,
 body {

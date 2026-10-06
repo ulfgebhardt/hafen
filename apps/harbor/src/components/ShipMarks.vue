@@ -61,8 +61,8 @@
     class="border-b border-slate-800 px-4 py-3"
     :class="isPier(chosen) ? 'bg-orange-500/5 ring-1 ring-orange-500/30' : ''"
   >
-    <p class="text-[10px] tracking-wide text-slate-600 uppercase">
-      Zustand <span class="text-slate-700">— {{ marks.length }} Arten</span>
+    <p class="text-[11px] tracking-wide text-ink-faint uppercase">
+      Zustand <span class="text-ink-faint">— {{ marks.length }} Arten</span>
     </p>
 
     <ul class="mt-1 space-y-1">
@@ -87,11 +87,11 @@
           />
           <span class="min-w-0 flex-1">
             <span class="flex items-baseline gap-2">
-              <span class="text-xs text-slate-200">{{ MARK_LABEL[mark.kind] }}</span>
+              <span class="text-xs text-ink-strong">{{ MARK_LABEL[mark.kind] }}</span>
               <!-- The honest count: the drawing caps at four, the measurement does not. -->
-              <span class="font-mono text-[11px] text-slate-500">{{ mark.count }}</span>
+              <span class="font-mono text-[11px] text-ink-muted">{{ mark.count }}</span>
             </span>
-            <span class="block text-[11px] leading-snug text-slate-600">{{
+            <span class="block text-[11px] leading-snug text-ink-faint">{{
               MARK_MEANING[mark.kind]
             }}</span>
           </span>

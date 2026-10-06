@@ -27,18 +27,18 @@
 <template>
   <section class="flex h-full items-center justify-center p-8">
     <div class="max-w-xl">
-      <h2 class="font-mono text-sm tracking-wide text-slate-300">Der Hafen ist noch leer</h2>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
+      <h2 class="font-mono text-sm tracking-wide text-ink">Der Hafen ist noch leer</h2>
+      <p class="mt-3 text-sm leading-relaxed text-ink-muted">
         Es ist nicht festgehalten, wo deine Projekte liegen — und raten wäre das eine, was der Hafen
         nicht tut. Er misst, was da ist; wo er suchen soll, kann nur ein Mensch sagen.
       </p>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
+      <p class="mt-3 text-sm leading-relaxed text-ink-muted">
         Wähle das Verzeichnis, unter dem deine Git-Repositories liegen. Gesucht wird bis vier Ebenen
         tief, und bei jedem Repository hört die Suche auf — was darin liegt, gehört ihm.
       </p>
 
       <button
-        class="mt-5 border border-slate-700 px-4 py-2 font-mono text-xs text-slate-200 hover:border-slate-500 hover:text-white disabled:text-slate-600"
+        class="mt-5 border border-slate-700 px-4 py-2 font-mono text-xs text-ink-strong hover:border-slate-500 hover:text-white disabled:text-ink-off"
         :disabled="busy"
         @click="emit('choose')"
       >
@@ -53,13 +53,13 @@
         and knowing where it goes before answering is the difference between a setting and a
         black box.
       -->
-      <p class="mt-6 font-mono text-[11px] leading-relaxed text-slate-600">
+      <p class="mt-6 font-mono text-[11px] leading-relaxed text-ink-faint">
         Die Antwort kommt als Zeile nach
-        <span class="text-slate-500">{{ store }}/register.md</span>. Dort steht nur, was keine
+        <span class="text-ink-muted">{{ store }}/register.md</span>. Dort steht nur, was keine
         Messung ist — und sie bleibt auf dieser Maschine.
       </p>
-      <p class="mt-2 font-mono text-[11px] text-slate-600">
-        Oder <span class="text-slate-500">$HAFEN_ROOT</span> setzen, komma-getrennt; das geht vor.
+      <p class="mt-2 font-mono text-[11px] text-ink-faint">
+        Oder <span class="text-ink-muted">$HAFEN_ROOT</span> setzen, komma-getrennt; das geht vor.
       </p>
     </div>
   </section>

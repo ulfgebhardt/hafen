@@ -39,13 +39,13 @@
 
 <template>
   <section class="border-b border-slate-800 px-4 py-3">
-    <p class="text-[10px] tracking-wide text-slate-600 uppercase">
+    <p class="text-[11px] tracking-wide text-ink-faint uppercase">
       {{ title }}
-      <span v-if="tasks.length > 0" class="text-slate-700">— {{ tasks.length }}</span>
+      <span v-if="tasks.length > 0" class="text-ink-faint">— {{ tasks.length }}</span>
     </p>
 
     <!-- The intended end state, not an empty list: a repository in good order asks for nothing. -->
-    <p v-if="tasks.length === 0" class="mt-1 text-xs text-slate-500">
+    <p v-if="tasks.length === 0" class="mt-1 text-xs text-ink-muted">
       Nichts offen. Der Baum ist sauber, nichts liegt im Stash, nichts wartet auf einen Push.
     </p>
 
@@ -57,18 +57,18 @@
 
         <span class="min-w-0 flex-1">
           <span class="flex flex-wrap items-baseline justify-between gap-x-2">
-            <span class="text-xs text-slate-200">{{ task.title }}</span>
+            <span class="text-xs text-ink-strong">{{ task.title }}</span>
             <PointValue :project="task.project" :personal="task.personal" signed />
           </span>
 
-          <span class="mt-0.5 block text-[11px] leading-snug text-slate-500">{{ task.why }}</span>
+          <span class="mt-0.5 block text-[11px] leading-snug text-ink-muted">{{ task.why }}</span>
 
           <!--
             The command to type, and nothing that types it. The harbour measures and draws; the
             work happens in a terminal, by hand — offering a button here would make this a tool
             that acts on repositories, which is the one thing it must not become.
           -->
-          <code class="mt-1 block font-mono text-[11px] break-all text-slate-600 select-all">{{
+          <code class="mt-1 block font-mono text-[11px] break-all text-ink-faint select-all">{{
             task.command
           }}</code>
         </span>

@@ -99,8 +99,8 @@
 
 <template>
   <header class="flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-slate-800 px-4 py-2">
-    <h1 class="font-mono text-sm tracking-widest text-slate-200 uppercase">Hafen</h1>
-    <p class="font-mono text-xs text-slate-400">{{ ships.length }} Schiffe</p>
+    <h1 class="font-mono text-sm tracking-widest text-ink-strong uppercase">Hafen</h1>
+    <p class="font-mono text-xs text-ink-muted">{{ ships.length }} Schiffe</p>
 
     <ul class="flex flex-wrap gap-x-4 gap-y-1">
       <li
@@ -115,12 +115,12 @@
             backgroundColor: verdict === 'met' ? VERDICT_COLOR[verdict] : 'transparent',
           }"
         />
-        <span class="text-slate-300">{{ counts.get(verdict) ?? 0 }}</span>
-        <span class="text-slate-600">{{ VERDICT_LABEL[verdict] }}</span>
+        <span class="text-ink">{{ counts.get(verdict) ?? 0 }}</span>
+        <span class="text-ink-faint">{{ VERDICT_LABEL[verdict] }}</span>
       </li>
     </ul>
 
-    <p class="font-mono text-xs text-slate-500">{{ bound }} gebunden</p>
+    <p class="font-mono text-xs text-ink-muted">{{ bound }} gebunden</p>
 
     <p :title="bill">
       <PointValue :project="fleet" :personal="mine.total" />
@@ -130,7 +130,7 @@
       Measuring one repository used to stamp the other ninety-one with a minute they were not read
       in, which is the one lie a timestamp exists to prevent.
     -->
-    <p class="ml-auto font-mono text-[10px] text-slate-600" :title="source">
+    <p class="ml-auto font-mono text-[11px] text-ink-faint" :title="source">
       vollständig gemessen {{ taken }}
     </p>
 
@@ -142,7 +142,7 @@
     -->
     <button
       v-if="canMeasure && !busy"
-      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+      class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
       :title="`Alle ${ships.length} Repositories neu messen`"
       @click="emit('measure')"
     >
@@ -164,17 +164,17 @@
           :style="share === null ? undefined : { width: `${String(Math.round(share * 100))}%` }"
         />
       </span>
-      <span class="font-mono text-[10px] whitespace-nowrap text-slate-500">
+      <span class="font-mono text-[11px] whitespace-nowrap text-ink-muted">
         <template v-if="progress !== null && progress.of > 0"
           >{{ progress.at }}/{{ progress.of }}</template
         >
         <template v-else>zählt …</template>
       </span>
-      <span class="max-w-48 truncate font-mono text-[10px] text-slate-600" :title="progress?.path">
+      <span class="max-w-48 truncate font-mono text-[11px] text-ink-faint" :title="progress?.path">
         {{ reading }}
       </span>
       <button
-        class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+        class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
         title="Messung abbrechen — der Cache behält die letzte vollständige"
         @click="emit('stop')"
       >
@@ -190,7 +190,7 @@
     -->
     <button
       v-if="canMeasure"
-      class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+      class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
       :disabled="busy"
       :title="
         forgeAt === ''
@@ -208,7 +208,7 @@
     -->
     <span v-if="canMeasure" class="relative" @keyup.escape="rooting = false">
       <button
-        class="font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+        class="font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
         :aria-expanded="rooting"
         title="Wo der Hafen nach Git-Repositories sucht"
         @click="rooting = !rooting"
@@ -217,20 +217,20 @@
       </button>
       <div
         v-if="rooting"
-        class="absolute top-full right-0 z-10 mt-1 w-96 max-w-[90vw] border border-slate-700 bg-slate-950 p-2 font-mono text-[10px] shadow-lg"
+        class="absolute top-full right-0 z-10 mt-1 w-96 max-w-[90vw] border border-slate-700 bg-slate-950 p-2 font-mono text-[11px] shadow-lg"
       >
         <ul>
           <li v-for="root in roots" :key="root.path" class="flex items-baseline gap-2 py-0.5">
-            <span class="min-w-0 flex-1 truncate text-slate-300" :title="root.path">
+            <span class="min-w-0 flex-1 truncate text-ink" :title="root.path">
               {{ root.path }}
             </span>
             <span v-if="root.ships === null" class="whitespace-nowrap text-red-400">
               nicht gefunden
             </span>
-            <span v-else class="whitespace-nowrap text-slate-500">{{ root.ships }} Schiffe</span>
+            <span v-else class="whitespace-nowrap text-ink-muted">{{ root.ships }} Schiffe</span>
             <button
               v-if="!fixed"
-              class="text-slate-600 hover:text-slate-300 disabled:text-slate-800"
+              class="text-ink-faint hover:text-ink disabled:text-ink-off"
               :disabled="busy"
               :aria-label="`${root.path} entfernen`"
               :title="`${root.path} nicht mehr durchsuchen — die Repositories bleiben, wo sie sind`"
@@ -244,12 +244,12 @@
           Said rather than silently ignored: with the variable set, an entry added here would land
           in the register and do nothing until it is unset.
         -->
-        <p v-if="fixed" class="mt-1 text-slate-600">
+        <p v-if="fixed" class="mt-1 text-ink-faint">
           $HAFEN_ROOT ist gesetzt und geht vor — das Register wird erst ohne sie gelesen.
         </p>
         <button
           v-else
-          class="mt-1 text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          class="mt-1 text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
           :disabled="busy"
           title="Einen Ordner wählen, unter dem nach Git-Repositories gesucht wird"
           @click="add"

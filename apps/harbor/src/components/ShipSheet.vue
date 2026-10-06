@@ -225,21 +225,21 @@
     >
       <p
         v-if="!scrolled"
-        class="flex items-baseline gap-2 font-mono text-[10px] tracking-widest uppercase"
+        class="flex items-baseline gap-2 font-mono text-[11px] tracking-widest uppercase"
       >
-        <span class="text-slate-500">Schiffsdatenblatt</span>
+        <span class="text-ink-muted">Schiffsdatenblatt</span>
         <!-- Said out loud: a panel that silently stops following the pointer looks broken. -->
-        <span v-if="pinned" class="text-slate-400 normal-case">festgehalten</span>
-        <span v-else class="text-slate-700 normal-case">anklicken hält fest</span>
+        <span v-if="pinned" class="text-ink-muted normal-case">festgehalten</span>
+        <span v-else class="text-ink-faint normal-case">anklicken hält fest</span>
       </p>
       <h2
-        class="font-mono break-words text-slate-100"
+        class="font-mono break-words text-ink-strong"
         :class="scrolled ? 'text-sm' : 'mt-1 text-base'"
       >
         {{ ship.org }}/{{ ship.name }}
       </h2>
       <!-- The path is the first thing to go: it is long, and it does not change while reading. -->
-      <p v-if="!scrolled" class="mt-1 text-xs text-slate-500">{{ ship.path }}</p>
+      <p v-if="!scrolled" class="mt-1 text-xs text-ink-muted">{{ ship.path }}</p>
 
       <!--
         One plan, and it lives here.
@@ -266,11 +266,11 @@
       -->
       <p
         v-if="canAct"
-        class="flex gap-3 font-mono text-[10px]"
+        class="flex gap-3 font-mono text-[11px]"
         :class="scrolled ? 'mt-0.5' : 'mt-2'"
       >
         <button
-          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          class="text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
           :disabled="busy"
           title="Nur dieses Repository neu messen"
           @click="emit('measure', ship.path)"
@@ -283,9 +283,9 @@
           survey is her answer. The header carries the fleet's age and this carries hers — the two
           are different questions and only this one is about the sheet somebody is reading.
         -->
-        <span v-if="readAt !== null" class="text-slate-700">gemessen {{ readAt }}</span>
+        <span v-if="readAt !== null" class="text-ink-faint">gemessen {{ readAt }}</span>
         <button
-          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          class="text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
           :disabled="busy"
           :title="
             ship.archived
@@ -303,7 +303,7 @@
         -->
         <button
           v-if="ship.enlisted"
-          class="text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+          class="text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
           :disabled="busy"
           title="Aus dem Register nehmen — dieses Verzeichnis wurde von Hand aufgenommen"
           @click="emit('enlist', false)"
@@ -315,41 +315,41 @@
 
     <section class="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-slate-800 px-4 py-3">
       <div>
-        <p class="text-[10px] tracking-wide text-slate-600 uppercase">Lage</p>
-        <p class="text-slate-300">{{ STAGE_LABEL[ship.stage] }}</p>
-        <p class="text-[11px] text-slate-600">{{ STAGE_MEANING[ship.stage] }}</p>
+        <p class="text-[11px] tracking-wide text-ink-faint uppercase">Lage</p>
+        <p class="text-ink">{{ STAGE_LABEL[ship.stage] }}</p>
+        <p class="text-[11px] text-ink-faint">{{ STAGE_MEANING[ship.stage] }}</p>
       </div>
       <div>
-        <p class="text-[10px] tracking-wide text-slate-600 uppercase">Liegezeit</p>
-        <p class="text-slate-300">{{ ageLabel(ship.rustDays) }}</p>
-        <p class="text-[11px] text-slate-600">{{ RUST_LABEL[rustLevel(ship.rustDays)] }}</p>
+        <p class="text-[11px] tracking-wide text-ink-faint uppercase">Liegezeit</p>
+        <p class="text-ink">{{ ageLabel(ship.rustDays) }}</p>
+        <p class="text-[11px] text-ink-faint">{{ RUST_LABEL[rustLevel(ship.rustDays)] }}</p>
       </div>
       <div>
-        <p class="text-[10px] tracking-wide text-slate-600 uppercase">Branch</p>
-        <p class="font-mono text-xs text-slate-300">
+        <p class="text-[11px] tracking-wide text-ink-faint uppercase">Branch</p>
+        <p class="font-mono text-xs text-ink">
           {{ ship.branch ?? '—' }}<span v-if="ship.dirty" class="text-amber-500"> *</span>
         </p>
-        <p v-if="ship.ahead !== null || ship.behind !== null" class="text-[11px] text-slate-600">
+        <p v-if="ship.ahead !== null || ship.behind !== null" class="text-[11px] text-ink-faint">
           {{ ship.ahead ?? 0 }} voraus, {{ ship.behind ?? 0 }} zurück
         </p>
         <!-- No upstream is an answer, and not the same as being level with one. -->
-        <p v-else class="text-[11px] text-slate-600">kein Upstream</p>
+        <p v-else class="text-[11px] text-ink-faint">kein Upstream</p>
       </div>
       <div>
-        <p class="text-[10px] tracking-wide text-slate-600 uppercase">Worktrees</p>
-        <p class="text-slate-300">{{ ship.docks.length }}</p>
+        <p class="text-[11px] tracking-wide text-ink-faint uppercase">Worktrees</p>
+        <p class="text-ink">{{ ship.docks.length }}</p>
       </div>
     </section>
 
     <!-- Counts beside the score, so the weighting can be argued with rather than believed. -->
     <section class="border-b border-slate-800 px-4 py-3">
-      <p class="text-[10px] tracking-wide text-slate-600 uppercase">Geleistet</p>
+      <p class="text-[11px] tracking-wide text-ink-faint uppercase">Geleistet</p>
       <p><PointValue :project="points.project" :personal="points.own" /></p>
-      <p class="text-[11px] text-slate-600">
+      <p class="text-[11px] text-ink-faint">
         {{ ship.ledger.total.commits }} Commits · {{ ship.ledger.total.pulls }} PRs ·
         {{ ship.ledger.total.authors }} {{ ship.ledger.total.authors === 1 ? 'Autor' : 'Autoren' }}
       </p>
-      <p v-if="ship.ledger.total.unscored > 0" class="text-[11px] text-slate-600">
+      <p v-if="ship.ledger.total.unscored > 0" class="text-[11px] text-ink-faint">
         {{ ship.ledger.total.unscored }} ohne Convention
       </p>
 
@@ -367,10 +367,10 @@
         a share of, which suggested the rest was merely outstanding. A dash says "nobody's" where
         a nought would say "none of yours yet".
       -->
-      <p class="mt-1.5 text-[10px] tracking-wide text-slate-600 uppercase">Punkteabrechnung</p>
+      <p class="mt-1.5 text-[11px] tracking-wide text-ink-faint uppercase">Punkteabrechnung</p>
       <table class="mt-0.5 w-full font-mono text-[11px]">
         <thead>
-          <tr class="text-[10px] text-slate-700">
+          <tr class="text-[11px] text-ink-faint">
             <th class="text-left font-normal" colspan="3">das Repo</th>
             <th class="text-right font-normal">Punkte</th>
             <th class="pl-2 text-right font-normal text-emerald-900">deine</th>
@@ -378,13 +378,13 @@
         </thead>
         <tbody>
           <tr v-for="line in bill" :key="line.name">
-            <td class="text-slate-600">{{ line.name }}</td>
-            <td class="text-right text-slate-500">{{ line.count.toLocaleString('de-DE') }}</td>
-            <td class="text-right text-slate-700">× {{ line.rate }}</td>
-            <td class="text-right text-slate-400">{{ line.points.toLocaleString('de-DE') }}</td>
+            <td class="text-ink-faint">{{ line.name }}</td>
+            <td class="text-right text-ink-muted">{{ line.count.toLocaleString('de-DE') }}</td>
+            <td class="text-right text-ink-faint">× {{ line.rate }}</td>
+            <td class="text-right text-ink-muted">{{ line.points.toLocaleString('de-DE') }}</td>
             <td
               class="pl-2 text-right"
-              :class="line.own === null ? 'text-slate-700' : 'text-emerald-300/80'"
+              :class="line.own === null ? 'text-ink-faint' : 'text-emerald-300/80'"
               :title="
                 line.own === null
                   ? `${line.name} gehört dem Repository — daran hat niemand einen Anteil`
@@ -397,7 +397,7 @@
         </tbody>
         <tfoot>
           <tr class="border-t border-slate-800">
-            <td class="text-slate-600" colspan="3">Projektpunkte</td>
+            <td class="text-ink-faint" colspan="3">Projektpunkte</td>
             <td class="text-right text-sky-300">
               {{ points.project.toLocaleString('de-DE') }}
             </td>
@@ -413,7 +413,7 @@
         once over all of it and belong to no single repository. Without this sentence the column
         above reads as the whole of what a person is worth, and it is not even its own total.
       -->
-      <p class="mt-1 text-[11px] text-slate-600">
+      <p class="mt-1 text-[11px] text-ink-faint">
         Deine Punkte sind nur Commits und PRs. Autoren, Prüfungen und CI gehören dem Repository —
         daran hat niemand einen Anteil. Breite, Ordnung und erfüllte Forderungen zählen über die
         ganze Flotte und stehen in keinem einzelnen Schiff.
@@ -435,13 +435,11 @@
     />
 
     <section class="border-b border-slate-800 px-4 py-3">
-      <p class="text-[10px] tracking-wide text-slate-600 uppercase">Remotes</p>
-      <p v-if="origin === null" class="text-slate-500">kein origin</p>
+      <p class="text-[11px] tracking-wide text-ink-faint uppercase">Remotes</p>
+      <p v-if="origin === null" class="text-ink-muted">kein origin</p>
       <template v-else>
-        <p class="font-mono text-xs break-all text-slate-300">
-          {{ origin.name }} · {{ origin.url }}
-        </p>
-        <p class="text-[11px] text-slate-600">Forge: {{ origin.forge }}</p>
+        <p class="font-mono text-xs break-all text-ink">{{ origin.name }} · {{ origin.url }}</p>
+        <p class="text-[11px] text-ink-faint">Forge: {{ origin.forge }}</p>
       </template>
       <!--
         Each further remote with what it is, and the measurement under it.
@@ -449,24 +447,24 @@
         and `ungewiss` with its reason is a better answer than a confident wrong one.
       -->
       <div v-for="other in others" :key="other.name" class="mt-1">
-        <p class="font-mono text-xs break-all text-slate-500">
+        <p class="font-mono text-xs break-all text-ink-muted">
           {{ other.name }} · {{ other.url }}
           <span
             v-if="other.told !== null"
-            :class="other.told.fromForge ? 'text-sky-500' : 'text-slate-600'"
+            :class="other.told.fromForge ? 'text-sky-500' : 'text-ink-faint'"
           >
             {{ other.told.mark }} {{ other.told.word }}
           </span>
         </p>
-        <p v-if="other.told !== null" class="text-[11px] text-slate-600">
+        <p v-if="other.told !== null" class="text-[11px] text-ink-faint">
           {{ other.told.because }}
         </p>
       </div>
     </section>
 
     <section class="border-b border-slate-800 px-4 py-3">
-      <p class="text-[10px] tracking-wide text-slate-600 uppercase">Test-Vertrag</p>
-      <p class="text-[11px] text-slate-600">
+      <p class="text-[11px] tracking-wide text-ink-faint uppercase">Test-Vertrag</p>
+      <p class="text-[11px] text-ink-faint">
         Art: {{ ship.contract.kind }} · Dev-Einstieg: {{ ship.contract.devEntry }}
       </p>
       <!-- "Nothing to run" stands above everything, because every gap hides behind it. -->
@@ -479,13 +477,13 @@
           <li
             v-for="check in checks"
             :key="`${check.dir}/${check.script}`"
-            class="font-mono text-xs text-slate-400"
+            class="font-mono text-xs text-ink-muted"
           >
             {{ check.dir }} · {{ check.script }}
           </li>
         </ul>
       </template>
-      <p v-if="ship.contract.inCi.length > 0" class="mt-1 text-[11px] text-slate-600">
+      <p v-if="ship.contract.inCi.length > 0" class="mt-1 text-[11px] text-ink-faint">
         in CI: {{ ship.contract.inCi.join(', ') }}
       </p>
     </section>
@@ -503,11 +501,11 @@
     <TaskList :tasks="doing" />
 
     <section class="px-4 py-3">
-      <p class="text-[10px] tracking-wide text-slate-600 uppercase">
-        Quests <span class="text-slate-700">— {{ binding.length }} bindend</span>
+      <p class="text-[11px] tracking-wide text-ink-faint uppercase">
+        Quests <span class="text-ink-faint">— {{ binding.length }} bindend</span>
       </p>
 
-      <div v-if="binding.length === 0" class="mt-2 text-slate-500">
+      <div v-if="binding.length === 0" class="mt-2 text-ink-muted">
         Keine Forderung der Flotte gilt für dieses Schiff.
       </div>
       <div v-else class="mt-1">
@@ -523,7 +521,7 @@
       </div>
 
       <!-- Counted, not listed: the right answer, and noise at length. -->
-      <p v-if="notApplicable.length > 0" class="mt-3 text-[11px] text-slate-600">
+      <p v-if="notApplicable.length > 0" class="mt-3 text-[11px] text-ink-faint">
         {{ notApplicable.length }} weitere gelten hier nicht:
         {{ notApplicable.map((quest) => quest.id).join(', ') }}
       </p>
