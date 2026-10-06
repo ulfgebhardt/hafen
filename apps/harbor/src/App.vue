@@ -96,11 +96,15 @@
   const sheet = computed(() => picked.value ?? hovered.value)
 
   /**
-   * Escape lets go of the chosen ship and what was chosen on her — and of the hover.
+   * Escape lets go one step at a time: first what was chosen on the ship, then the ship.
    *
-   * The sheet shows `picked ?? hovered`, and right after a click the pointer still rests on the
-   * ship it clicked. Letting go of the pick alone fell back to the hover: the mark went, the sheet
-   * stayed. The scene sets a hover again on the next ship the pointer enters.
+   * A container or a demand is a choice made *inside* a pinned ship, so one press takes back that
+   * choice and leaves her sheet open; the next lets go of her. With nothing chosen it does nothing.
+   *
+   * The ship step clears the hover as well. The sheet shows `picked ?? hovered`, and right after a
+   * click the pointer still rests on the ship it clicked — letting go of the pick alone fell back to
+   * the hover: the mark went, the sheet stayed. The scene sets a hover again on the next ship the
+   * pointer enters.
    *
    * On the window and not on the scene: a canvas has no focus to receive a key, so the one place
    * that hears it whatever was last clicked is the window. A control that has its own use for the
@@ -110,9 +114,12 @@
     if (event.key !== 'Escape' || event.defaultPrevented) {
       return
     }
+    if (demand.value !== null) {
+      demand.value = null
+      return
+    }
     picked.value = null
     hovered.value = null
-    demand.value = null
   }
   onMounted(() => {
     globalThis.addEventListener('keydown', letGo)
