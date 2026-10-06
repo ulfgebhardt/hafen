@@ -123,7 +123,7 @@
         v-for="name in VIEWS"
         :key="name"
         class="flex items-center px-2 py-1"
-        :class="view === name ? 'text-slate-100' : 'text-slate-600 hover:text-slate-400'"
+        :class="view === name ? 'text-ink-strong' : 'text-ink-faint hover:text-ink-muted'"
         :aria-pressed="view === name"
         :title="`${VIEW_LABEL[name]} ${counted[name]} — ${VIEW_MEANING[name]}`"
         @click="emit('view', name)"
@@ -165,7 +165,7 @@
           for the one whose unit is not a hull. Three numbers in the same place that mean three
           different things would be the trap here — the title says which is which.
         -->
-        <span class="ml-1 font-mono text-[10px] text-slate-600">{{ counted[name] }}</span>
+        <span class="ml-1 font-mono text-[11px] text-ink-faint">{{ counted[name] }}</span>
       </button>
     </span>
 
@@ -175,8 +175,8 @@
       class="group shrink-0 px-3 py-1.5 text-left whitespace-nowrap"
       :class="
         page === name
-          ? 'border-b-2 border-slate-300 text-slate-100'
-          : 'border-b-2 border-transparent text-slate-500 hover:text-slate-300'
+          ? 'border-b-2 border-slate-300 text-ink-strong'
+          : 'border-b-2 border-transparent text-ink-muted hover:text-ink'
       "
       :aria-current="page === name ? 'page' : undefined"
       :title="PAGE_MEANING[name]"
@@ -188,7 +188,7 @@
         The fleet tab counted demands at first, because it is not a band and the only other case
         was the catalog — a tab that says 13 beside a harbour of 92 is a window lying about itself.
       -->
-      <span class="ml-1.5 font-mono text-[10px] text-slate-600">{{
+      <span class="ml-1.5 font-mono text-[11px] text-ink-faint">{{
         name === CONTRACTS ? demands : shipsOn(name, ships).length
       }}</span>
 
@@ -216,15 +216,15 @@
     -->
     <span
       v-if="contract !== null"
-      class="ml-3 flex shrink-0 items-baseline gap-1.5 self-center font-mono text-[10px] whitespace-nowrap"
+      class="ml-3 flex shrink-0 items-baseline gap-1.5 self-center font-mono text-[11px] whitespace-nowrap"
     >
-      <span class="text-slate-600">Vertrag</span>
+      <span class="text-ink-faint">Vertrag</span>
       <span class="text-orange-300">{{ contract.id }}</span>
-      <span class="text-slate-500">{{
+      <span class="text-ink-muted">{{
         contract.verdict === null ? 'offen' : VERDICT_LABEL[contract.verdict]
       }}</span>
       <button
-        class="text-slate-600 hover:text-slate-300"
+        class="text-ink-faint hover:text-ink"
         title="Vertragsfilter aufheben"
         @click="emit('clear')"
       >
@@ -240,7 +240,7 @@
       its own title — a bar that changes height is a bar nobody can aim at.
     -->
     <p
-      class="ml-auto min-w-0 flex-1 self-center truncate pr-3 text-right font-mono text-[10px] text-slate-600"
+      class="ml-auto min-w-0 flex-1 self-center truncate pr-3 text-right font-mono text-[11px] text-ink-faint"
       :title="PAGE_MEANING[page]"
     >
       {{ PAGE_MEANING[page] }}
@@ -254,7 +254,7 @@
       <input
         v-model="query"
         type="search"
-        class="w-48 border-b border-slate-700 bg-transparent py-0.5 font-mono text-[11px] text-slate-300 outline-none focus:border-slate-500 placeholder:text-slate-700"
+        class="w-48 border-b border-slate-700 bg-transparent py-0.5 font-mono text-[11px] text-ink outline-none focus:border-slate-500 placeholder:text-ink-faint"
         placeholder="suchen …"
         aria-label="Schiffe filtern"
         @keyup.escape="query = ''"
@@ -265,8 +265,8 @@
       -->
       <button
         v-if="query !== ''"
-        class="font-mono text-[10px]"
-        :class="only ? 'text-slate-100 underline' : 'text-slate-600 hover:text-slate-300'"
+        class="font-mono text-[11px]"
+        :class="only ? 'text-ink-strong underline' : 'text-ink-faint hover:text-ink'"
         :aria-pressed="only"
         :title="
           only
@@ -279,7 +279,7 @@
       </button>
       <button
         v-if="query !== ''"
-        class="font-mono text-[10px] text-slate-600 hover:text-slate-300"
+        class="font-mono text-[11px] text-ink-faint hover:text-ink"
         title="Filter aufheben"
         @click="query = ''"
       >

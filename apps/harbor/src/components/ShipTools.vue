@@ -60,13 +60,13 @@
     v-if="offered.length > 0 || stale.length > 0 || tenders.length > 0"
     class="border-b border-slate-800 px-4 py-3"
   >
-    <p class="text-[10px] tracking-wide text-slate-600 uppercase">Werkzeug</p>
+    <p class="text-[11px] tracking-wide text-ink-faint uppercase">Werkzeug</p>
 
     <p v-if="offered.length > 0" class="mt-1 flex flex-wrap gap-2">
       <button
         v-for="name in offered"
         :key="name"
-        class="border border-slate-700 px-2 py-0.5 font-mono text-[11px] text-slate-400 hover:border-slate-500 hover:text-slate-200 disabled:border-slate-800 disabled:text-slate-700"
+        class="border border-slate-700 px-2 py-0.5 font-mono text-[11px] text-ink-muted hover:border-slate-500 hover:text-ink-strong disabled:border-slate-800 disabled:text-ink-off"
         :disabled="busy"
         :title="TOOL_MEANING[name]"
         @click="emit('tool', name)"
@@ -76,15 +76,15 @@
     </p>
 
     <template v-if="stale.length > 0">
-      <p class="mt-3 text-[10px] tracking-wide text-slate-600 uppercase">
-        Branches <span class="text-slate-700">— {{ stale.length }} könnten weg</span>
+      <p class="mt-3 text-[11px] tracking-wide text-ink-faint uppercase">
+        Branches <span class="text-ink-faint">— {{ stale.length }} könnten weg</span>
       </p>
       <!--
         What "enthalten" was measured against. A verdict without the thing it was compared to is
         one a reader has to take on faith — and this one used to compare against `HEAD`, which on a
         feature branch is the wrong question entirely.
       -->
-      <p v-if="ship.defaultBranch !== null" class="text-[11px] text-slate-600">
+      <p v-if="ship.defaultBranch !== null" class="text-[11px] text-ink-faint">
         verglichen mit <span class="font-mono">{{ ship.defaultBranch }}</span>
       </p>
       <p v-else class="text-[11px] text-amber-600">
@@ -102,7 +102,7 @@
       <ul class="mt-1 space-y-1.5">
         <li v-for="branch in stale" :key="branch.name">
           <span class="flex items-baseline gap-2">
-            <span class="min-w-0 flex-1 font-mono text-xs break-all text-slate-300">{{
+            <span class="min-w-0 flex-1 font-mono text-xs break-all text-ink">{{
               branch.name
             }}</span>
             <!--
@@ -111,7 +111,7 @@
               measurement. A label a reader has to look up what it does is a label that does not.
             -->
             <button
-              class="shrink-0 font-mono text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline disabled:text-slate-700 disabled:no-underline"
+              class="shrink-0 font-mono text-[11px] text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:text-ink-off disabled:no-underline"
               :disabled="busy"
               :title="`Löscht nur ${branch.name} — git verweigert, wenn Commits nur dort liegen`"
               @click="emit('prune', branch.name)"
@@ -119,7 +119,7 @@
               löschen
             </button>
           </span>
-          <span class="block text-[11px] text-slate-600">{{
+          <span class="block text-[11px] text-ink-faint">{{
             branch.gone
               ? 'der Remote hat diesen Branch nicht mehr'
               : `bereits in ${ship.defaultBranch ?? 'dem Default-Branch'} enthalten`
@@ -130,7 +130,7 @@
             read as what a button does — so the button looked like it would take all of them. What
             you see is now what this button runs, and nothing else.
           -->
-          <code class="block font-mono text-[10px] break-all text-slate-600 select-all"
+          <code class="block font-mono text-[11px] break-all text-ink-faint select-all"
             >git branch -d {{ branch.name }}</code
           >
         </li>
@@ -138,9 +138,9 @@
     </template>
 
     <template v-if="tenders.length > 0">
-      <p class="mt-3 text-[10px] tracking-wide text-slate-600 uppercase">
+      <p class="mt-3 text-[11px] tracking-wide text-ink-faint uppercase">
         Beiboote
-        <span class="text-slate-700">— {{ tenders.length }} mitgeführt</span>
+        <span class="text-ink-faint">— {{ tenders.length }} mitgeführt</span>
         <span v-if="stray.length > 0" class="text-amber-600"
           >, {{ stray.length }} nicht an Bord</span
         >
@@ -149,19 +149,19 @@
         <li v-for="boat in tenders" :key="boat.path" class="flex items-baseline gap-2">
           <span
             class="mt-px w-3 shrink-0 font-mono text-xs"
-            :class="boat.state === 'aboard' ? 'text-slate-600' : 'text-amber-500'"
+            :class="boat.state === 'aboard' ? 'text-ink-faint' : 'text-amber-500'"
             >{{ boat.state === 'aboard' ? '·' : boat.state === 'adrift' ? '~' : '!' }}</span
           >
           <span class="min-w-0 flex-1">
-            <span class="block font-mono text-xs break-all text-slate-300">{{ boat.path }}</span>
-            <span class="text-[11px] text-slate-600">{{ TENDER_MEANING[boat.state] }}</span>
+            <span class="block font-mono text-xs break-all text-ink">{{ boat.path }}</span>
+            <span class="text-[11px] text-ink-faint">{{ TENDER_MEANING[boat.state] }}</span>
           </span>
-          <span class="shrink-0 font-mono text-[10px] text-slate-600">{{ boat.at }}</span>
+          <span class="shrink-0 font-mono text-[11px] text-ink-faint">{{ boat.at }}</span>
         </li>
       </ul>
       <code
         v-if="stray.length > 0"
-        class="mt-1.5 block font-mono text-[11px] break-all text-slate-600 select-all"
+        class="mt-1.5 block font-mono text-[11px] break-all text-ink-faint select-all"
         >git submodule update --init {{ stray.map((boat) => boat.path).join(' ') }}</code
       >
     </template>

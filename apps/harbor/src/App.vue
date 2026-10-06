@@ -681,7 +681,7 @@
 </script>
 
 <template>
-  <div class="flex h-screen w-screen flex-col bg-slate-950 text-slate-300">
+  <div class="flex h-screen w-screen flex-col bg-slate-950 text-ink">
     <!--
       Above everything, including the two views that replace the harbour: a newer version can be
       exactly the remedy for the state somebody is looking at.
@@ -766,7 +766,7 @@
           ((query.trim() !== '' && (onlyMatches ? shown.length : found.length) === 0) ||
             (contract !== null && shown.length === 0))
         "
-        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-slate-500"
+        class="border-b border-slate-800 px-4 py-1 font-mono text-xs text-ink-muted"
       >
         <!--
           The contract filter says its own sentence and never borrows the search's. A pick that
@@ -869,7 +869,7 @@
             @prune="prune(sheet.path, $event)"
             @open="visit($event)"
           />
-          <p v-else class="px-4 py-6 text-sm text-slate-600">
+          <p v-else class="px-4 py-6 text-sm text-ink-faint">
             Ein Schiff anfahren, um sein Datenblatt zu lesen — anklicken hält es fest.
           </p>
         </aside>
@@ -878,11 +878,11 @@
 
     <section v-else-if="failed !== null" class="p-6 font-mono text-sm">
       <p class="text-red-400">Kein Schnappschuss: {{ failed.message }}</p>
-      <p class="mt-2 text-slate-500">Gesucht in {{ failed.source }}</p>
-      <p class="mt-4 text-slate-400">Erzeugen mit:</p>
-      <p class="mt-1 text-slate-300">{{ failed.remedy }}</p>
+      <p class="mt-2 text-ink-muted">Gesucht in {{ failed.source }}</p>
+      <p class="mt-4 text-ink-muted">Erzeugen mit:</p>
+      <p class="mt-1 text-ink">{{ failed.remedy }}</p>
     </section>
 
-    <p v-else class="p-6 text-sm text-slate-600">wird gelesen …</p>
+    <p v-else class="p-6 text-sm text-ink-faint">wird gelesen …</p>
   </div>
 </template>

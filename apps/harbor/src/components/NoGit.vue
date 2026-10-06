@@ -20,27 +20,27 @@
   <section class="flex h-full items-center justify-center p-8">
     <div class="max-w-xl">
       <h2 class="font-mono text-sm tracking-wide text-red-400">git fehlt</h2>
-      <p class="mt-3 text-sm leading-relaxed text-slate-400">
-        Der Hafen misst alles mit <span class="font-mono text-slate-300">git</span> — Liegezeit,
-        Branches, Zeilen, Herkunft. Ohne das Programm findet er nichts, und eine leere Flotte sähe
-        genauso aus wie eine Maschine ohne Projekte. Das sind zwei verschiedene Sätze.
+      <p class="mt-3 text-sm leading-relaxed text-ink-muted">
+        Der Hafen misst alles mit <span class="font-mono text-ink">git</span> — Liegezeit, Branches,
+        Zeilen, Herkunft. Ohne das Programm findet er nichts, und eine leere Flotte sähe genauso aus
+        wie eine Maschine ohne Projekte. Das sind zwei verschiedene Sätze.
       </p>
 
-      <p class="mt-4 font-mono text-[11px] tracking-wide text-slate-600 uppercase">Abhilfe</p>
-      <ul class="mt-1 space-y-1 font-mono text-[11px] text-slate-500">
-        <li>macOS <span class="text-slate-400">xcode-select --install</span></li>
-        <li>Debian/Ubuntu <span class="text-slate-400">sudo apt install git</span></li>
-        <li>Arch <span class="text-slate-400">sudo pacman -S git</span></li>
-        <li>Windows <span class="text-slate-400">winget install Git.Git</span></li>
+      <p class="mt-4 font-mono text-[11px] tracking-wide text-ink-faint uppercase">Abhilfe</p>
+      <ul class="mt-1 space-y-1 font-mono text-[11px] text-ink-muted">
+        <li>macOS <span class="text-ink-muted">xcode-select --install</span></li>
+        <li>Debian/Ubuntu <span class="text-ink-muted">sudo apt install git</span></li>
+        <li>Arch <span class="text-ink-muted">sudo pacman -S git</span></li>
+        <li>Windows <span class="text-ink-muted">winget install Git.Git</span></li>
       </ul>
-      <p class="mt-3 text-[11px] text-slate-600">
+      <p class="mt-3 text-[11px] text-ink-faint">
         Danach dieses Fenster neu starten — gesucht wird beim Start, einmal.
       </p>
 
       <!--
         What still works, because "nothing works" would be the easier sentence and the wrong one.
       -->
-      <p class="mt-6 text-[11px] leading-relaxed text-slate-600">
+      <p class="mt-6 text-[11px] leading-relaxed text-ink-faint">
         <template v-if="gh || curl">
           Die Forge wäre ansprechbar ({{
             [gh ? 'gh' : '', curl ? 'curl' : ''].filter(Boolean).join(', ')

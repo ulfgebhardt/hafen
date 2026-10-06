@@ -122,7 +122,7 @@
 
 <template>
   <section class="border-b border-slate-800 px-4 py-3">
-    <p class="flex items-baseline gap-2 text-[10px] tracking-wide text-slate-600 uppercase">
+    <p class="flex items-baseline gap-2 text-[11px] tracking-wide text-ink-faint uppercase">
       <span>Forge</span>
       <span class="normal-case">{{ stats.slug.host }}</span>
       <!-- Its own age, always: this reading and the survey are never the same minute old. -->
@@ -137,10 +137,10 @@
         :title="`${figure.name} auf ${stats.slug.host} ansehen`"
         @click="emit('open', figure.href ?? links['repo'] ?? '')"
       >
-        <span class="text-slate-300 group-hover:text-orange-300">{{
+        <span class="text-ink group-hover:text-orange-300">{{
           figure.value.toLocaleString('de-DE')
         }}</span>
-        <span class="text-slate-600 group-hover:text-slate-400">{{ figure.name }}</span>
+        <span class="text-ink-faint group-hover:text-ink-muted">{{ figure.name }}</span>
       </button>
     </p>
 
@@ -158,7 +158,7 @@
           @click="emit('open', row.href ?? links['repo'] ?? '')"
         >
           <span
-            class="w-12 shrink-0 text-left font-mono text-[10px] text-slate-600 group-hover:text-slate-400"
+            class="w-12 shrink-0 text-left font-mono text-[11px] text-ink-faint group-hover:text-ink-muted"
             >{{ row.name }}</span
           >
           <span
@@ -170,9 +170,9 @@
               backgroundColor: row.filled ? row.color : 'transparent',
             }"
           />
-          <span v-if="row.cut" class="font-mono text-[10px] text-slate-500">+</span>
-          <span v-if="row.count === 0" class="font-mono text-[10px] text-slate-700">keine</span>
-          <span class="ml-auto pl-2 font-mono text-xs text-slate-300 group-hover:text-orange-300">{{
+          <span v-if="row.cut" class="font-mono text-[11px] text-ink-muted">+</span>
+          <span v-if="row.count === 0" class="font-mono text-[11px] text-ink-faint">keine</span>
+          <span class="ml-auto pl-2 font-mono text-xs text-ink group-hover:text-orange-300">{{
             row.count.toLocaleString('de-DE')
           }}</span>
         </button>
@@ -180,9 +180,9 @@
     </ul>
 
     <p class="mt-1 flex items-baseline gap-2 text-[11px]">
-      <span v-if="stats.language !== null" class="text-slate-500">{{ stats.language }}</span>
+      <span v-if="stats.language !== null" class="text-ink-muted">{{ stats.language }}</span>
       <button
-        class="font-mono text-[10px] text-slate-600 underline-offset-2 hover:text-slate-300 hover:underline"
+        class="font-mono text-[11px] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
         @click="emit('open', links['repo'] ?? '')"
       >
         {{ stats.slug.owner }}/{{ stats.slug.repo }}

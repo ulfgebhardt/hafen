@@ -83,17 +83,15 @@
     -->
     <section v-for="chain in chains" :key="chain.chain" class="mb-5">
       <p class="flex items-baseline gap-2 border-b border-slate-800 pb-1">
-        <span class="font-mono text-xs tracking-widest text-slate-300 uppercase">{{
-          chain.chain
-        }}</span>
-        <span v-if="chain.contracts.length === 0" class="text-[11px] text-slate-700">
+        <span class="font-mono text-xs tracking-widest text-ink uppercase">{{ chain.chain }}</span>
+        <span v-if="chain.contracts.length === 0" class="text-[11px] text-ink-faint">
           fordert heute nichts
         </span>
         <template v-else>
-          <span class="font-mono text-[10px] text-slate-600"
+          <span class="font-mono text-[11px] text-ink-faint"
             >{{ chain.contracts.length }} Forderungen</span
           >
-          <span class="font-mono text-[10px] text-slate-700"
+          <span class="font-mono text-[11px] text-ink-faint"
             >· {{ chain.binding }} Schiffe im Geltungsbereich</span
           >
         </template>
@@ -128,19 +126,19 @@
                 isPicked(row.id, null)
                   ? 'text-orange-300'
                   : row.outstanding > 0
-                    ? 'text-slate-300 group-hover:text-orange-300'
-                    : 'text-slate-400'
+                    ? 'text-ink group-hover:text-orange-300'
+                    : 'text-ink-muted'
               "
               >{{ row.id }}</span
             >
-            <span class="min-w-0 flex-1 truncate text-[11px] text-slate-600">{{ row.title }}</span>
+            <span class="min-w-0 flex-1 truncate text-[11px] text-ink-faint">{{ row.title }}</span>
             <!--
               `verletzt` plus `Voraussetzung offen`, and never `binding - met`.
               That arithmetic reported "44 offen" for a demand that is `nicht messbar` on all 44
               ships it reaches — 44 debts invented out of 44 failed measurements. Where nothing was
               found, the row says so instead of counting.
             -->
-            <span class="shrink-0 font-mono text-[10px] text-slate-700">
+            <span class="shrink-0 font-mono text-[11px] text-ink-faint">
               {{ row.outstanding > 0 ? `${row.outstanding} offen` : 'nichts gefunden' }}
             </span>
           </button>
@@ -166,7 +164,7 @@
             <button
               v-for="one in present(row)"
               :key="one.verdict"
-              class="group flex items-baseline gap-1 font-mono text-[10px]"
+              class="group flex items-baseline gap-1 font-mono text-[11px]"
               :title="`${VERDICT_MEANING[one.verdict]} — die ${one.count} anzeigen`"
               @click="emit('pick', { id: row.id, verdict: one.verdict })"
             >
@@ -174,7 +172,7 @@
                 :class="
                   isPicked(row.id, one.verdict)
                     ? 'text-orange-300'
-                    : 'text-slate-400 group-hover:text-orange-300'
+                    : 'text-ink-muted group-hover:text-orange-300'
                 "
                 >{{ one.count }}</span
               >
@@ -182,7 +180,7 @@
                 :class="
                   isPicked(row.id, one.verdict)
                     ? 'text-orange-400/70'
-                    : 'text-slate-600 group-hover:text-slate-400'
+                    : 'text-ink-faint group-hover:text-ink-muted'
                 "
                 >{{ VERDICT_LABEL[one.verdict] }}</span
               >
@@ -195,7 +193,7 @@
             and it is never drawn as a failure. But one that answers nothing anywhere looks exactly
             like a working one until somebody counts, and two of thirteen are in that state.
           -->
-          <p v-if="row.silent" class="mt-1 font-mono text-[10px] text-amber-600/80">
+          <p v-if="row.silent" class="mt-1 font-mono text-[11px] text-amber-600/80">
             kein Urteil auf dieser Flotte — diese Forderung misst hier nichts
           </p>
         </li>
