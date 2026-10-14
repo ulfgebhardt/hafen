@@ -181,6 +181,112 @@ function workflowNote(facts: QuestFacts): string {
   return count === 1 ? '1 Workflow' : `${String(count)} Workflows`
 }
 
+/** A path a quest may name: relative, and not climbing out of the ship. */
+function inShip(path: string): boolean {
+  return path !== '' && !path.startsWith('/') && !path.split('/').includes('..')
+}
+
+/**
+ * `ort: manifest` — the file belongs beside a manifest, not at the root of the ship.
+ *
+ * A decision of the quest and not of the probe, because both readings are right for different
+ * files. `.gitignore`, a licence and a readme are about the repository and live at its root. A
+ * linter config, a formatter config and a pinned runtime are about the package: a Nuxt app in
+ * `app/` carries all three there, and the probe that found its `package.json` in `app/` reported
+ * the same three files missing from the root. Moving the default would make a `.gitignore` in
+ * `app/` answer for the repository; an opt-in keeps that question where it was.
+ */
+function atManifest(check: QuestCheck): boolean {
+  return check.args['ort'] === 'manifest'
+}
+
+/**
+ * The directories one member looks a file up in, nearest first, ending at the root.
+ *
+ * The walk eslint, prettier and asdf do themselves: a member of a workspace without its own
+ * config uses the root's, and one with its own uses that and nothing above it. Searching every
+ * member directory instead would let a config beside one package answer for another.
+ */
+function upwards(dir: string): readonly string[] {
+  if (dir === '.') {
+    return ['.']
+  }
+  const parts = dir.split('/')
+  return [...parts.map((_, index) => parts.slice(0, parts.length - index).join('/')), '.']
+}
+
+function within(dir: string, path: string): string {
+  return dir === '.' ? path : `${dir}/${path}`
+}
+
+/** What one member finds: the nearest file on its walk to the root, or none. */
+type Nearest = Found | { member: string; path: null }
+
+interface Found {
+  member: string
+  path: string
+  text: string
+}
+
+function nearest(facts: QuestFacts, path: string): readonly Nearest[] {
+  return facts.contract.members.map((member) => {
+    for (const dir of upwards(member.dir)) {
+      const at = within(dir, path)
+      const text = facts.files.get(at)
+      if (typeof text === 'string') {
+        return { member: member.dir, path: at, text }
+      }
+    }
+    return { member: member.dir, path: null }
+  })
+}
+
+function memberName(dir: string): string {
+  return dir === '.' ? 'Wurzel' : dir
+}
+
+/** The distinct files the members found, in member order. */
+function foundPaths(found: readonly Found[]): string {
+  return [...new Set(found.map((one) => one.path))].join(', ')
+}
+
+/**
+ * A `datei` or `datei-enthaelt` asked per manifest — every member has to find the file, and
+ * `text` where one is given. `null` where there is nothing to ask: no manifest, or a path the
+ * catalog may not read.
+ */
+function perManifest(
+  facts: QuestFacts,
+  path: string,
+  text: string | null,
+): { ok: boolean | null; where: string; found: string } {
+  const where = `${path} (je Manifest, ${manifestNote(facts.contract)})`
+  if (!inShip(path)) {
+    return { ok: null, where, found: 'Pfad liegt nicht im Schiff' }
+  }
+  if (facts.contract.members.length === 0) {
+    return { ok: null, where, found: 'kein Manifest zu lesen' }
+  }
+  const seen = nearest(facts, path)
+  const found = seen.filter((one): one is Found => one.path !== null)
+  const missing = seen.filter((one) => one.path === null)
+  const silent = text === null ? [] : found.filter((one) => !one.text.includes(text))
+  if (missing.length === 0 && silent.length === 0) {
+    return {
+      ok: true,
+      where,
+      found: `${foundPaths(found)} ${text === null ? 'vorhanden' : `nennt ${text}`}`,
+    }
+  }
+  const gaps = [
+    ...(missing.length > 0
+      ? [`fehlt für ${missing.map((one) => memberName(one.member)).join(', ')}`]
+      : []),
+    ...(silent.length > 0 ? [`${foundPaths(silent)} nennt ${String(text)} nicht`] : []),
+  ]
+  return { ok: false, where, found: gaps.join('; ') }
+}
+
 /** A path a quest names, refused when it would leave the ship. */
 function shipFile(facts: QuestFacts, path: string): { ok: boolean | null; found: string } {
   const text = facts.files.get(path)
@@ -337,6 +443,10 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
 
     case 'datei': {
       const path = check.args['datei'] ?? ''
+      if (atManifest(check)) {
+        const seen = perManifest(facts, path, null)
+        return say(`${path} liegt bei jedem Manifest`, seen.where, seen.found, seen.ok)
+      }
       const seen = shipFile(facts, path)
       return say(`${path} liegt im Schiff`, path, seen.found, seen.ok)
     }
@@ -410,6 +520,10 @@ export function runCheck(check: QuestCheck, facts: QuestFacts): ProbeResult {
     case 'datei-enthaelt': {
       const path = check.args['datei'] ?? ''
       const text = check.args['text'] ?? ''
+      if (atManifest(check)) {
+        const seen = perManifest(facts, path, text)
+        return say(`${path} nennt ${text}`, seen.where, seen.found, seen.ok)
+      }
       const raw = facts.files.get(path)
       if (raw === undefined) {
         return say(`${path} nennt ${text}`, path, 'Pfad liegt nicht im Schiff', null)
@@ -657,18 +771,25 @@ function wantedFiles(catalog: readonly Quest[]): readonly string[] {
       ]
       for (const entry of named) {
         const path = entry?.trim()
-        if (
-          path !== undefined &&
-          path !== '' &&
-          !path.startsWith('/') &&
-          !path.split('/').includes('..')
-        ) {
+        if (path !== undefined && inShip(path)) {
           paths.add(path)
         }
       }
     }
   }
   return [...paths].sort()
+}
+
+/**
+ * The paths an `ort: manifest` check reads: its file at every directory of every member's walk to
+ * the root. A few reads per member, and only for the checks that ask.
+ */
+function manifestFiles(catalog: readonly Quest[], contract: Contract): readonly string[] {
+  const named = catalog.flatMap((quest) =>
+    quest.checks.filter(atManifest).map((check) => check.args['datei']?.trim() ?? ''),
+  )
+  const dirs = [...new Set(contract.members.flatMap((member) => upwards(member.dir)))]
+  return named.filter(inShip).flatMap((path) => dirs.map((dir) => within(dir, path)))
 }
 
 interface Manifest {
@@ -806,7 +927,7 @@ export async function measureQuests(
   catalog: readonly Quest[],
   forge: ForgeStats | null = null,
 ): Promise<QuestFacts> {
-  const paths = wantedFiles(catalog)
+  const paths = [...new Set([...wantedFiles(catalog), ...manifestFiles(catalog, contract)])]
   // Which traits any quest gates on at all. The cheap ones are measured regardless; the ones that
   // cost a git call are not, and this is what tells them apart.
   const askedTraits = new Set(catalog.flatMap((quest) => quest.appliesTo))

@@ -13,14 +13,17 @@ pruefung:
       paket: eslint-config-it4c
     - pruef: datei-enthaelt
       datei: eslint.config.ts
+      ort: manifest
       text: eslint-config-it4c
       frage: 'eslint.config.ts baut auf eslint-config-it4c auf'
     - pruef: datei-enthaelt
       datei: prettier.config.ts
+      ort: manifest
       text: eslint-config-it4c/prettier
       frage: 'prettier.config.ts re-exportiert eslint-config-it4c/prettier'
     - pruef: datei
       datei: .tool-versions
+      ort: manifest
       frage: 'die Node-Version ist gepinnt'
     - pruef: manuell
       art: manuell
