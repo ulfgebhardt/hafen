@@ -198,6 +198,115 @@ describe(runCheck, () => {
     })
   })
 
+  /**
+   * `ort: manifest`: the file belongs to the package, and a package in `app/` carries it there.
+   * Measured over the fleet: four ships with their only manifest below the root were told their
+   * linter config was missing while the manifest probe beside it found that manifest.
+   */
+  describe('ort: manifest', () => {
+    const members = (...dirs: readonly string[]): QuestFacts['contract'] =>
+      mockContract({ members: dirs.map((dir) => ({ dir, checks: [] })) })
+    const at = (
+      dirs: readonly string[],
+      files: Record<string, string | null>,
+    ): Pick<QuestFacts, 'contract' | 'files'> => ({
+      contract: members(...dirs),
+      files: new Map(Object.entries(files)),
+    })
+    const pinned = check('datei', { datei: '.tool-versions', ort: 'manifest' })
+    const standard = check('datei-enthaelt', {
+      datei: 'eslint.config.ts',
+      text: 'eslint-config-it4c',
+      ort: 'manifest',
+    })
+
+    it('finds the file beside a manifest below the root', () => {
+      const result = runCheck(
+        standard,
+        facts(at(['app'], { 'app/eslint.config.ts': "from 'eslint-config-it4c'\n" })),
+      )
+
+      expect(result.ok).toBe(true)
+      expect(result.evidence).toStrictEqual({
+        question: 'eslint.config.ts nennt eslint-config-it4c',
+        where: 'eslint.config.ts (je Manifest, 1 Manifest)',
+        found: 'app/eslint.config.ts nennt eslint-config-it4c',
+      })
+    })
+
+    /** The walk the tools do: a workspace member without its own config uses the root's. */
+    it('lets a member use the file of a directory above it', () => {
+      const result = runCheck(
+        pinned,
+        facts(at(['.', 'packages/core'], { '.tool-versions': 'nodejs 24\n' })),
+      )
+
+      expect(result.ok).toBe(true)
+      expect(result.evidence.found).toBe('.tool-versions vorhanden')
+    })
+
+    /** And the nearest one wins: a member's own config replaces the root's, it does not add. */
+    it('judges the nearest file, not the best one on the way up', () => {
+      const result = runCheck(
+        standard,
+        facts(
+          at(['.', 'packages/ui'], {
+            'eslint.config.ts': "from 'eslint-config-it4c'\n",
+            'packages/ui/eslint.config.ts': 'export default []\n',
+          }),
+        ),
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.evidence.found).toBe(
+        'packages/ui/eslint.config.ts nennt eslint-config-it4c nicht',
+      )
+    })
+
+    it('names every member that finds nothing', () => {
+      const result = runCheck(
+        standard,
+        facts(
+          at(['.', 'backend', 'frontend'], { 'frontend/eslint.config.ts': 'export default []\n' }),
+        ),
+      )
+
+      expect(result.ok).toBe(false)
+      expect(result.evidence.found).toBe(
+        'fehlt für Wurzel, backend; frontend/eslint.config.ts nennt eslint-config-it4c nicht',
+      )
+      expect(runCheck(pinned, facts(at(['app'], {}))).evidence.found).toBe('fehlt für app')
+    })
+
+    /** Without a manifest there is no package to ask about — unmeasured, not missing. */
+    it('cannot answer for a ship without a manifest', () => {
+      const result = runCheck(pinned, facts(at([], {})))
+
+      expect(result.ok).toBeNull()
+      expect(result.evidence.found).toBe('kein Manifest zu lesen')
+    })
+
+    it('refuses a path that would leave the ship', () => {
+      const result = runCheck(
+        check('datei', { datei: '../.tool-versions', ort: 'manifest' }),
+        facts(at(['app'], {})),
+      )
+
+      expect(result.ok).toBeNull()
+      expect(result.evidence.found).toBe('Pfad liegt nicht im Schiff')
+    })
+
+    /** Opt-in: without `ort`, a file below the root does not answer a question about the root. */
+    it('leaves a check without it at the root', () => {
+      const result = runCheck(
+        check('datei', { datei: '.gitignore' }),
+        facts(at(['app'], { '.gitignore': null, 'app/.gitignore': 'node_modules\n' })),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+  })
+
   describe('ci-nennt', () => {
     /**
      * The case that forced this probe: release-please lives in `release.yml` in five of these
@@ -403,6 +512,34 @@ describe(measureQuests, () => {
     ])
 
     expect(measured.dependencies).toStrictEqual(['eslint-config-it4c', 'vue'])
+  })
+
+  it('reads an `ort: manifest` file along the walk of every member to the root', async () => {
+    const ports = mockPorts({
+      files: { [`${SHIP}/apps/web/eslint.config.ts`]: "from 'eslint-config-it4c'\n" },
+    })
+    const contract = mockContract({
+      members: [
+        { dir: '.', checks: [] },
+        { dir: 'apps/web', checks: [] },
+      ],
+    })
+
+    const measured = await measureQuests(ports, SHIP, contract, [
+      quest([
+        check('datei-enthaelt', { datei: 'eslint.config.ts', text: 'x', ort: 'manifest' }),
+        check('datei', { datei: '../escape', ort: 'manifest' }),
+        check('datei', { ort: 'manifest' }),
+      ]),
+    ])
+
+    expect([...measured.files.keys()].sort()).toStrictEqual([
+      'apps/eslint.config.ts',
+      'apps/web/eslint.config.ts',
+      'eslint.config.ts',
+    ])
+    expect(measured.files.get('apps/web/eslint.config.ts')).toContain('eslint-config-it4c')
+    expect(measured.files.get('apps/eslint.config.ts')).toBeNull()
   })
 
   it('says a ship is neither node nor rust when it is neither', async () => {
